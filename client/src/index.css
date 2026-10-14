@@ -1,0 +1,169 @@
+@import '@fontsource/be-vietnam-pro/400.css';
+@import '@fontsource/be-vietnam-pro/500.css';
+@import '@fontsource/be-vietnam-pro/600.css';
+@import '@fontsource/be-vietnam-pro/700.css';
+@import '@fontsource/be-vietnam-pro/800.css';
+@import 'tailwindcss';
+
+/*
+ * Design system đồng bộ với landing page https://dtst-landing-page.vercel.app/
+ *
+ * Token gốc (landing):
+ *   forest #176b50 · forest-hover #125a43 · forest-deep #153f32 · forest-ink #0f2f25
+ *   leaf #8ebf83 · leaf-soft #dcebd4 · botanical #f4f8ef
+ *   lotus #efa4b5 · lotus-soft #fbe8ec · lotus-deep #b2506b
+ *   cream #faf8f0 · ink #34483d · muted #718176 · line #e3e8dc
+ *   gold #c4a15a · gold-soft #f3e7c9
+ *
+ * Ánh xạ sang scale Tailwind của MVP (giữ tên class hiện có):
+ *   leaf  → forest / soft leaf
+ *   river → ink / forest-deep (chữ & nền tối)
+ *   lotus → hồng sen
+ *   sand  → cream / botanical / line
+ *   teal  → gold (điểm nhấn thưởng / QR / accent ấm)
+ */
+@theme {
+  --font-sans: 'Be Vietnam Pro', Inter, 'Plus Jakarta Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+
+  /* Forest / soft leaf */
+  --color-leaf-50: #f4f8ef;
+  --color-leaf-100: #dcebd4;
+  --color-leaf-200: #c5dfb8;
+  --color-leaf-300: #8ebf83;
+  --color-leaf-400: #5fa97a;
+  --color-leaf-500: #2f8f66;
+  --color-leaf-600: #176b50;
+  --color-leaf-700: #125a43;
+  --color-leaf-800: #153f32;
+  --color-leaf-900: #0f2f25;
+
+  /* Ink / forest-deep (body text + dark surfaces) */
+  --color-river-50: #f4f8ef;
+  --color-river-100: #e3e8dc;
+  --color-river-200: #c9d2c0;
+  --color-river-300: #a3b0a0;
+  --color-river-400: #7a8a7e;
+  --color-river-500: #718176;
+  --color-river-600: #5b6b60;
+  --color-river-700: #34483d;
+  --color-river-800: #1f3d32;
+  --color-river-900: #153f32;
+  --color-river-950: #0f2f25;
+
+  /* Gold accents (rewards / QR / warm highlights) */
+  --color-teal-50: #f3e7c9;
+  --color-teal-100: #ebe0b8;
+  --color-teal-200: #e0cf96;
+  --color-teal-300: #d4bb74;
+  --color-teal-400: #ccad62;
+  --color-teal-500: #c4a15a;
+  --color-teal-600: #a8863f;
+  --color-teal-700: #8a6a2a;
+  --color-teal-800: #7a5a1e;
+  --color-teal-900: #5c4214;
+
+  /* Lotus pink */
+  --color-lotus-50: #fbe8ec;
+  --color-lotus-100: #f7cbd5;
+  --color-lotus-200: #f3b5c3;
+  --color-lotus-300: #efa4b5;
+  --color-lotus-400: #efa4b5;
+  --color-lotus-500: #d97f98;
+  --color-lotus-600: #b2506b;
+  --color-lotus-700: #94455a;
+  --color-lotus-800: #74374d;
+  --color-lotus-900: #562a3a;
+
+  /* Cream / line neutrals */
+  --color-sand-50: #faf8f0;
+  --color-sand-100: #f4f8ef;
+  --color-sand-200: #e3e8dc;
+  --color-sand-300: #c9d2c0;
+
+  --radius-control: 1rem; /* matches landing inputs (rounded-2xl) */
+  --radius-card: 1.5rem;
+  --radius-panel: 2rem;
+
+  --shadow-card: 0 1px 2px rgb(21 63 50 / 0.04), 0 8px 24px -12px rgb(21 63 50 / 0.12);
+  --shadow-raised: 0 2px 4px rgb(21 63 50 / 0.05), 0 22px 44px -20px rgb(21 63 50 / 0.28);
+  --shadow-cta: 0 10px 24px -12px rgb(23 107 80 / 0.7);
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-padding-top: 5.5rem;
+  }
+  body {
+    /* Nền kem trung tính (cream #faf8f0), hồng sen chỉ là điểm xuyết rất nhẹ */
+    @apply font-sans text-river-700 antialiased;
+    background-color: #faf8f2;
+    background-image:
+      radial-gradient(ellipse 70% 40% at 50% -10%, rgb(251 232 236 / 0.55), transparent 60%),
+      radial-gradient(ellipse 60% 40% at 0% 25%, rgb(220 235 212 / 0.4), transparent 55%),
+      radial-gradient(ellipse 50% 35% at 100% 75%, rgb(244 248 239 / 0.8), transparent 55%),
+      radial-gradient(circle at 1px 1px, rgb(21 63 50 / 0.04) 1px, transparent 0);
+    background-size: auto, auto, auto, 22px 22px;
+    background-attachment: fixed;
+  }
+  /* Thang chữ tiêu đề thống nhất (có thể ghi đè bằng utility khi cần) */
+  h1,
+  h2,
+  h3 {
+    @apply font-extrabold tracking-tight text-river-900;
+    text-wrap: balance;
+  }
+  h1 {
+    @apply text-[1.875rem] leading-tight sm:text-4xl;
+  }
+  h2 {
+    @apply text-2xl leading-tight sm:text-[2rem];
+  }
+  h3 {
+    @apply text-lg leading-snug sm:text-xl;
+  }
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-leaf-600;
+  }
+  ::selection {
+    @apply bg-leaf-100 text-river-900;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-toast-in {
+  animation: toast-in 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Eyebrow label used across marketing-style sections */
+.eyebrow {
+  @apply inline-flex items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.22em] text-river-600;
+}
+.eyebrow::before {
+  content: '';
+  width: 0.55rem;
+  height: 0.35rem;
+  border-radius: 9999px;
+  background: var(--color-lotus-400);
+  flex-shrink: 0;
+}
