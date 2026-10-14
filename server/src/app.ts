@@ -33,7 +33,9 @@ export function createApp(): Express {
           styleSrc: ["'self'", "'unsafe-inline'"],
         },
       },
-      crossOriginResourcePolicy: { policy: 'same-site' },
+      // API is called from the Vercel site (a different registrable domain), so the
+      // browser must be allowed to read these responses.
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
     }),
   );
   app.use(
