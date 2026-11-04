@@ -1,0 +1,223 @@
+{
+  "new_001": {
+    "name": "Lẩu ếch Đông Đô",
+    "visit_duration_minutes": null,
+    "weekday_schedule": null,
+    "cost": {
+      "confirmed_max_vnd": null,
+      "currency": "VND",
+      "unit": null,
+      "capacity": null,
+      "verified_at": null,
+      "source_url": null
+    }
+  },
+  "new_002": {
+    "name": "Nhà Hàng Chương Dương",
+    "visit_duration_minutes": null,
+    "weekday_schedule": null,
+    "cost": {
+      "confirmed_max_vnd": null,
+      "currency": "VND",
+      "unit": null,
+      "capacity": null,
+      "verified_at": null,
+      "source_url": null
+    }
+  },
+  "new_003": {
+    "name": "Khách sạn Mekong Mỹ Tho",
+    "visit_duration_minutes": null,
+    "weekday_schedule": null,
+    "cost": {
+      "confirmed_max_vnd": null,
+      "currency": "VND",
+      "unit": "room_per_night",
+      "capacity": null,
+      "verified_at": null,
+      "source_url": null
+    }
+  },
+  "new_004": {
+    "name": "Central Plaza Hotel Mỹ Tho",
+    "visit_duration_minutes": null,
+    "weekday_schedule": null,
+    "cost": {
+      "confirmed_max_vnd": null,
+      "currency": "VND",
+      "unit": "room_per_night",
+      "capacity": null,
+      "verified_at": null,
+      "source_url": null
+    }
+  },
+  "new_005": {
+    "name": "Bầu Bí Mini Farmstay - Mekong - Tiền Giang",
+    "visit_duration_minutes": null,
+    "weekday_schedule": null,
+    "cost": {
+      "confirmed_max_vnd": null,
+      "currency": "VND",
+      "unit": "room_per_night",
+      "capacity": null,
+      "verified_at": null,
+      "source_url": null
+    }
+  },
+  "new_006": {
+    "name": "Cửu Long Hotel",
+    "visit_duration_minutes": null,
+    "weekday_schedule": null,
+    "cost": {
+      "confirmed_max_vnd": null,
+      "currency": "VND",
+      "unit": "room_per_night",
+      "capacity": null,
+      "verified_at": null,
+      "source_url": null
+    }
+  },
+  "new_007": {
+    "name": "Siri 2 Hotel - Khách sạn Siri 2 Mỹ Tho",
+    "visit_duration_minutes": null,
+    "weekday_schedule": null,
+    "cost": {
+      "confirmed_max_vnd": null,
+      "currency": "VND",
+      "unit": "room_per_night",
+      "capacity": null,
+      "verified_at": null,
+      "source_url": null
+    }
+  },
+  "new_008": {
+    "name": "Cosy 1 Karaoke",
+    "visit_duration_minutes": null,
+    "weekday_schedule": null,
+    "cost": {
+      "confirmed_max_vnd": null,
+      "currency": "VND",
+      "unit": null,
+      "capacity": null,
+      "verified_at": null,
+      "source_url": null
+    }
+  },
+  "new_009": {
+    "name": "KARAOKE KING",
+    "visit_duration_minutes": null,
+    "weekday_schedule": null,
+    "cost": {
+      "confirmed_max_vnd": null,
+      "currency": "VND",
+      "unit": null,
+      "capacity": null,
+      "verified_at": null,
+      "source_url": null
+    }
+  },
+  "new_010": {
+    "name": "KARAOKE TẤN LỘC",
+    "visit_duration_minutes": null,
+    "weekday_schedule": null,
+    "cost": {
+      "confirmed_max_vnd": null,
+      "currency": "VND",
+      "unit": null,
+      "capacity": null,
+      "verified_at": null,
+      "source_url": null
+    }
+  },
+  "new_011": {
+    "name": "288 CLUB",
+    "visit_duration_minutes": null,
+    "weekday_schedule": null,
+    "cost": {
+      "confirmed_max_vnd": null,
+      "currency": "VND",
+      "unit": null,
+      "capacity": null,
+      "verified_at": null,
+      "source_url": null
+    }
+  },
+  "new_012": {
+    "name": "Massage Đông Y Mỹ Tho - Phẻ Spa Gội Dưỡng Sinh",
+    "visit_duration_minutes": null,
+    "weekday_schedule": null,
+    "cost": {
+      "confirmed_max_vnd": null,
+      "currency": "VND",
+      "unit": null,
+      "capacity": null,
+      "verified_at": null,
+      "source_url": null
+    }
+  },
+  "new_013": {
+    "name": "Vua Nám Bà Tư Spa Sa Đéc",
+    "visit_duration_minutes": null,
+    "weekday_schedule": null,
+    "cost": {
+      "confirmed_max_vnd": null,
+      "currency": "VND",
+      "unit": null,
+      "capacity": null,
+      "verified_at": null,
+      "source_url": null
+    }
+  },
+  "new_014": {
+    "name": "Trại rắn Đồng Tâm",
+    "visit_duration_minutes": null,
+    "weekday_schedule": null,
+    "cost": {
+      "confirmed_max_vnd": null,
+      "currency": "VND",
+      "unit": null,
+      "capacity": null,
+      "verified_at": null,
+      "source_url": null
+    }
+  },
+  "new_015": {
+    "name": "Trà mật ong Kỳ Lân",
+    "visit_duration_minutes": null,
+    "weekday_schedule": null,
+    "cost": {
+      "confirmed_max_vnd": null,
+      "currency": "VND",
+      "unit": null,
+      "capacity": null,
+      "verified_at": null,
+      "source_url": null
+    }
+  },
+  "new_016": {
+    "name": "Khu Du Lịch Công Đoàn Thới Sơn Mỹ Tho Tiền Giang",
+    "visit_duration_minutes": null,
+    "weekday_schedule": null,
+    "cost": {
+      "confirmed_max_vnd": null,
+      "currency": "VND",
+      "unit": null,
+      "capacity": null,
+      "verified_at": null,
+      "source_url": null
+    }
+  },
+  "new_017": {
+    "name": "Khu sinh thái Vườn Xanh - Thị trấn Kiểng Phước",
+    "visit_duration_minutes": null,
+    "weekday_schedule": null,
+    "cost": {
+      "confirmed_max_vnd": null,
+      "currency": "VND",
+      "unit": null,
+      "capacity": null,
+      "verified_at": null,
+      "source_url": null
+    }
+  }
+}

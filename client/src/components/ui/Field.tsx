@@ -124,11 +124,13 @@ export function ChipToggle({
       aria-checked={checked}
       onClick={() => onChange(!checked)}
       className={clsx(
-        'inline-flex min-h-10 items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium transition-colors',
-        checked ? 'border-leaf-600 bg-leaf-600 text-white' : 'border-sand-300 bg-white text-river-700 hover:border-leaf-400',
+        'inline-flex min-h-10 items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium transition-all duration-200 active:scale-95',
+        checked
+          ? 'border-leaf-600 bg-leaf-600 text-white shadow-cta'
+          : 'border-sand-300 bg-white text-river-700 hover:-translate-y-0.5 hover:border-leaf-400 hover:shadow-card',
       )}
     >
-      {icon}
+      {icon ?? (checked ? <Check className="size-3.5" strokeWidth={2.75} aria-hidden /> : null)}
       {children}
     </button>
   );

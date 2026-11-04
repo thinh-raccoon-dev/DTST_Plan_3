@@ -1,17 +1,18 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Save, UserRound } from 'lucide-react';
+import { Compass, KeyRound, Save, UserRound } from 'lucide-react';
 import { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { CategoryIcon } from '../components/destination/CategoryIcon';
 import { PageContainer } from '../components/layout/PublicLayout';
+import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
-import { Card, SectionHeading } from '../components/ui/Card';
+import { Card } from '../components/ui/Card';
 import { ChipToggle, FormField, Input, Select } from '../components/ui/Field';
 import { Notice } from '../components/ui/States';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
-import { AREA_OPTIONS, CATEGORY_OPTIONS } from '../lib/catalog';
 import { applyFieldErrors, toApiError } from '../lib/api';
+import { AREA_OPTIONS, CATEGORY_OPTIONS } from '../lib/catalog';
 import { useAuthStore } from '../stores/authStore';
 import { toast } from '../stores/toastStore';
 import type { Area, Category } from '../types/api';
@@ -78,9 +79,7 @@ export function ProfilePage() {
           numberOfDays: values.numberOfDays,
           hoursPerDay: values.hoursPerDay,
         },
-        ...(values.newPassword
-          ? { currentPassword: values.currentPassword, newPassword: values.newPassword }
-          : {}),
+        ...(values.newPassword ? { currentPassword: values.currentPassword, newPassword: values.newPassword } : {}),
       });
       form.setValue('currentPassword', '');
       form.setValue('newPassword', '');
@@ -88,105 +87,131 @@ export function ProfilePage() {
       toast.success('Đã cập nhật trang cá nhân');
     } catch (error) {
       const apiError = toApiError(error);
-      const unplaced = applyFieldErrors(apiError, form.setError, [
-        'displayName',
-        'currentPassword',
-        'newPassword',
-      ]);
+      const unplaced = applyFieldErrors(apiError, form.setError, ['displayName', 'currentPassword', 'newPassword']);
       if (apiError.fieldIssues.length === 0 || unplaced.length > 0) setFormError(apiError.message);
     }
   };
 
+  const roleLabel = user.role === 'admin' ? 'Quản trị viên' : user.role === 'partner' ? 'Đối tác' : 'Du khách';
+  const initials = (user.displayName || user.email).slice(0, 2).toUpperCase();
+
   return (
     <PageContainer width="narrow">
-      <SectionHeading
-        as="h1"
-        title="Trang cá nhân"
-        description="Tên hiển thị, sở thích du lịch mặc định cho lịch trình, và đổi mật khẩu."
-      />
+      <div className="tp-fade-up flex flex-wrap items-center gap-4 rounded-panel border border-sand-200 bg-gradient-to-br from-leaf-950 via-leaf-900 to-river-900 p-6 text-white shadow-raised">
+        <div className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-teal-400/20 text-xl font-bold text-teal-200 ring-1 ring-teal-300/40">
+          {initials}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="truncate text-2xl font-bold text-white">{user.displayName}</h1>
+            <Badge tone="teal">{roleLabel}</Badge>
+          </div>
+          <p className="mt-0.5 truncate text-sm text-sand-200">{user.email}</p>
+        </div>
+      </div>
+
       <Card className="mt-6 p-5 sm:p-6">
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6" noValidate>
           {formError && <Notice tone="warning">{formError}</Notice>}
-          <FormField label="Tên hiển thị" required error={form.formState.errors.displayName?.message}>
-            <Input autoComplete="name" {...form.register('displayName')} />
-          </FormField>
-          <FormField label="Email">
-            <Input value={user.email} disabled readOnly />
-          </FormField>
-          <p className="inline-flex items-center gap-2 text-sm text-river-600">
-            <UserRound className="size-4" aria-hidden />
-            Vai trò: {user.role === 'admin' ? 'Quản trị viên' : user.role === 'partner' ? 'Đối tác' : 'Du khách'}
-          </p>
 
           <div>
-            <h2 className="text-base font-semibold text-river-900">Sở thích mặc định</h2>
+            <h2 className="flex items-center gap-2 text-base font-semibold text-river-900">
+              <UserRound className="size-4 text-leaf-600" aria-hidden />
+              Thông tin tài khoản
+            </h2>
+            <div className="mt-3 grid gap-4 sm:grid-cols-2">
+              <FormField label="Tên hiển thị" required error={form.formState.errors.displayName?.message}>
+                <Input autoComplete="name" {...form.register('displayName')} />
+              </FormField>
+              <FormField label="Email">
+                <Input value={user.email} disabled readOnly />
+              </FormField>
+            </div>
+          </div>
+
+          <div className="border-t border-sand-200 pt-5">
+            <h2 className="flex items-center gap-2 text-base font-semibold text-river-900">
+              <Compass className="size-4 text-leaf-600" aria-hidden />
+              Sở thích du lịch mặc định
+            </h2>
             <p className="mt-1 text-sm text-river-600">Dùng khi tạo lịch trình mới và gợi ý điểm đến trên trang chủ.</p>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <FormField label="Số ngày" error={form.formState.errors.numberOfDays?.message}>
-              <Input type="number" min={1} max={7} inputMode="numeric" {...form.register('numberOfDays')} />
-            </FormField>
-            <FormField label="Giờ tham quan mỗi ngày">
-              <Select {...form.register('hoursPerDay')}>
-                {[4, 6, 8, 10].map((h) => (
-                  <option key={h} value={h}>
-                    {h} giờ
-                  </option>
-                ))}
-              </Select>
-            </FormField>
-          </div>
-          <Controller
-            control={form.control}
-            name="interests"
-            render={({ field }) => (
-              <fieldset>
-                <legend className="mb-2 text-sm font-medium text-river-800">Loại hình yêu thích</legend>
-                <div className="flex flex-wrap gap-2">
-                  {CATEGORY_OPTIONS.map((o) => (
-                    <ChipToggle
-                      key={o.value}
-                      checked={field.value.includes(o.value)}
-                      onChange={(on) => field.onChange(toggle(field.value, o.value, on))}
-                      icon={<CategoryIcon category={o.value} className="size-4" />}
-                    >
-                      {o.label}
-                    </ChipToggle>
-                  ))}
-                </div>
-              </fieldset>
-            )}
-          />
-          <Controller
-            control={form.control}
-            name="areas"
-            render={({ field }) => (
-              <fieldset>
-                <legend className="mb-2 text-sm font-medium text-river-800">Khu vực thường đi</legend>
-                <div className="flex flex-wrap gap-2">
-                  {AREA_OPTIONS.map((o) => (
-                    <ChipToggle key={o.value} checked={field.value.includes(o.value)} onChange={(on) => field.onChange(toggle(field.value, o.value, on))}>
-                      {o.label}
-                    </ChipToggle>
-                  ))}
-                </div>
-              </fieldset>
-            )}
-          />
 
-          <div>
-            <h2 className="text-base font-semibold text-river-900">Đổi mật khẩu</h2>
-            <p className="mt-1 text-sm text-river-600">Để trống nếu không muốn đổi.</p>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <FormField label="Số ngày" error={form.formState.errors.numberOfDays?.message}>
+                <Input type="number" min={1} max={7} inputMode="numeric" {...form.register('numberOfDays')} />
+              </FormField>
+              <FormField label="Giờ tham quan mỗi ngày">
+                <Select {...form.register('hoursPerDay')}>
+                  {[4, 6, 8, 10].map((h) => (
+                    <option key={h} value={h}>
+                      {h} giờ
+                    </option>
+                  ))}
+                </Select>
+              </FormField>
+            </div>
+
+            <div className="mt-4 space-y-4">
+              <Controller
+                control={form.control}
+                name="interests"
+                render={({ field }) => (
+                  <fieldset>
+                    <legend className="mb-2 text-sm font-medium text-river-800">Loại hình yêu thích</legend>
+                    <div className="flex flex-wrap gap-2">
+                      {CATEGORY_OPTIONS.map((o) => (
+                        <ChipToggle
+                          key={o.value}
+                          checked={field.value.includes(o.value)}
+                          onChange={(on) => field.onChange(toggle(field.value, o.value, on))}
+                          icon={<CategoryIcon category={o.value} className="size-4" />}
+                        >
+                          {o.label}
+                        </ChipToggle>
+                      ))}
+                    </div>
+                  </fieldset>
+                )}
+              />
+              <Controller
+                control={form.control}
+                name="areas"
+                render={({ field }) => (
+                  <fieldset>
+                    <legend className="mb-2 text-sm font-medium text-river-800">Khu vực thường đi</legend>
+                    <div className="flex flex-wrap gap-2">
+                      {AREA_OPTIONS.map((o) => (
+                        <ChipToggle key={o.value} checked={field.value.includes(o.value)} onChange={(on) => field.onChange(toggle(field.value, o.value, on))}>
+                          {o.label}
+                        </ChipToggle>
+                      ))}
+                    </div>
+                  </fieldset>
+                )}
+              />
+            </div>
           </div>
-          <FormField label="Mật khẩu hiện tại" error={form.formState.errors.currentPassword?.message}>
-            <Input type="password" autoComplete="current-password" {...form.register('currentPassword')} />
-          </FormField>
-          <FormField label="Mật khẩu mới" error={form.formState.errors.newPassword?.message}>
-            <Input type="password" autoComplete="new-password" {...form.register('newPassword')} />
-          </FormField>
-          <FormField label="Nhập lại mật khẩu mới" error={form.formState.errors.confirmPassword?.message}>
-            <Input type="password" autoComplete="new-password" {...form.register('confirmPassword')} />
-          </FormField>
+
+          <div className="border-t border-sand-200 pt-5">
+            <h2 className="flex items-center gap-2 text-base font-semibold text-river-900">
+              <KeyRound className="size-4 text-leaf-600" aria-hidden />
+              Đổi mật khẩu
+            </h2>
+            <p className="mt-1 text-sm text-river-600">Để trống nếu không muốn đổi mật khẩu hiện tại.</p>
+            <div className="mt-3 space-y-4">
+              <FormField label="Mật khẩu hiện tại" error={form.formState.errors.currentPassword?.message}>
+                <Input type="password" autoComplete="current-password" {...form.register('currentPassword')} />
+              </FormField>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <FormField label="Mật khẩu mới" error={form.formState.errors.newPassword?.message}>
+                  <Input type="password" autoComplete="new-password" {...form.register('newPassword')} />
+                </FormField>
+                <FormField label="Nhập lại mật khẩu mới" error={form.formState.errors.confirmPassword?.message}>
+                  <Input type="password" autoComplete="new-password" {...form.register('confirmPassword')} />
+                </FormField>
+              </div>
+            </div>
+          </div>
 
           <Button type="submit" size="lg" loading={form.formState.isSubmitting} icon={<Save className="size-5" aria-hidden />}>
             Lưu thay đổi

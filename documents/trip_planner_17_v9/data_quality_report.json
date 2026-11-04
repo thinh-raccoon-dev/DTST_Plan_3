@@ -1,0 +1,9 @@
+{
+  "version": "v5",
+  "total_places": 17,
+  "enriched_attractions": 4,
+  "activity_entries": 37,
+  "newly_crawled_other_places": 0,
+  "price_and_availability_verified": false,
+  "see": "tourism_places_enriched.json and itinerary.warnings"
+}

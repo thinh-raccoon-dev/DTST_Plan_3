@@ -1,0 +1,773 @@
+{
+  "places": [
+    {
+      "google_rating": 3.9,
+      "google_review_count": 1002,
+      "rating_adjusted_for_review_count": 3.895247,
+      "rating_status": "source_snapshot",
+      "rating_source_date": "2026-10-28",
+      "id": "new_001",
+      "name": "Lẩu ếch Đông Đô",
+      "role": "restaurant",
+      "tags": [
+        "ẩm thực",
+        "ăn uống",
+        "món địa phương"
+      ],
+      "activities_available": [],
+      "address": "Hẻm 22 Đ. Đoàn Thị Nghiệp, Đạo Thạnh, Đồng Tháp, Việt Nam",
+      "coordinates": [
+        106.34992369999999,
+        10.3668722
+      ],
+      "visit_duration_minutes": 120,
+      "phone": "+84 273 3888 186"
+    },
+    {
+      "google_rating": 3.9,
+      "google_review_count": 304,
+      "rating_adjusted_for_review_count": 3.885876,
+      "rating_status": "source_snapshot",
+      "rating_source_date": "2026-10-28",
+      "id": "new_002",
+      "name": "Nhà Hàng Chương Dương",
+      "role": "restaurant",
+      "tags": [
+        "ẩm thực",
+        "ăn uống"
+      ],
+      "activities_available": [],
+      "address": "10 30/4 Street, ward 1, My Tho City (10 Đường 30/4, P.1, T.P Mỹ Tho), Mỹ Tho, Đồng Tháp, Việt Nam",
+      "coordinates": [
+        106.3655562,
+        10.3523128
+      ],
+      "visit_duration_minutes": 120,
+      "phone": "+84 273 3882 352"
+    },
+    {
+      "google_rating": 4.1,
+      "google_review_count": 1028,
+      "rating_adjusted_for_review_count": 4.086085,
+      "rating_status": "source_snapshot",
+      "rating_source_date": "2026-10-28",
+      "id": "new_003",
+      "name": "Khách sạn Mekong Mỹ Tho",
+      "role": "accommodation",
+      "tags": [
+        "lưu trú",
+        "nghỉ ngơi"
+      ],
+      "activities_available": [],
+      "address": "1A Tết Mậu Thân, Đạo Thạnh, Đồng Tháp 860000, Việt Nam",
+      "coordinates": [
+        106.3590564,
+        10.3538784
+      ],
+      "visit_duration_minutes": 90,
+      "phone": "+84 273 3887 777"
+    },
+    {
+      "google_rating": 4.1,
+      "google_review_count": 321,
+      "rating_adjusted_for_review_count": 4.059569,
+      "rating_status": "source_snapshot",
+      "rating_source_date": "2026-10-28",
+      "id": "new_004",
+      "name": "Central Plaza Hotel Mỹ Tho",
+      "role": "accommodation",
+      "tags": [
+        "lưu trú",
+        "nghỉ ngơi"
+      ],
+      "activities_available": [],
+      "address": "Ba Mươi Tháng Tư, Phường, Mỹ Tho, Đồng Tháp, Việt Nam",
+      "coordinates": [
+        106.3618712,
+        10.3530379
+      ],
+      "visit_duration_minutes": 90,
+      "phone": "+84 273 3933 839"
+    },
+    {
+      "google_rating": 4.6,
+      "google_review_count": 109,
+      "rating_adjusted_for_review_count": 4.348428,
+      "rating_status": "source_snapshot",
+      "rating_source_date": "2026-10-28",
+      "id": "new_005",
+      "name": "Bầu Bí Mini Farmstay - Mekong - Tiền Giang",
+      "role": "accommodation",
+      "tags": [
+        "lưu trú",
+        "trải nghiệm nông thôn"
+      ],
+      "activities_available": [],
+      "address": "9852+WQ7, Long Hưng, Đồng Tháp, Việt Nam",
+      "coordinates": [
+        106.3019238,
+        10.3597852
+      ],
+      "visit_duration_minutes": 90,
+      "phone": "+84 918 111 291"
+    },
+    {
+      "google_rating": 4.2,
+      "google_review_count": 841,
+      "rating_adjusted_for_review_count": 4.177553,
+      "rating_status": "source_snapshot",
+      "rating_source_date": "2026-10-28",
+      "id": "new_006",
+      "name": "Cửu Long Hotel",
+      "role": "accommodation",
+      "tags": [
+        "lưu trú",
+        "nghỉ ngơi"
+      ],
+      "activities_available": [],
+      "address": "81/83 đường 30/4, Mỹ Tho, Đồng Tháp 860000, Việt Nam",
+      "coordinates": [
+        106.36724919999999,
+        10.352729199999999
+      ],
+      "visit_duration_minutes": 90,
+      "phone": "+84 273 6266 666"
+    },
+    {
+      "google_rating": 4.6,
+      "google_review_count": 119,
+      "rating_adjusted_for_review_count": 4.363314,
+      "rating_status": "source_snapshot",
+      "rating_source_date": "2026-10-28",
+      "id": "new_007",
+      "name": "Siri 2 Hotel - Khách sạn Siri 2 Mỹ Tho",
+      "role": "accommodation",
+      "tags": [
+        "lưu trú",
+        "nghỉ ngơi"
+      ],
+      "activities_available": [],
+      "address": "7/15 Nguyễn Hữu Trí, Ấp Mỹ Thạnh, xã, Mỹ Phong, Đồng Tháp, Việt Nam",
+      "coordinates": [
+        106.3666557,
+        10.367820499999999
+      ],
+      "visit_duration_minutes": 90,
+      "phone": "+84 379 262 962"
+    },
+    {
+      "google_rating": 4.2,
+      "google_review_count": 380,
+      "rating_adjusted_for_review_count": 4.153488,
+      "rating_status": "source_snapshot",
+      "rating_source_date": "2026-10-28",
+      "id": "new_008",
+      "name": "Cosy 1 Karaoke",
+      "role": "entertainment",
+      "tags": [
+        "giải trí",
+        "ca hát"
+      ],
+      "activities_available": [],
+      "address": "80 Lê Văn Phẩm, Đạo Thạnh, Đồng Tháp, Việt Nam",
+      "coordinates": [
+        106.34955289999999,
+        10.3590754
+      ],
+      "visit_duration_minutes": 15,
+      "phone": "+84 943 920 065"
+    },
+    {
+      "google_rating": 4.0,
+      "google_review_count": 185,
+      "rating_adjusted_for_review_count": 3.957447,
+      "rating_status": "source_snapshot",
+      "rating_source_date": "2026-10-28",
+      "id": "new_009",
+      "name": "KARAOKE KING",
+      "role": "entertainment",
+      "tags": [
+        "giải trí",
+        "ca hát"
+      ],
+      "activities_available": [],
+      "address": "Mỹ Phong, Đồng Tháp, Việt Nam",
+      "coordinates": [
+        106.36576249999999,
+        10.3717913
+      ],
+      "visit_duration_minutes": 90,
+      "phone": "+84 273 3827 999"
+    },
+    {
+      "google_rating": 4.0,
+      "google_review_count": 266,
+      "rating_adjusted_for_review_count": 3.968354,
+      "rating_status": "source_snapshot",
+      "rating_source_date": "2026-10-28",
+      "id": "new_010",
+      "name": "KARAOKE TẤN LỘC",
+      "role": "entertainment",
+      "tags": [
+        "giải trí",
+        "ca hát"
+      ],
+      "activities_available": [],
+      "address": "99C8+846, Đạo Thạnh, Đồng Tháp, Việt Nam",
+      "coordinates": [
+        106.36527,
+        10.370781
+      ],
+      "visit_duration_minutes": 180,
+      "phone": "+84 907 208 988"
+    },
+    {
+      "google_rating": 3.5,
+      "google_review_count": 8,
+      "rating_adjusted_for_review_count": 3.758621,
+      "rating_status": "source_snapshot",
+      "rating_source_date": "2026-10-28",
+      "id": "new_011",
+      "name": "288 CLUB",
+      "role": "entertainment",
+      "tags": [
+        "giải trí",
+        "ban đêm"
+      ],
+      "activities_available": [],
+      "address": "19 Phạm Thanh, Đạo Thạnh, Đồng Tháp, Việt Nam",
+      "coordinates": [
+        106.3506529,
+        10.361925099999999
+      ],
+      "visit_duration_minutes": 90,
+      "phone": null
+    },
+    {
+      "google_rating": 4.9,
+      "google_review_count": 238,
+      "rating_adjusted_for_review_count": 4.709028,
+      "rating_status": "source_snapshot",
+      "rating_source_date": "2026-10-28",
+      "id": "new_012",
+      "name": "Massage Đông Y Mỹ Tho - Phẻ Spa Gội Dưỡng Sinh",
+      "role": "wellness",
+      "tags": [
+        "thư giãn",
+        "chăm sóc cá nhân"
+      ],
+      "activities_available": [],
+      "address": "1 Hoàng Việt, Đạo Thạnh, Đồng Tháp 84113, Việt Nam",
+      "coordinates": [
+        106.35432039999999,
+        10.367184199999999
+      ],
+      "visit_duration_minutes": 90,
+      "phone": "+84 888 370 139"
+    },
+    {
+      "google_rating": null,
+      "google_review_count": null,
+      "rating_adjusted_for_review_count": null,
+      "rating_status": "missing",
+      "rating_source_date": "2026-10-28",
+      "id": "new_013",
+      "name": "Vua Nám Bà Tư Spa Sa Đéc",
+      "role": "wellness",
+      "tags": [
+        "thư giãn",
+        "chăm sóc da"
+      ],
+      "activities_available": [],
+      "address": "321 Đường Nguyễn Huệ, Sa Đéc, Đồng Tháp, Việt Nam",
+      "coordinates": [
+        105.7673598,
+        10.295564299999999
+      ],
+      "visit_duration_minutes": 90,
+      "phone": "+84 773 971 920"
+    },
+    {
+      "google_rating": 4.3,
+      "google_review_count": 5261,
+      "rating_adjusted_for_review_count": 4.295293,
+      "rating_status": "source_snapshot",
+      "rating_source_date": "2026-10-28",
+      "id": "new_014",
+      "name": "Trại rắn Đồng Tâm",
+      "role": "attraction",
+      "tags": [
+        "thiên nhiên",
+        "động vật",
+        "tham quan",
+        "giáo dục sinh học",
+        "gia đình",
+        "vui chơi",
+        "ẩm thực tại chỗ"
+      ],
+      "activities_available": [
+        {
+          "name": "Quan sát các loài rắn",
+          "source_id": "dongtam_home",
+          "evidence_status": "published_by_primary_source",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null
+        },
+        {
+          "name": "Nghe giới thiệu về sinh học của rắn",
+          "source_id": "dongtam_home",
+          "evidence_status": "published_by_primary_source",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null
+        },
+        {
+          "name": "Xem trình diễn lấy nọc rắn",
+          "source_id": "dongtam_home",
+          "evidence_status": "published_by_primary_source",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null
+        },
+        {
+          "name": "Tham quan khu động vật hoang dã",
+          "source_id": "dongtam_home",
+          "evidence_status": "published_by_primary_source",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null
+        },
+        {
+          "name": "Cho động vật ăn",
+          "source_id": "dongtam_home",
+          "evidence_status": "published_by_primary_source",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null
+        },
+        {
+          "name": "Câu cá sấu",
+          "source_id": "dongtam_home",
+          "evidence_status": "published_by_primary_source",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null
+        },
+        {
+          "name": "Vui chơi thiếu nhi",
+          "source_id": "dongtam_home",
+          "evidence_status": "published_by_primary_source",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null
+        },
+        {
+          "name": "Trò chơi cảm giác mạnh",
+          "source_id": "dongtam_home",
+          "evidence_status": "published_by_primary_source",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null,
+          "details_reported": [
+            "đĩa bay",
+            "xe điện đụng",
+            "đu quay"
+          ]
+        },
+        {
+          "name": "Trò chơi dân gian",
+          "source_id": "dongtam_home",
+          "evidence_status": "published_by_primary_source",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null,
+          "details_reported": [
+            "ném phi tiêu",
+            "chọi banh",
+            "ném bóng"
+          ]
+        },
+        {
+          "name": "Dã ngoại",
+          "source_id": "dongtam_home",
+          "evidence_status": "published_by_primary_source",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null
+        },
+        {
+          "name": "Câu cá giải trí",
+          "source_id": "dongtam_home",
+          "evidence_status": "published_by_primary_source",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null
+        },
+        {
+          "name": "Tham quan bảo tàng rắn",
+          "source_id": "dongtam_museum",
+          "evidence_status": "published_by_primary_source",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null,
+          "note": null
+        },
+        {
+          "name": "Chụp ảnh tại tiểu cảnh",
+          "source_id": "dongtam_event",
+          "evidence_status": "published_by_primary_source",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null,
+          "note": "Bài công bố dịp 02/09/2026; chưa xác nhận tiểu cảnh còn giữ nguyên."
+        }
+      ],
+      "address": "Ấp Tân Thuận B, Kim Sơn, Đồng Tháp, Việt Nam",
+      "coordinates": [
+        106.29672509999999,
+        10.351908
+      ],
+      "visit_duration_minutes": 240,
+      "phone": "+84 397 787 878"
+    },
+    {
+      "google_rating": 4.3,
+      "google_review_count": 34,
+      "rating_adjusted_for_review_count": 4.002381,
+      "rating_status": "source_snapshot",
+      "rating_source_date": "2026-10-28",
+      "id": "new_015",
+      "name": "Trà mật ong Kỳ Lân",
+      "role": "attraction",
+      "tags": [
+        "du lịch sinh thái",
+        "ẩm thực",
+        "miệt vườn",
+        "nghề truyền thống",
+        "mật ong",
+        "kẹo dừa",
+        "chụp ảnh"
+      ],
+      "activities_available": [
+        {
+          "name": "Tham quan nhà vườn làm từ gỗ dừa",
+          "source_id": "kylan_portal",
+          "evidence_status": "published_by_primary_source",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null,
+          "note": null
+        },
+        {
+          "name": "Tham quan vườn cây ăn trái",
+          "source_id": "kylan_portal",
+          "evidence_status": "published_by_primary_source",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null,
+          "note": null
+        },
+        {
+          "name": "Xem quy trình làm kẹo dừa",
+          "source_id": "kylan_portal",
+          "evidence_status": "published_by_primary_source",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null,
+          "note": null
+        },
+        {
+          "name": "Nếm kẹo dừa",
+          "source_id": "kylan_portal",
+          "evidence_status": "published_by_primary_source",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null,
+          "note": null
+        },
+        {
+          "name": "Tìm hiểu nghề nuôi ong lấy mật",
+          "source_id": "kylan_portal",
+          "evidence_status": "published_by_primary_source",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null,
+          "note": null
+        },
+        {
+          "name": "Uống trà mật ong",
+          "source_id": "kylan_portal",
+          "evidence_status": "published_by_primary_source",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null,
+          "note": null
+        },
+        {
+          "name": "Chụp ảnh với trăn",
+          "source_id": "kylan_portal",
+          "evidence_status": "published_by_primary_source",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null,
+          "note": null
+        },
+        {
+          "name": "Mua đặc sản làm quà",
+          "source_id": "kylan_portal",
+          "evidence_status": "published_by_primary_source",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null,
+          "note": null
+        }
+      ],
+      "address": "89V6+79C Mật Ong Kỳ Lân, Huyện Lộ 94C, Thới Sơn, Đồng Tháp, Việt Nam",
+      "coordinates": [
+        106.36087789999999,
+        10.343191899999999
+      ],
+      "visit_duration_minutes": 120,
+      "phone": "0986999749"
+    },
+    {
+      "google_rating": 4.5,
+      "google_review_count": 14,
+      "rating_adjusted_for_review_count": 3.953125,
+      "rating_status": "source_snapshot",
+      "rating_source_date": "2026-10-28",
+      "id": "new_016",
+      "name": "Khu Du Lịch Công Đoàn Thới Sơn Mỹ Tho Tiền Giang",
+      "role": "attraction",
+      "tags": [
+        "du lịch sinh thái",
+        "sông nước",
+        "văn hóa địa phương",
+        "đò chèo",
+        "trái cây",
+        "đờn ca tài tử"
+      ],
+      "activities_available": [
+        {
+          "name": "Đi đò chèo",
+          "source_id": "congdoan_portal",
+          "evidence_status": "published_by_primary_source",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null,
+          "note": null
+        },
+        {
+          "name": "Thưởng thức trái cây",
+          "source_id": "congdoan_portal",
+          "evidence_status": "published_by_primary_source",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null,
+          "note": null
+        },
+        {
+          "name": "Nghe đờn ca tài tử",
+          "source_id": "congdoan_portal",
+          "evidence_status": "published_by_primary_source",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null,
+          "note": null
+        },
+        {
+          "name": "Tham quan vườn nhãn và bưởi",
+          "source_id": "congdoan_portal",
+          "evidence_status": "published_by_primary_source",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null,
+          "note": null
+        },
+        {
+          "name": "Hái trái cây",
+          "source_id": "congdoan_portal",
+          "evidence_status": "published_by_primary_source",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null,
+          "note": null
+        },
+        {
+          "name": "Uống trà mật ong",
+          "source_id": "congdoan_portal",
+          "evidence_status": "published_by_primary_source",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null,
+          "note": null
+        },
+        {
+          "name": "Mua đồ thủ công và quà lưu niệm",
+          "source_id": "congdoan_portal",
+          "evidence_status": "published_by_primary_source",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null,
+          "note": null
+        }
+      ],
+      "address": "Ấp Thới Thạnh, Thới Sơn, Đồng Tháp 700000, Việt Nam",
+      "coordinates": [
+        106.3559523,
+        10.3430936
+      ],
+      "visit_duration_minutes": 120,
+      "phone": "+84 918 051 336"
+    },
+    {
+      "google_rating": 3.9,
+      "google_review_count": 154,
+      "rating_adjusted_for_review_count": 3.87549,
+      "rating_status": "source_snapshot",
+      "rating_source_date": "2026-10-28",
+      "id": "new_017",
+      "name": "Khu sinh thái Vườn Xanh - Thị trấn Kiểng Phước",
+      "role": "attraction",
+      "tags": [
+        "du lịch sinh thái",
+        "thiên nhiên",
+        "tham quan",
+        "cảnh quan",
+        "hồ nước",
+        "cá koi",
+        "vui chơi trẻ em",
+        "gia đình",
+        "chụp ảnh"
+      ],
+      "activities_available": [
+        {
+          "name": "Dạo cảnh quan cây xanh và hồ",
+          "source_id": "vuonxanh_article",
+          "evidence_status": "third_party_report_needs_venue_confirmation",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null,
+          "note": null
+        },
+        {
+          "name": "Chụp ảnh",
+          "source_id": "vuonxanh_article",
+          "evidence_status": "third_party_report_needs_venue_confirmation",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null,
+          "note": null
+        },
+        {
+          "name": "Xe điện đụng",
+          "source_id": "vuonxanh_article",
+          "evidence_status": "third_party_report_needs_venue_confirmation",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null,
+          "note": null
+        },
+        {
+          "name": "Xe đạp nước",
+          "source_id": "vuonxanh_article",
+          "evidence_status": "third_party_report_needs_venue_confirmation",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null,
+          "note": null
+        },
+        {
+          "name": "Đạp vịt",
+          "source_id": "vuonxanh_article",
+          "evidence_status": "third_party_report_needs_venue_confirmation",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null,
+          "note": null
+        },
+        {
+          "name": "Chèo thuyền",
+          "source_id": "vuonxanh_article",
+          "evidence_status": "third_party_report_needs_venue_confirmation",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null,
+          "note": null
+        },
+        {
+          "name": "Cho cá koi ăn",
+          "source_id": "vuonxanh_article",
+          "evidence_status": "third_party_report_needs_venue_confirmation",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null,
+          "note": null
+        },
+        {
+          "name": "Đu quay",
+          "source_id": "vuonxanh_article",
+          "evidence_status": "third_party_report_needs_venue_confirmation",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null,
+          "note": null
+        },
+        {
+          "name": "Nhà hơi trẻ em",
+          "source_id": "vuonxanh_article",
+          "evidence_status": "third_party_report_needs_venue_confirmation",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null,
+          "note": null
+        }
+      ],
+      "address": "Đ. Nguyễn Trãi, Gia Thuận, Đồng Tháp, Việt Nam",
+      "coordinates": [
+        106.77093529999999,
+        10.397254499999999
+      ],
+      "visit_duration_minutes": 240,
+      "phone": "+84 849 548 307"
+    }
+  ]
+}

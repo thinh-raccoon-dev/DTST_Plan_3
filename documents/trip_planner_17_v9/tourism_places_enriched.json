@@ -1,0 +1,1067 @@
+{
+  "scope": "4 điểm tham quan trong danh sách 17 địa điểm",
+  "retrieved_date": "2026-10-30",
+  "coverage": "best_effort_public_sources_not_exhaustive",
+  "integrated_into_recommender": true,
+  "source_registry": "sources.json",
+  "places": [
+    {
+      "id": "new_014",
+      "name": "Trại rắn Đồng Tâm",
+      "source_snapshot": {
+        "name": "Trại rắn Đồng Tâm",
+        "category": [
+          "Điểm thu hút khách du lịch"
+        ],
+        "address": "Ấp Tân Thuận B, Kim Sơn, Đồng Tháp, Việt Nam",
+        "latitude": 10.351908,
+        "longitude": 106.29672509999999,
+        "phone": "+84 397 787 878",
+        "place_id": "ChIJ8yjgOeCkCjERdOWReDskSEg",
+        "rating": 4.3,
+        "review_count": 5261,
+        "price_text": null,
+        "website": "https://trairandongtam.vn/",
+        "google_maps_url": "https://www.google.com/maps/preview/place/Tr%E1%BA%A1i+r%E1%BA%AFn+%C4%90%E1%BB%93ng+T%C3%A2m,+%E1%BA%A4p+T%C3%A2n+Thu%E1%BA%ADn+B,+Kim+S%C6%A1n,+%C4%90%E1%BB%93ng+Th%C3%A1p,+Vi%E1%BB%87t+Nam/@10.351908,106.2967251,3925a,13.1y/data=!4m2!3m1!1s0x310aa4e039e028f3:0x4848243b7891e574",
+        "visit_duration_text": "Mọi người thường dành tối đa 4 giờ ở đây",
+        "hours_by_date": [
+          {
+            "day": "Thứ Tư",
+            "date": [
+              2026,
+              10,
+              28
+            ],
+            "hours": [
+              "07:00–17:00"
+            ]
+          },
+          {
+            "day": "Thứ Năm",
+            "date": [
+              2026,
+              10,
+              29
+            ],
+            "hours": [
+              "07:00–17:00"
+            ]
+          },
+          {
+            "day": "Thứ Sáu",
+            "date": [
+              2026,
+              10,
+              30
+            ],
+            "hours": [
+              "07:00–17:00"
+            ]
+          },
+          {
+            "day": "Thứ Bảy",
+            "date": [
+              2026,
+              10,
+              31
+            ],
+            "hours": [
+              "07:00–17:30"
+            ]
+          },
+          {
+            "day": "Chủ Nhật",
+            "date": [
+              2026,
+              11,
+              1
+            ],
+            "hours": [
+              "07:00–17:30"
+            ]
+          },
+          {
+            "day": "Thứ Hai",
+            "date": [
+              2026,
+              11,
+              2
+            ],
+            "hours": [
+              "07:00–17:00"
+            ]
+          },
+          {
+            "day": "Thứ Ba",
+            "date": [
+              2026,
+              11,
+              3
+            ],
+            "hours": [
+              "07:00–17:00"
+            ]
+          }
+        ],
+        "about": {
+          "Phù hợp cho người khuyết tật": [
+            {
+              "name": "Chỗ đỗ xe cho xe lăn",
+              "status": true,
+              "source_text": "Chỗ đỗ xe cho xe lăn"
+            },
+            {
+              "name": "Lối vào cho xe lăn",
+              "status": true,
+              "source_text": "Lối vào cho xe lăn"
+            },
+            {
+              "name": "Nhà vệ sinh cho xe lăn",
+              "status": true,
+              "source_text": "Nhà vệ sinh cho xe lăn"
+            }
+          ],
+          "Tiện nghi": [
+            {
+              "name": "Nhà vệ sinh",
+              "status": true,
+              "source_text": "Nhà vệ sinh"
+            }
+          ],
+          "Thanh toán": [
+            {
+              "name": "Thẻ tín dụng",
+              "status": true,
+              "source_text": "Thẻ tín dụng"
+            }
+          ],
+          "Trẻ em": [
+            {
+              "name": "Phù hợp cho trẻ em",
+              "status": true,
+              "source_text": "Phù hợp cho trẻ em"
+            },
+            {
+              "name": "Sân chơi",
+              "status": true,
+              "source_text": "Sân chơi"
+            }
+          ]
+        },
+        "menu": {},
+        "data_date": "2026-10-28",
+        "notes": [
+          "Bản trích xuất một phần; không khẳng định mọi thông tin trong nguồn đã được tách."
+        ]
+      },
+      "enrichment_checked_at": "2026-10-30",
+      "all_information_complete": false,
+      "activities": [
+        {
+          "name": "Quan sát các loài rắn",
+          "source_id": "dongtam_home",
+          "evidence_status": "published_by_primary_source",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null
+        },
+        {
+          "name": "Nghe giới thiệu về sinh học của rắn",
+          "source_id": "dongtam_home",
+          "evidence_status": "published_by_primary_source",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null
+        },
+        {
+          "name": "Xem trình diễn lấy nọc rắn",
+          "source_id": "dongtam_home",
+          "evidence_status": "published_by_primary_source",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null
+        },
+        {
+          "name": "Tham quan khu động vật hoang dã",
+          "source_id": "dongtam_home",
+          "evidence_status": "published_by_primary_source",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null
+        },
+        {
+          "name": "Cho động vật ăn",
+          "source_id": "dongtam_home",
+          "evidence_status": "published_by_primary_source",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null
+        },
+        {
+          "name": "Câu cá sấu",
+          "source_id": "dongtam_home",
+          "evidence_status": "published_by_primary_source",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null
+        },
+        {
+          "name": "Vui chơi thiếu nhi",
+          "source_id": "dongtam_home",
+          "evidence_status": "published_by_primary_source",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null
+        },
+        {
+          "name": "Trò chơi cảm giác mạnh",
+          "source_id": "dongtam_home",
+          "evidence_status": "published_by_primary_source",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null,
+          "details_reported": [
+            "đĩa bay",
+            "xe điện đụng",
+            "đu quay"
+          ]
+        },
+        {
+          "name": "Trò chơi dân gian",
+          "source_id": "dongtam_home",
+          "evidence_status": "published_by_primary_source",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null,
+          "details_reported": [
+            "ném phi tiêu",
+            "chọi banh",
+            "ném bóng"
+          ]
+        },
+        {
+          "name": "Dã ngoại",
+          "source_id": "dongtam_home",
+          "evidence_status": "published_by_primary_source",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null
+        },
+        {
+          "name": "Câu cá giải trí",
+          "source_id": "dongtam_home",
+          "evidence_status": "published_by_primary_source",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null
+        },
+        {
+          "name": "Tham quan bảo tàng rắn",
+          "source_id": "dongtam_museum",
+          "evidence_status": "published_by_primary_source",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null,
+          "note": null
+        },
+        {
+          "name": "Chụp ảnh tại tiểu cảnh",
+          "source_id": "dongtam_event",
+          "evidence_status": "published_by_primary_source",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null,
+          "note": "Bài công bố dịp 02/09/2026; chưa xác nhận tiểu cảnh còn giữ nguyên."
+        }
+      ],
+      "onsite_services": [
+        {
+          "name": "Nhà hàng trong khuôn viên",
+          "source_id": "dongtam_restaurant"
+        },
+        {
+          "name": "Điểm cà phê và trà",
+          "source_id": "dongtam_cafe"
+        },
+        {
+          "name": "Quầy sản phẩm",
+          "source_id": "dongtam_home"
+        }
+      ],
+      "contacts_from_new_sources": [
+        {
+          "phone": "02733853204",
+          "source_id": "dongtam_home"
+        },
+        {
+          "phone": "0397787878",
+          "source_id": "dongtam_home"
+        },
+        {
+          "phone": "0898408408",
+          "source_id": "dongtam_home"
+        },
+        {
+          "phone": "0966993289",
+          "purpose": "đặt bàn nhà hàng",
+          "source_id": "dongtam_restaurant"
+        },
+        {
+          "email": "trairandongtam408@gmail.com",
+          "source_id": "dongtam_home"
+        }
+      ],
+      "hours_from_new_sources": [
+        {
+          "open": "07:00",
+          "close": "17:00",
+          "days": "all_week",
+          "source_id": "dongtam_home",
+          "status": "published_not_live_verified"
+        }
+      ],
+      "visit_duration_from_new_sources_minutes": null,
+      "admission_price_from_new_sources": null,
+      "planning_tags_inferred": [
+        "thiên nhiên",
+        "động vật",
+        "giáo dục sinh học",
+        "gia đình",
+        "vui chơi",
+        "ẩm thực tại chỗ"
+      ],
+      "needs_confirmation": [
+        "Giá và điều kiện của từng hoạt động",
+        "Lịch thực hiện và tình trạng hoạt động khi khách đến",
+        "Website công bố 07:00–17:00, bản Maps cũ có cuối tuần đến 17:30; không tự ghi đè.",
+        "Website ghi nhiều số liên hệ; cần xác nhận số phụ trách từng dịch vụ."
+      ],
+      "images": [],
+      "activity_availability_note": "Website có giới thiệu, chưa xác nhận lịch, điều kiện, độ tuổi hoặc phí riêng."
+    },
+    {
+      "id": "new_015",
+      "name": "Trà mật ong Kỳ Lân",
+      "source_snapshot": {
+        "name": "Trà mật ong Kỳ Lân",
+        "category": [
+          "Trang trại"
+        ],
+        "address": "89V6+79C Mật Ong Kỳ Lân, Huyện Lộ 94C, Thới Sơn, Đồng Tháp, Việt Nam",
+        "latitude": 10.343191899999999,
+        "longitude": 106.36087789999999,
+        "phone": null,
+        "place_id": "ChIJ95otynWvCjERb1WkofBukag",
+        "rating": 4.3,
+        "review_count": 34,
+        "price_text": null,
+        "website": null,
+        "google_maps_url": "https://www.google.com/maps/preview/place/89V6%2B79C+Tr%C3%A0+m%E1%BA%ADt+ong+K%E1%BB%B3+L%C3%A2n,+M%E1%BA%ADt+Ong+K%E1%BB%B3+L%C3%A2n,+Huy%E1%BB%87n+L%E1%BB%99+94C,+Th%E1%BB%9Bi+S%C6%A1n,+%C4%90%E1%BB%93ng+Th%C3%A1p,+Vi%E1%BB%87t+Nam/@10.3431919,106.3608779,3925a,13.1y/data=!4m2!3m1!1s0x310aaf75ca2d9af7:0xa8916ef0a1a4556f",
+        "visit_duration_text": null,
+        "hours_by_date": [],
+        "about": {},
+        "menu": {},
+        "data_date": "2026-10-28",
+        "notes": [
+          "Không trích xuất được giờ hoạt động.",
+          "Bản trích xuất một phần; không khẳng định mọi thông tin trong nguồn đã được tách."
+        ]
+      },
+      "enrichment_checked_at": "2026-10-30",
+      "all_information_complete": false,
+      "activities": [
+        {
+          "name": "Tham quan nhà vườn làm từ gỗ dừa",
+          "source_id": "kylan_portal",
+          "evidence_status": "published_by_primary_source",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null,
+          "note": null
+        },
+        {
+          "name": "Tham quan vườn cây ăn trái",
+          "source_id": "kylan_portal",
+          "evidence_status": "published_by_primary_source",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null,
+          "note": null
+        },
+        {
+          "name": "Xem quy trình làm kẹo dừa",
+          "source_id": "kylan_portal",
+          "evidence_status": "published_by_primary_source",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null,
+          "note": null
+        },
+        {
+          "name": "Nếm kẹo dừa",
+          "source_id": "kylan_portal",
+          "evidence_status": "published_by_primary_source",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null,
+          "note": null
+        },
+        {
+          "name": "Tìm hiểu nghề nuôi ong lấy mật",
+          "source_id": "kylan_portal",
+          "evidence_status": "published_by_primary_source",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null,
+          "note": null
+        },
+        {
+          "name": "Uống trà mật ong",
+          "source_id": "kylan_portal",
+          "evidence_status": "published_by_primary_source",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null,
+          "note": null
+        },
+        {
+          "name": "Chụp ảnh với trăn",
+          "source_id": "kylan_portal",
+          "evidence_status": "published_by_primary_source",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null,
+          "note": null
+        },
+        {
+          "name": "Mua đặc sản làm quà",
+          "source_id": "kylan_portal",
+          "evidence_status": "published_by_primary_source",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null,
+          "note": null
+        }
+      ],
+      "onsite_services": [],
+      "contacts_from_new_sources": [
+        {
+          "phone": "0986999749",
+          "source_id": "kylan_portal"
+        },
+        {
+          "email": "info@dulichtiengiang.com.vn",
+          "source_id": "kylan_portal",
+          "note": "Email trên cổng du lịch; chưa xác nhận thuộc cơ sở."
+        }
+      ],
+      "hours_from_new_sources": [
+        {
+          "open": "07:00",
+          "close": "18:00",
+          "days": null,
+          "source_id": "kylan_portal",
+          "status": "published_weekdays_not_explicit"
+        }
+      ],
+      "visit_duration_from_new_sources_minutes": {
+        "value": 120,
+        "source_id": "kylan_portal",
+        "status": "portal_suggestion_not_mandatory"
+      },
+      "admission_price_from_new_sources": {
+        "source_text": "Miễn phí",
+        "value_vnd": 0,
+        "source_id": "kylan_portal",
+        "scope": "portal_admission_listing_only",
+        "includes_all_activities": null,
+        "requires_confirmation": true
+      },
+      "planning_tags_inferred": [
+        "miệt vườn",
+        "nghề truyền thống",
+        "mật ong",
+        "kẹo dừa",
+        "ẩm thực",
+        "chụp ảnh"
+      ],
+      "needs_confirmation": [
+        "Giá và điều kiện của từng hoạt động",
+        "Lịch thực hiện và tình trạng hoạt động khi khách đến",
+        "Không suy diễn tham quan vườn thành được tự hái trái.",
+        "Chụp ảnh với trăn là hoạt động nguồn nêu, không bắt buộc tham gia."
+      ],
+      "images": []
+    },
+    {
+      "id": "new_016",
+      "name": "Khu Du Lịch Công Đoàn Thới Sơn Mỹ Tho Tiền Giang",
+      "source_snapshot": {
+        "name": "Khu Du Lịch Công Đoàn Thới Sơn Mỹ Tho Tiền Giang",
+        "category": [
+          "Nhà hàng"
+        ],
+        "address": "Ấp Thới Thạnh, Thới Sơn, Đồng Tháp 700000, Việt Nam",
+        "latitude": 10.3430936,
+        "longitude": 106.3559523,
+        "phone": "+84 918 051 336",
+        "place_id": "ChIJx13Mq6evCjER-ruIJdpD_-c",
+        "rating": 4.5,
+        "review_count": 14,
+        "price_text": null,
+        "website": null,
+        "google_maps_url": "https://www.google.com/maps/preview/place/Khu+Du+L%E1%BB%8Bch+C%C3%B4ng+%C4%90o%C3%A0n+Th%E1%BB%9Bi+S%C6%A1n+M%E1%BB%B9+Tho+Ti%E1%BB%81n+Giang,+%E1%BA%A4p+Th%E1%BB%9Bi+Th%E1%BA%A1nh,+Th%E1%BB%9Bi+S%C6%A1n,+%C4%90%E1%BB%93ng+Th%C3%A1p+700000,+Vi%E1%BB%87t+Nam/@10.3430936,106.3559523,3925a,13.1y/data=!4m2!3m1!1s0x310aafa7abcc5dc7:0xe7ff43da2588bbfa",
+        "visit_duration_text": null,
+        "hours_by_date": [
+          {
+            "day": "Thứ Tư",
+            "date": [
+              2026,
+              10,
+              28
+            ],
+            "hours": [
+              "06:00–19:00"
+            ]
+          },
+          {
+            "day": "Thứ Năm",
+            "date": [
+              2026,
+              10,
+              29
+            ],
+            "hours": [
+              "06:00–19:00"
+            ]
+          },
+          {
+            "day": "Thứ Sáu",
+            "date": [
+              2026,
+              10,
+              30
+            ],
+            "hours": [
+              "06:00–19:00"
+            ]
+          },
+          {
+            "day": "Thứ Bảy",
+            "date": [
+              2026,
+              10,
+              31
+            ],
+            "hours": [
+              "06:00–19:00"
+            ]
+          },
+          {
+            "day": "Chủ Nhật",
+            "date": [
+              2026,
+              11,
+              1
+            ],
+            "hours": [
+              "06:00–19:00"
+            ]
+          },
+          {
+            "day": "Thứ Hai",
+            "date": [
+              2026,
+              11,
+              2
+            ],
+            "hours": [
+              "06:00–19:00"
+            ]
+          },
+          {
+            "day": "Thứ Ba",
+            "date": [
+              2026,
+              11,
+              3
+            ],
+            "hours": [
+              "06:00–19:00"
+            ]
+          }
+        ],
+        "about": {
+          "Các tùy chọn dịch vụ": [
+            {
+              "name": "Giao hàng gián tiếp",
+              "status": true,
+              "source_text": "Giao hàng gián tiếp"
+            },
+            {
+              "name": "Giao hàng",
+              "status": true,
+              "source_text": "Giao hàng"
+            },
+            {
+              "name": "Đồ ăn mang đi",
+              "status": true,
+              "source_text": "Đồ ăn mang đi"
+            },
+            {
+              "name": "Ăn tại chỗ",
+              "status": true,
+              "source_text": "Ăn tại chỗ"
+            }
+          ],
+          "Tiện nghi": [
+            {
+              "name": "Nhà vệ sinh",
+              "status": true,
+              "source_text": "Nhà vệ sinh"
+            }
+          ],
+          "Bầu không khí": [
+            {
+              "name": "Thông thường",
+              "status": true,
+              "source_text": "Thông thường"
+            }
+          ],
+          "Khách hàng": [
+            {
+              "name": "Du khách",
+              "status": true,
+              "source_text": "Du khách"
+            },
+            {
+              "name": "Nhóm",
+              "status": true,
+              "source_text": "Phù hợp khi đi theo nhóm"
+            }
+          ],
+          "Trẻ em": [
+            {
+              "name": "Phù hợp cho trẻ em",
+              "status": true,
+              "source_text": "Phù hợp cho trẻ em"
+            }
+          ],
+          "Bãi đỗ xe": [
+            {
+              "name": "Đỗ xe miễn phí trên đường",
+              "status": true,
+              "source_text": "Đỗ xe miễn phí trên đường"
+            }
+          ]
+        },
+        "menu": {},
+        "data_date": "2026-10-28",
+        "notes": [
+          "Bản trích xuất một phần; không khẳng định mọi thông tin trong nguồn đã được tách."
+        ]
+      },
+      "enrichment_checked_at": "2026-10-30",
+      "all_information_complete": false,
+      "activities": [
+        {
+          "name": "Đi đò chèo",
+          "source_id": "congdoan_portal",
+          "evidence_status": "published_by_primary_source",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null,
+          "note": null
+        },
+        {
+          "name": "Thưởng thức trái cây",
+          "source_id": "congdoan_portal",
+          "evidence_status": "published_by_primary_source",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null,
+          "note": null
+        },
+        {
+          "name": "Nghe đờn ca tài tử",
+          "source_id": "congdoan_portal",
+          "evidence_status": "published_by_primary_source",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null,
+          "note": null
+        },
+        {
+          "name": "Tham quan vườn nhãn và bưởi",
+          "source_id": "congdoan_portal",
+          "evidence_status": "published_by_primary_source",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null,
+          "note": null
+        },
+        {
+          "name": "Hái trái cây",
+          "source_id": "congdoan_portal",
+          "evidence_status": "published_by_primary_source",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null,
+          "note": null
+        },
+        {
+          "name": "Uống trà mật ong",
+          "source_id": "congdoan_portal",
+          "evidence_status": "published_by_primary_source",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null,
+          "note": null
+        },
+        {
+          "name": "Mua đồ thủ công và quà lưu niệm",
+          "source_id": "congdoan_portal",
+          "evidence_status": "published_by_primary_source",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null,
+          "note": null
+        }
+      ],
+      "onsite_services": [],
+      "contacts_from_new_sources": [
+        {
+          "phone": "0902036056",
+          "source_id": "congdoan_portal"
+        },
+        {
+          "email": "conphungvn@gmail.com",
+          "source_id": "congdoan_portal",
+          "note": "Email trên cổng du lịch; cần xác nhận đúng cơ sở."
+        }
+      ],
+      "hours_from_new_sources": [
+        {
+          "open": "07:00",
+          "close": "18:00",
+          "days": null,
+          "source_id": "congdoan_portal",
+          "status": "published_weekdays_not_explicit"
+        }
+      ],
+      "visit_duration_from_new_sources_minutes": {
+        "value": 120,
+        "source_id": "congdoan_portal",
+        "status": "portal_suggestion_not_mandatory"
+      },
+      "admission_price_from_new_sources": {
+        "source_text": "Miễn phí",
+        "value_vnd": 0,
+        "source_id": "congdoan_portal",
+        "scope": "portal_admission_listing_only",
+        "includes_all_activities": null,
+        "requires_confirmation": true
+      },
+      "planning_tags_inferred": [
+        "sông nước",
+        "đò chèo",
+        "trái cây",
+        "đờn ca tài tử",
+        "văn hóa địa phương"
+      ],
+      "needs_confirmation": [
+        "Giá và điều kiện của từng hoạt động",
+        "Lịch thực hiện và tình trạng hoạt động khi khách đến",
+        "Cổng du lịch ghi 0902036056 và 07:00–18:00; Maps cũ ghi 0918051336 và 06:00–19:00. Giữ hai nguồn, chưa chọn một làm chuẩn.",
+        "Trái cây có thể phụ thuộc mùa vụ; nguồn không công bố lịch mùa."
+      ],
+      "images": []
+    },
+    {
+      "id": "new_017",
+      "name": "Khu sinh thái Vườn Xanh - Thị trấn Kiểng Phước",
+      "source_snapshot": {
+        "name": "Khu sinh thái Vườn Xanh - Thị trấn Kiểng Phước",
+        "category": [
+          "Điểm thu hút khách du lịch"
+        ],
+        "address": "Đ. Nguyễn Trãi, Gia Thuận, Đồng Tháp, Việt Nam",
+        "latitude": 10.397254499999999,
+        "longitude": 106.77093529999999,
+        "phone": "+84 849 548 307",
+        "place_id": "ChIJza7PBw1FdTERvMHBz1B6vbU",
+        "rating": 3.9,
+        "review_count": 154,
+        "price_text": null,
+        "website": "https://www.facebook.com/share/188UoEVm1Z/",
+        "google_maps_url": "https://www.google.com/maps/preview/place/Khu+sinh+th%C3%A1i+V%C6%B0%E1%BB%9Dn+Xanh+-+Th%E1%BB%8B+tr%E1%BA%A5n+Ki%E1%BB%83ng+Ph%C6%B0%E1%BB%9Bc,+%C4%90.+Nguy%E1%BB%85n+Tr%C3%A3i,+Gia+Thu%E1%BA%ADn,+%C4%90%E1%BB%93ng+Th%C3%A1p,+Vi%E1%BB%87t+Nam/@10.3972545,106.7709353,3924a,13.1y/data=!4m2!3m1!1s0x3175450d07cfaecd:0xb5bd7a50cfc1c1bc",
+        "visit_duration_text": "Mọi người thường dành tối đa 4 giờ ở đây",
+        "hours_by_date": [
+          {
+            "day": "Thứ Tư",
+            "date": [
+              2026,
+              10,
+              28
+            ],
+            "hours": [
+              "08:00–22:00"
+            ]
+          },
+          {
+            "day": "Thứ Năm",
+            "date": [
+              2026,
+              10,
+              29
+            ],
+            "hours": [
+              "08:00–22:00"
+            ]
+          },
+          {
+            "day": "Thứ Sáu",
+            "date": [
+              2026,
+              10,
+              30
+            ],
+            "hours": [
+              "08:00–22:00"
+            ]
+          },
+          {
+            "day": "Thứ Bảy",
+            "date": [
+              2026,
+              10,
+              31
+            ],
+            "hours": [
+              "08:00–22:00"
+            ]
+          },
+          {
+            "day": "Chủ Nhật",
+            "date": [
+              2026,
+              11,
+              1
+            ],
+            "hours": [
+              "08:00–22:00"
+            ]
+          },
+          {
+            "day": "Thứ Hai",
+            "date": [
+              2026,
+              11,
+              2
+            ],
+            "hours": [
+              "08:00–22:00"
+            ]
+          },
+          {
+            "day": "Thứ Ba",
+            "date": [
+              2026,
+              11,
+              3
+            ],
+            "hours": [
+              "08:00–22:00"
+            ]
+          }
+        ],
+        "about": {
+          "Phù hợp cho người khuyết tật": [
+            {
+              "name": "Chỗ đỗ xe cho xe lăn",
+              "status": true,
+              "source_text": "Chỗ đỗ xe cho xe lăn"
+            },
+            {
+              "name": "Nhà vệ sinh cho xe lăn",
+              "status": true,
+              "source_text": "Nhà vệ sinh cho xe lăn"
+            }
+          ],
+          "Tiện nghi": [
+            {
+              "name": "Nhà vệ sinh",
+              "status": true,
+              "source_text": "Nhà vệ sinh"
+            }
+          ],
+          "Trẻ em": [
+            {
+              "name": "Phù hợp cho tiệc sinh nhật của trẻ em",
+              "status": true,
+              "source_text": "Phù hợp cho tiệc sinh nhật của trẻ em"
+            },
+            {
+              "name": "Phù hợp cho trẻ em",
+              "status": true,
+              "source_text": "Phù hợp cho trẻ em"
+            }
+          ]
+        },
+        "menu": {},
+        "data_date": "2026-10-28",
+        "notes": [
+          "Bản trích xuất một phần; không khẳng định mọi thông tin trong nguồn đã được tách."
+        ]
+      },
+      "enrichment_checked_at": "2026-10-30",
+      "all_information_complete": false,
+      "activities": [
+        {
+          "name": "Dạo cảnh quan cây xanh và hồ",
+          "source_id": "vuonxanh_article",
+          "evidence_status": "third_party_report_needs_venue_confirmation",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null,
+          "note": null
+        },
+        {
+          "name": "Chụp ảnh",
+          "source_id": "vuonxanh_article",
+          "evidence_status": "third_party_report_needs_venue_confirmation",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null,
+          "note": null
+        },
+        {
+          "name": "Xe điện đụng",
+          "source_id": "vuonxanh_article",
+          "evidence_status": "third_party_report_needs_venue_confirmation",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null,
+          "note": null
+        },
+        {
+          "name": "Xe đạp nước",
+          "source_id": "vuonxanh_article",
+          "evidence_status": "third_party_report_needs_venue_confirmation",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null,
+          "note": null
+        },
+        {
+          "name": "Đạp vịt",
+          "source_id": "vuonxanh_article",
+          "evidence_status": "third_party_report_needs_venue_confirmation",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null,
+          "note": null
+        },
+        {
+          "name": "Chèo thuyền",
+          "source_id": "vuonxanh_article",
+          "evidence_status": "third_party_report_needs_venue_confirmation",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null,
+          "note": null
+        },
+        {
+          "name": "Cho cá koi ăn",
+          "source_id": "vuonxanh_article",
+          "evidence_status": "third_party_report_needs_venue_confirmation",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null,
+          "note": null
+        },
+        {
+          "name": "Đu quay",
+          "source_id": "vuonxanh_article",
+          "evidence_status": "third_party_report_needs_venue_confirmation",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null,
+          "note": null
+        },
+        {
+          "name": "Nhà hơi trẻ em",
+          "source_id": "vuonxanh_article",
+          "evidence_status": "third_party_report_needs_venue_confirmation",
+          "price_vnd": null,
+          "duration_minutes": null,
+          "schedule": null,
+          "requires_booking": null,
+          "note": null
+        }
+      ],
+      "onsite_services": [
+        {
+          "name": "Ăn uống trong khu",
+          "source_id": "vuonxanh_article"
+        }
+      ],
+      "contacts_from_new_sources": [],
+      "hours_from_new_sources": [],
+      "visit_duration_from_new_sources_minutes": null,
+      "admission_price_from_new_sources": null,
+      "planning_tags_inferred": [
+        "cảnh quan",
+        "hồ nước",
+        "cá koi",
+        "vui chơi trẻ em",
+        "gia đình",
+        "chụp ảnh"
+      ],
+      "needs_confirmation": [
+        "Giá và điều kiện của từng hoạt động",
+        "Lịch thực hiện và tình trạng hoạt động khi khách đến",
+        "Hoạt động mới lấy từ bài của đơn vị tour, chưa có nguồn chủ cơ sở xác nhận.",
+        "Không dùng giờ làm việc, số điện thoại hoặc giá tour của Cảnh Việt làm giờ/điện thoại/giá vé Vườn Xanh."
+      ],
+      "images": []
+    }
+  ],
+  "application_version": "v5"
+}

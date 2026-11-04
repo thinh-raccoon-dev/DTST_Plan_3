@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { ShieldCheck } from 'lucide-react';
+import { ShieldCheck, Sparkles } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { useForm } from 'react-hook-form';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
@@ -49,11 +49,16 @@ async function offerDeviceSync() {
 
 function AuthShell({ title, description, children }: { title: string; description: string; children: ReactNode }) {
   return (
-    <div className="mx-auto flex w-full max-w-md flex-col px-4 py-10 sm:py-16">
-      <Card className="p-6 sm:p-8">
-        <h1 className="text-2xl">{title}</h1>
-        <p className="mt-1 text-sm text-river-600">{description}</p>
-        <div className="mt-6">{children}</div>
+    <div className="mx-auto flex w-full max-w-md flex-col px-4 py-10 sm:py-14">
+      <Card className="tp-fade-up overflow-hidden border-sand-300 shadow-raised">
+        <div className="bg-gradient-to-br from-leaf-950 via-leaf-900 to-river-900 px-6 py-5 text-white sm:px-8">
+          <span className="inline-flex items-center gap-1.5 rounded-pill bg-white/10 px-2.5 py-0.5 text-xs font-medium text-teal-300">
+            <Sparkles className="size-3.5" aria-hidden /> Du lịch số Đồng Tháp
+          </span>
+          <h1 className="mt-2 text-2xl text-white">{title}</h1>
+          <p className="mt-1 text-sm text-sand-200">{description}</p>
+        </div>
+        <div className="p-6 sm:p-8">{children}</div>
       </Card>
     </div>
   );
@@ -198,7 +203,7 @@ export function AdminLoginPage() {
   if (user?.role === 'admin') return <Navigate to="/admin" replace />;
   return (
     <div className="flex min-h-dvh items-center justify-center bg-river-950 px-4">
-      <Card className="w-full max-w-md p-6 sm:p-8">
+      <Card className="tp-fade-up w-full max-w-md p-6 sm:p-8">
         <Logo subtitle="QUẢN TRỊ" stacked={false} />
         <h1 className="mt-6 flex items-center gap-2 text-2xl">
           <ShieldCheck className="size-6 text-leaf-600" aria-hidden />
@@ -209,7 +214,9 @@ export function AdminLoginPage() {
           <LoginForm admin />
         </div>
         <p className="mt-6 text-center text-sm">
-          <Link to="/" className="text-river-600 hover:text-leaf-700">← Về trang du khách</Link>
+          <Link to="/" className="text-river-600 hover:text-leaf-700">
+            ← Về trang du khách
+          </Link>
         </p>
       </Card>
     </div>

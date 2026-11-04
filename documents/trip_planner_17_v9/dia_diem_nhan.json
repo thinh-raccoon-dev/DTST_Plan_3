@@ -1,0 +1,177 @@
+[
+  {
+    "ten": "Lẩu ếch Đông Đô",
+    "nhan": [
+      "ẩm thực",
+      "ăn uống",
+      "món địa phương"
+    ],
+    "gia_moi_nguoi_vnd": null,
+    "tong_thoi_gian_phut": null,
+    "khoang_cach_duong_km": null
+  },
+  {
+    "ten": "Nhà Hàng Chương Dương",
+    "nhan": [
+      "ẩm thực",
+      "ăn uống"
+    ],
+    "gia_moi_nguoi_vnd": null,
+    "tong_thoi_gian_phut": null,
+    "khoang_cach_duong_km": null
+  },
+  {
+    "ten": "Khách sạn Mekong Mỹ Tho",
+    "nhan": [
+      "lưu trú",
+      "nghỉ ngơi"
+    ],
+    "gia_moi_nguoi_vnd": null,
+    "tong_thoi_gian_phut": null,
+    "khoang_cach_duong_km": null
+  },
+  {
+    "ten": "Central Plaza Hotel Mỹ Tho",
+    "nhan": [
+      "lưu trú",
+      "nghỉ ngơi"
+    ],
+    "gia_moi_nguoi_vnd": null,
+    "tong_thoi_gian_phut": null,
+    "khoang_cach_duong_km": null
+  },
+  {
+    "ten": "Bầu Bí Mini Farmstay - Mekong - Tiền Giang",
+    "nhan": [
+      "lưu trú",
+      "trải nghiệm nông thôn"
+    ],
+    "gia_moi_nguoi_vnd": null,
+    "tong_thoi_gian_phut": null,
+    "khoang_cach_duong_km": null
+  },
+  {
+    "ten": "Cửu Long Hotel",
+    "nhan": [
+      "lưu trú",
+      "nghỉ ngơi"
+    ],
+    "gia_moi_nguoi_vnd": null,
+    "tong_thoi_gian_phut": null,
+    "khoang_cach_duong_km": null
+  },
+  {
+    "ten": "Siri 2 Hotel - Khách sạn Siri 2 Mỹ Tho",
+    "nhan": [
+      "lưu trú",
+      "nghỉ ngơi"
+    ],
+    "gia_moi_nguoi_vnd": null,
+    "tong_thoi_gian_phut": null,
+    "khoang_cach_duong_km": null
+  },
+  {
+    "ten": "Cosy 1 Karaoke",
+    "nhan": [
+      "giải trí",
+      "ca hát"
+    ],
+    "gia_moi_nguoi_vnd": null,
+    "tong_thoi_gian_phut": null,
+    "khoang_cach_duong_km": null
+  },
+  {
+    "ten": "KARAOKE KING",
+    "nhan": [
+      "giải trí",
+      "ca hát"
+    ],
+    "gia_moi_nguoi_vnd": null,
+    "tong_thoi_gian_phut": null,
+    "khoang_cach_duong_km": null
+  },
+  {
+    "ten": "KARAOKE TẤN LỘC",
+    "nhan": [
+      "giải trí",
+      "ca hát"
+    ],
+    "gia_moi_nguoi_vnd": null,
+    "tong_thoi_gian_phut": null,
+    "khoang_cach_duong_km": null
+  },
+  {
+    "ten": "288 CLUB",
+    "nhan": [
+      "giải trí",
+      "ban đêm"
+    ],
+    "gia_moi_nguoi_vnd": null,
+    "tong_thoi_gian_phut": null,
+    "khoang_cach_duong_km": null
+  },
+  {
+    "ten": "Massage Đông Y Mỹ Tho - Phẻ Spa Gội Dưỡng Sinh",
+    "nhan": [
+      "thư giãn",
+      "chăm sóc cá nhân"
+    ],
+    "gia_moi_nguoi_vnd": null,
+    "tong_thoi_gian_phut": null,
+    "khoang_cach_duong_km": null
+  },
+  {
+    "ten": "Vua Nám Bà Tư Spa Sa Đéc",
+    "nhan": [
+      "thư giãn",
+      "chăm sóc da"
+    ],
+    "gia_moi_nguoi_vnd": null,
+    "tong_thoi_gian_phut": null,
+    "khoang_cach_duong_km": null
+  },
+  {
+    "ten": "Trại rắn Đồng Tâm",
+    "nhan": [
+      "thiên nhiên",
+      "động vật",
+      "tham quan"
+    ],
+    "gia_moi_nguoi_vnd": null,
+    "tong_thoi_gian_phut": null,
+    "khoang_cach_duong_km": null
+  },
+  {
+    "ten": "Trà mật ong Kỳ Lân",
+    "nhan": [
+      "du lịch sinh thái",
+      "ẩm thực",
+      "miệt vườn"
+    ],
+    "gia_moi_nguoi_vnd": null,
+    "tong_thoi_gian_phut": null,
+    "khoang_cach_duong_km": null
+  },
+  {
+    "ten": "Khu Du Lịch Công Đoàn Thới Sơn Mỹ Tho Tiền Giang",
+    "nhan": [
+      "du lịch sinh thái",
+      "sông nước",
+      "văn hóa địa phương"
+    ],
+    "gia_moi_nguoi_vnd": null,
+    "tong_thoi_gian_phut": null,
+    "khoang_cach_duong_km": null
+  },
+  {
+    "ten": "Khu sinh thái Vườn Xanh - Thị trấn Kiểng Phước",
+    "nhan": [
+      "du lịch sinh thái",
+      "thiên nhiên",
+      "tham quan"
+    ],
+    "gia_moi_nguoi_vnd": null,
+    "tong_thoi_gian_phut": null,
+    "khoang_cach_duong_km": null
+  }
+]

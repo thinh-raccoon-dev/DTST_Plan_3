@@ -45,12 +45,19 @@ export function buildApiRouter(): Router {
   api.get('/destinations/:slug/related', destinations.getRelatedDestinations);
   api.post('/events/destination-view', eventLimiter, destinations.recordDestinationView);
 
+  // Trip Planner V9 (AI & Manual + Valhalla routing + Replan)
+  api.get('/trip-planner/health', itineraries.getTripPlannerHealth);
+  api.get('/trip-planner/places', itineraries.listTripPlannerPlaces);
+  api.post('/trip-planner/recommend', eventLimiter, itineraries.recommendTripPlanner);
+  api.post('/trip-planner/itinerary', eventLimiter, itineraries.planTripV9);
+
   // Itineraries
   api.post('/itineraries/generate', eventLimiter, itineraries.generateItinerary);
   api.post('/itineraries', requireAuth, itineraries.createItinerary);
   api.get('/itineraries/my', requireAuth, itineraries.listMyItineraries);
   api.get('/itineraries/:id', requireAuth, itineraries.getItinerary);
   api.patch('/itineraries/:id', requireAuth, itineraries.updateItinerary);
+  api.post('/itineraries/:id/replan', requireAuth, eventLimiter, itineraries.replanItinerary);
   api.delete('/itineraries/:id', requireAuth, itineraries.deleteItinerary);
 
   // QR & challenges

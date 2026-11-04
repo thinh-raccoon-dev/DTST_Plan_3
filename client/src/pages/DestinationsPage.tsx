@@ -1,17 +1,17 @@
-import { SlidersHorizontal } from 'lucide-react';
+import { Compass, SlidersHorizontal, X } from 'lucide-react';
 import { useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { DestinationCard } from '../components/destination/DestinationCard';
 import { FilterPanel, type DestinationFilters } from '../components/destination/FilterPanel';
 import { PageContainer } from '../components/layout/PublicLayout';
 import { Button } from '../components/ui/Button';
-import { Card, SectionHeading } from '../components/ui/Card';
+import { Card } from '../components/ui/Card';
 import { Pagination, SearchBar } from '../components/ui/Navigation';
 import { CardGridSkeleton, EmptyState, ErrorState } from '../components/ui/States';
 import { useApiQuery } from '../hooks/useApiQuery';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { api } from '../lib/api';
-import { AREA_OPTIONS, CATEGORY_OPTIONS } from '../lib/catalog';
+import { AREA_OPTIONS, areaLabel, CATEGORY_OPTIONS, categoryLabel } from '../lib/catalog';
 import type { Area, Category, DestinationSummary, Paginated } from '../types/api';
 
 const PAGE_SIZE = 9;
@@ -24,7 +24,6 @@ function parseList<T extends string>(raw: string | null, allowed: Array<{ value:
 
 export function DestinationsPage() {
   useDocumentTitle('Khám phá địa điểm');
-  // Filters live in the URL, so back/forward, reload and sharing keep the same results.
   const [params, setParams] = useSearchParams();
   const q = params.get('q') ?? '';
   const page = Math.max(1, Number(params.get('page')) || 1);
@@ -86,14 +85,27 @@ export function DestinationsPage() {
 
   return (
     <PageContainer>
-      <SectionHeading as="h1" title="Khám phá địa điểm" description="Tìm kiếm và lọc các điểm đến đã được xuất bản tại Đồng Tháp." />
-      <div className="mt-6">
-        <SearchBar value={q} onSearch={(value) => update({ q: value || null })} />
-      </div>
+      {/* Hero Header */}
+      <section className="tp-fade-up relative overflow-hidden rounded-panel bg-gradient-to-br from-leaf-900 via-leaf-800 to-leaf-600 p-6 text-white shadow-raised sm:p-8">
+        <div className="pointer-events-none absolute -right-12 -top-16 size-64 rounded-full bg-lotus-300/20 blur-3xl" aria-hidden />
+        <div className="relative">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold ring-1 ring-white/20">
+            <Compass className="size-3.5 text-teal-200" aria-hidden />
+            Bản đồ điểm đến Đồng Tháp
+          </span>
+          <h1 className="mt-3 text-3xl text-white sm:text-4xl">Khám phá địa điểm</h1>
+          <p className="mt-2 max-w-xl text-sm leading-relaxed text-leaf-100 sm:text-base">
+            Tìm kiếm theo từ khóa, lọc theo nhóm trải nghiệm, khu vực hoặc điểm có thử thách QR đang hoạt động.
+          </p>
+          <div className="mt-5 max-w-2xl">
+            <SearchBar value={q} onSearch={(value) => update({ q: value || null })} />
+          </div>
+        </div>
+      </section>
 
       <details className="mt-4 lg:hidden" open={activeFilterCount > 0 || undefined}>
-        <summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-control border border-sand-300 bg-white px-4 text-sm font-semibold text-river-800">
-          <SlidersHorizontal className="size-4" aria-hidden />
+        <summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-full border border-sand-300 bg-white px-4 text-sm font-semibold text-river-800 shadow-card">
+          <SlidersHorizontal className="size-4 text-leaf-600" aria-hidden />
           Bộ lọc{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
         </summary>
         <Card className="mt-3 p-4">{panel}</Card>
@@ -104,16 +116,66 @@ export function DestinationsPage() {
           <Card className="sticky top-24 p-5">{panel}</Card>
         </aside>
         <section aria-live="polite" aria-busy={query.loading}>
-          {query.data && !query.loading && (
-            <p className="mb-4 text-sm text-river-600">
-              Tìm thấy <strong className="text-river-900">{query.data.total}</strong> địa điểm
-              {q && (
-                <>
-                  {' '}cho “<strong className="text-river-900">{q}</strong>”
-                </>
-              )}
-            </p>
-          )}
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+            {query.data && !query.loading ? (
+              <p className="text-sm text-river-600">
+                Tìm thấy <strong className="text-river-900">{query.data.total}</strong> địa điểm
+                {q && (
+                  <>
+                    {' '}cho “<strong className="text-river-900">{q}</strong>”
+                  </>
+                )}
+              </p>
+            ) : (
+              <span />
+            )}
+
+            {/* Active filter pills */}
+            {(activeFilterCount > 0 || q) && (
+              <div className="flex flex-wrap items-center gap-1.5">
+                {filters.category.map((cat) => (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => update({ category: filters.category.filter((c) => c !== cat).join(',') || null })}
+                    className="inline-flex items-center gap-1 rounded-full bg-leaf-50 px-2.5 py-1 text-xs font-semibold text-leaf-800 ring-1 ring-leaf-200 hover:bg-leaf-100"
+                  >
+                    {categoryLabel(cat)}
+                    <X className="size-3" aria-hidden />
+                  </button>
+                ))}
+                {filters.area.map((ar) => (
+                  <button
+                    key={ar}
+                    type="button"
+                    onClick={() => update({ area: filters.area.filter((a) => a !== ar).join(',') || null })}
+                    className="inline-flex items-center gap-1 rounded-full bg-sand-100 px-2.5 py-1 text-xs font-semibold text-river-800 ring-1 ring-sand-200 hover:bg-sand-200"
+                  >
+                    {areaLabel(ar)}
+                    <X className="size-3" aria-hidden />
+                  </button>
+                ))}
+                {filters.hasActivity && (
+                  <button
+                    type="button"
+                    onClick={() => update({ hasActivity: null })}
+                    className="inline-flex items-center gap-1 rounded-full bg-teal-50 px-2.5 py-1 text-xs font-semibold text-teal-800 ring-1 ring-teal-200 hover:bg-teal-100"
+                  >
+                    Có QR / Thử thách
+                    <X className="size-3" aria-hidden />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setParams(new URLSearchParams())}
+                  className="text-xs font-semibold text-river-500 underline hover:text-leaf-700"
+                >
+                  Xóa tất cả
+                </button>
+              </div>
+            )}
+          </div>
+
           {query.loading ? (
             <CardGridSkeleton count={6} />
           ) : query.error ? (

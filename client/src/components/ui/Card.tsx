@@ -42,12 +42,16 @@ export function SectionHeading({
 
 export function StatCard({ label, value, hint, icon }: { label: string; value: ReactNode; hint?: string; icon?: ReactNode }) {
   return (
-    <Card className="p-4">
+    <Card className="tp-fade-up group p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-raised hover:ring-leaf-300">
       <div className="flex items-start justify-between gap-2">
         <p className="text-sm font-medium text-river-600">{label}</p>
-        {icon && <span className="text-leaf-600">{icon}</span>}
+        {icon && (
+          <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-leaf-50 text-leaf-700 ring-1 ring-leaf-100 transition-transform duration-200 group-hover:scale-110">
+            {icon}
+          </span>
+        )}
       </div>
-      <p className="mt-2 text-2xl font-extrabold text-river-900">{value}</p>
+      <p className="mt-2 text-2xl font-extrabold tracking-tight text-river-900">{value}</p>
       {hint && <p className="mt-1 text-xs text-river-500">{hint}</p>}
     </Card>
   );

@@ -155,6 +155,86 @@
   animation: toast-in 220ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+/* ── Trip Planner V9 motion ─────────────────────────────────────────────── */
+@keyframes tp-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.tp-fade-up {
+  animation: tp-fade-up 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes tp-shimmer {
+  from {
+    background-position: -200% 0;
+  }
+  to {
+    background-position: 200% 0;
+  }
+}
+.tp-shimmer {
+  background-image: linear-gradient(110deg, transparent 30%, rgb(255 255 255 / 0.35) 50%, transparent 70%);
+  background-size: 200% 100%;
+  animation: tp-shimmer 2.4s linear infinite;
+}
+
+@keyframes tp-pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgb(47 143 102 / 0.45);
+  }
+  70% {
+    box-shadow: 0 0 0 12px rgb(47 143 102 / 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgb(47 143 102 / 0);
+  }
+}
+.tp-pulse-ring {
+  animation: tp-pulse-ring 1.8s ease-out infinite;
+}
+
+@keyframes tp-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+.tp-float {
+  animation: tp-float 3.2s ease-in-out infinite;
+}
+
+@keyframes tp-route-dash {
+  to {
+    stroke-dashoffset: -40;
+  }
+}
+.tp-route-dash {
+  stroke-dasharray: 6 8;
+  animation: tp-route-dash 1.2s linear infinite;
+}
+
+@keyframes tp-grow-x {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+.tp-grow-x {
+  transform-origin: left center;
+  animation: tp-grow-x 900ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 /* Eyebrow label used across marketing-style sections */
 .eyebrow {
   @apply inline-flex items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.22em] text-river-600;
