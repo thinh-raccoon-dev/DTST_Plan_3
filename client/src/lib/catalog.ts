@@ -38,6 +38,7 @@ export const VERIFICATION_STATUS_LABELS: Record<VerificationStatus, string> = {
 
 export const PUBLICATION_LABELS: Record<PublicationStatus, string> = {
   draft: 'Bản nháp',
+  pending_review: 'Chờ duyệt',
   published: 'Đã xuất bản',
   hidden: 'Đã ẩn',
 };

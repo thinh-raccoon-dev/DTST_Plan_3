@@ -44,7 +44,7 @@ export const AREA_LABELS: Record<Area, string> = {
 export const VERIFICATION_LEVELS = ['verified', 'unverified', 'unknown'] as const;
 export type VerificationLevel = (typeof VERIFICATION_LEVELS)[number];
 
-export const PUBLICATION_STATUSES = ['draft', 'published', 'hidden'] as const;
+export const PUBLICATION_STATUSES = ['draft', 'pending_review', 'published', 'hidden'] as const;
 export const OPERATIONAL_STATUSES = ['active', 'temporarily_closed', 'closed'] as const;
 
 /** Points granted by the server for a self-declared check-in at a QR point. */

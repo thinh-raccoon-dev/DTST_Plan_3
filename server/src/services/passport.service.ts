@@ -1,9 +1,11 @@
 import { Types } from 'mongoose';
-import { BADGES, type BadgeDefinition, type PassportStats } from '../config/badges.js';
+import { BADGES as DEFAULT_STATIC_BADGES, type BadgeDefinition, type PassportStats } from '../config/badges.js';
 import { CHECKIN_POINTS } from '../config/catalog.js';
 import { AnalyticsEventModel } from '../models/AnalyticsEvent.js';
+import { BadgeModel, type Badge } from '../models/Badge.js';
 import { ChallengeModel } from '../models/Challenge.js';
 import { DestinationModel } from '../models/Destination.js';
+import { ItineraryModel } from '../models/Itinerary.js';
 import { PassportEntryModel } from '../models/PassportEntry.js';
 import { recordEvent } from './analytics.service.js';
 import { getActiveQrDestinationIds, type LeanDestination } from './destination.service.js';
@@ -13,48 +15,186 @@ function isDuplicateKey(error: unknown): boolean {
   return typeof error === 'object' && error !== null && (error as { code?: unknown }).code === 11000;
 }
 
-async function computeStats(identity: Identity): Promise<PassportStats> {
+export interface ExtendedPassportStats extends PassportStats {
+  totalPoints: number;
+  itineraryCount: number;
+}
+
+export async function ensureDefaultBadges(): Promise<void> {
+  const count = await BadgeModel.countDocuments();
+  if (count > 0) return;
+
+  const defaultBadges = [
+    {
+      key: 'first-steps',
+      name: 'Bước chân đầu tiên',
+      description: 'Check-in tại 1 điểm có mã QR.',
+      icon: 'footprints',
+      criteriaType: 'checkin_count',
+      targetCount: 1,
+      rewardPoints: 20,
+      status: 'active',
+    },
+    {
+      key: 'explorer',
+      name: 'Nhà thám hiểm Đồng Tháp',
+      description: 'Check-in tại 3 điểm đến khác nhau.',
+      icon: 'compass',
+      criteriaType: 'checkin_count',
+      targetCount: 3,
+      rewardPoints: 50,
+      status: 'active',
+    },
+    {
+      key: 'local-insight',
+      name: 'Hiểu biết địa phương',
+      description: 'Hoàn thành 1 thử thách.',
+      icon: 'lightbulb',
+      criteriaType: 'challenge_count',
+      targetCount: 1,
+      rewardPoints: 30,
+      status: 'active',
+    },
+    {
+      key: 'challenge-master',
+      name: 'Bậc thầy thử thách',
+      description: 'Hoàn thành 3 thử thách.',
+      icon: 'trophy',
+      criteriaType: 'challenge_count',
+      targetCount: 3,
+      rewardPoints: 100,
+      status: 'active',
+    },
+    {
+      key: 'heritage-keeper',
+      name: 'Người giữ hồn di sản',
+      description: 'Hoàn thành thử thách tại 2 điểm văn hóa hoặc lịch sử.',
+      icon: 'landmark',
+      criteriaType: 'heritage_challenge_count',
+      targetCount: 2,
+      rewardPoints: 80,
+      status: 'active',
+    },
+    {
+      key: 'itinerary-planner',
+      name: 'Nhà hoạch định tài ba',
+      description: 'Tạo và lưu 1 lịch trình du lịch thông minh.',
+      icon: 'star',
+      criteriaType: 'itinerary_created',
+      targetCount: 1,
+      rewardPoints: 40,
+      status: 'active',
+    },
+    {
+      key: 'loyal-traveler',
+      name: 'Đại sứ trải nghiệm Sen Hồng',
+      description: 'Đạt mốc 150 điểm tích lũy trong hộ chiếu số.',
+      icon: 'medal',
+      criteriaType: 'points_threshold',
+      targetCount: 150,
+      rewardPoints: 150,
+      status: 'active',
+    },
+  ];
+
+  for (const b of defaultBadges) {
+    await BadgeModel.updateOne({ key: b.key }, { $setOnInsert: b }, { upsert: true });
+  }
+}
+
+async function computeStats(identity: Identity): Promise<ExtendedPassportStats> {
   const owner = ownerFilter(identity);
-  const [checkIns, completions] = await Promise.all([
+  const [checkIns, completions, entries, itineraryCount] = await Promise.all([
     PassportEntryModel.countDocuments({ ...owner, entryType: 'check_in' }),
     PassportEntryModel.find({ ...owner, entryType: 'challenge_completed' }).select('destinationId').lean(),
+    PassportEntryModel.find(owner).select('scoreAwarded').lean(),
+    identity.userId ? ItineraryModel.countDocuments({ userId: identity.userId }) : Promise.resolve(0),
   ]);
+
   const destinationIds = [...new Set(completions.map((c) => String(c.destinationId)))];
   const heritage = destinationIds.length
     ? await DestinationModel.countDocuments({ _id: { $in: destinationIds }, category: { $in: ['culture', 'history'] } })
     : 0;
-  return { checkInDestinations: checkIns, completedChallenges: completions.length, heritageChallengeDestinations: heritage };
+
+  const totalPoints = entries.reduce((sum, e) => sum + (e.scoreAwarded ?? 0), 0);
+
+  return {
+    checkInDestinations: checkIns,
+    completedChallenges: completions.length,
+    heritageChallengeDestinations: heritage,
+    totalPoints,
+    itineraryCount,
+  };
 }
 
-/** Awards any newly earned badges. The unique index makes concurrent evaluation safe. */
-export async function evaluateBadges(identity: Identity): Promise<BadgeDefinition[]> {
+function checkBadgeEarned(badge: { criteriaType: string; targetCount: number }, stats: ExtendedPassportStats): boolean {
+  switch (badge.criteriaType) {
+    case 'checkin_count':
+      return stats.checkInDestinations >= badge.targetCount;
+    case 'challenge_count':
+      return stats.completedChallenges >= badge.targetCount;
+    case 'heritage_challenge_count':
+      return stats.heritageChallengeDestinations >= badge.targetCount;
+    case 'points_threshold':
+      return stats.totalPoints >= badge.targetCount;
+    case 'itinerary_created':
+      return stats.itineraryCount >= badge.targetCount;
+    default:
+      return false;
+  }
+}
+
+export interface AwardedBadgeDto {
+  key: string;
+  name: string;
+  description: string;
+  icon: string;
+  rewardPoints: number;
+}
+
+/** Awards any newly earned badges from dynamic Badge collection. */
+export async function evaluateBadges(identity: Identity): Promise<AwardedBadgeDto[]> {
+  await ensureDefaultBadges();
   const stats = await computeStats(identity);
   const owner = ownerFilter(identity);
-  const existing = new Set(
-    (await PassportEntryModel.find({ ...owner, entryType: 'badge_awarded' }).select('badgeKey').lean()).map((e) => e.badgeKey),
-  );
-  const awarded: BadgeDefinition[] = [];
-  for (const badge of BADGES) {
-    if (existing.has(badge.key) || !badge.isEarned(stats)) continue;
+  const [existingEntries, badges] = await Promise.all([
+    PassportEntryModel.find({ ...owner, entryType: 'badge_awarded' }).select('badgeKey').lean(),
+    BadgeModel.find({ status: 'active' }).lean(),
+  ]);
+
+  const existingKeys = new Set(existingEntries.map((e) => e.badgeKey));
+  const awarded: AwardedBadgeDto[] = [];
+
+  for (const badge of badges) {
+    if (existingKeys.has(badge.key)) continue;
+    if (!checkBadgeEarned(badge, stats)) continue;
+
     try {
       await PassportEntryModel.create({
         ...ownerFields(identity),
         entryType: 'badge_awarded',
         badgeKey: badge.key,
-        scoreAwarded: 0,
+        scoreAwarded: badge.rewardPoints ?? 0,
         source: 'system',
       });
-      awarded.push(badge);
+      awarded.push({
+        key: badge.key,
+        name: badge.name,
+        description: badge.description,
+        icon: badge.icon,
+        rewardPoints: badge.rewardPoints ?? 0,
+      });
       await recordEvent({ eventType: 'passport_badge_awarded', metadata: { badgeKey: badge.key } }, identity);
     } catch (error) {
       if (!isDuplicateKey(error)) throw error;
     }
   }
+
   return awarded;
 }
 
-export function toBadgeDto(badge: BadgeDefinition) {
-  return { key: badge.key, name: badge.name, description: badge.description, icon: badge.icon };
+export function toBadgeDto(badge: { key: string; name: string; description: string; icon: string; rewardPoints?: number }) {
+  return { key: badge.key, name: badge.name, description: badge.description, icon: badge.icon, rewardPoints: badge.rewardPoints ?? 0 };
 }
 
 export async function checkIn(identity: Identity, destinationId: Types.ObjectId, qrCodeId: Types.ObjectId) {
@@ -73,7 +213,7 @@ export async function checkIn(identity: Identity, destinationId: Types.ObjectId,
   }
   await recordEvent({ eventType: 'destination_check_in', destinationId, qrCodeId }, identity);
   const newBadges = await evaluateBadges(identity);
-  return { created: true, pointsAwarded: CHECKIN_POINTS, newBadges: newBadges.map(toBadgeDto) };
+  return { created: true, pointsAwarded: CHECKIN_POINTS, newBadges };
 }
 
 export async function recordChallengeCompletion(
@@ -112,12 +252,11 @@ export async function recordChallengeCompletion(
     identity,
   );
   const newBadges = await evaluateBadges(identity);
-  return { alreadyCompleted: false, pointsAwarded: params.rewardPoints, newBadges: newBadges.map(toBadgeDto) };
+  return { alreadyCompleted: false, pointsAwarded: params.rewardPoints, newBadges };
 }
 
 /** Status of a single destination for the current identity, used by the QR landing page. */
 export async function getDestinationProgress(identity: Identity, destinationId: Types.ObjectId) {
-  // When logged in, also surface guest progress from this browser until the user claims it.
   const owners: Array<ReturnType<typeof ownerFilter> | { anonymousSessionId: string }> = [ownerFilter(identity)];
   if (identity.userId && identity.anonymousSessionId) {
     owners.push({ anonymousSessionId: identity.anonymousSessionId });
@@ -140,6 +279,7 @@ function miniDestination(d: Pick<LeanDestination, '_id' | 'slug' | 'name' | 'cat
 }
 
 export async function getPassport(identity: Identity) {
+  await ensureDefaultBadges();
   const owner = ownerFilter(identity);
   const entries = await PassportEntryModel.find(owner).sort({ completedAt: -1 }).lean();
 
@@ -163,11 +303,13 @@ export async function getPassport(identity: Identity) {
     if (entry.challengeId) challengeIds.add(String(entry.challengeId));
   }
 
-  const [destinations, challenges, pilotIds] = await Promise.all([
+  const [destinations, challenges, pilotIds, allBadges] = await Promise.all([
     DestinationModel.find({ _id: { $in: [...destinationIds] } }).select('slug name category area').lean(),
     ChallengeModel.find({ _id: { $in: [...challengeIds] } }).select('title').lean(),
     getActiveQrDestinationIds(),
+    BadgeModel.find({ status: 'active' }).sort({ createdAt: 1 }).lean(),
   ]);
+
   const destinationMap = new Map(destinations.map((d) => [String(d._id), d]));
   const challengeMap = new Map(challenges.map((c) => [String(c._id), c]));
 
@@ -205,6 +347,9 @@ export async function getPassport(identity: Identity) {
     ? await DestinationModel.countDocuments({ _id: { $in: [...pilotIds] }, publicationStatus: 'published' })
     : 0;
 
+  // Use dynamic badges from database (or fallback if empty)
+  const badgeDefinitions = allBadges.length > 0 ? allBadges : DEFAULT_STATIC_BADGES;
+
   return {
     mode: identity.userId ? ('account' as const) : ('device' as const),
     totals: {
@@ -220,7 +365,7 @@ export async function getPassport(identity: Identity) {
     checkIns,
     completions,
     qrOpened: qrOpenedIds.map((id) => miniDestination(destinationMap.get(String(id)))).filter(Boolean),
-    badges: BADGES.map((badge) => ({
+    badges: badgeDefinitions.map((badge) => ({
       ...toBadgeDto(badge),
       earned: badgeEntries.has(badge.key),
       awardedAt: badgeEntries.get(badge.key) ?? null,
@@ -263,5 +408,5 @@ export async function claimDeviceEntries(userId: Types.ObjectId, anonymousSessio
   }
   await PassportEntryModel.deleteMany({ anonymousSessionId, entryType: 'badge_awarded' });
   const newBadges = await evaluateBadges({ userId });
-  return { claimed, skipped, newBadges: newBadges.map(toBadgeDto) };
+  return { claimed, skipped, newBadges };
 }

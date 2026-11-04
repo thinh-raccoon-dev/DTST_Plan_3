@@ -1,5 +1,5 @@
 import clsx from 'clsx';
-import { BarChart3, ExternalLink, Image, LogOut, MapPinned, Menu, QrCode, Trophy, X } from 'lucide-react';
+import { Award, BarChart3, ExternalLink, Image, LogOut, MapPinned, Menu, QrCode, Trophy, X } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Navigate, NavLink, Outlet, ScrollRestoration, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
@@ -7,8 +7,9 @@ import { toast } from '../../stores/toastStore';
 import { Logo } from './Logo';
 
 const allItems = [
-  { to: '/admin', label: 'Tổng quan', icon: BarChart3, end: true, adminOnly: true },
+  { to: '/admin', label: 'Tổng quan', icon: BarChart3, end: true, adminOnly: false },
   { to: '/admin/destinations', label: 'Địa điểm', icon: MapPinned, adminOnly: false },
+  { to: '/admin/badges', label: 'Huy hiệu & Thành tựu', icon: Award, adminOnly: true },
   { to: '/admin/qr', label: 'Mã QR', icon: QrCode, adminOnly: true },
   { to: '/admin/challenges', label: 'Thử thách', icon: Trophy, adminOnly: true },
   { to: '/admin/banners', label: 'Banner', icon: Image, adminOnly: true },
@@ -73,8 +74,8 @@ export function AdminLayout() {
   const location = useLocation();
   const user = useAuthStore((s) => s.user);
   useEffect(() => setOpen(false), [location.pathname]);
-  if (user?.role === 'partner' && !location.pathname.startsWith('/admin/destinations')) {
-    return <Navigate to="/admin/destinations" replace />;
+  if (user?.role === 'partner' && location.pathname !== '/admin' && !location.pathname.startsWith('/admin/destinations')) {
+    return <Navigate to="/admin" replace />;
   }
   return (
     <div className="min-h-dvh bg-sand-50 lg:grid lg:grid-cols-[260px_1fr]">
@@ -82,7 +83,7 @@ export function AdminLayout() {
         <SideNav />
       </aside>
       <div className="flex items-center justify-between border-b border-sand-200 bg-white px-4 py-3 lg:hidden">
-        <Logo to="/admin" subtitle="QUẢN TRỊ" stacked={false} />
+        <Logo to="/admin" subtitle={user?.role === 'partner' ? 'ĐỐI TÁC' : 'QUẢN TRỊ'} stacked={false} />
         <button type="button" onClick={() => setOpen(true)} className="inline-flex size-11 items-center justify-center rounded-control hover:bg-sand-100" aria-label="Mở menu quản trị">
           <Menu className="size-6" aria-hidden />
         </button>

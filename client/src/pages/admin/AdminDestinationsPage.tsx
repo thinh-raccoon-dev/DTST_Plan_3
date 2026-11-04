@@ -53,7 +53,10 @@ export function AdminDestinationsPage() {
     setBusyId(d.id);
     try {
       await api.patch(`/admin/destinations/${d.id}`, { publicationStatus });
-      toast.success(publicationStatus === 'published' ? `Đã xuất bản “${d.name}”` : `Đã ẩn “${d.name}”`);
+      if (publicationStatus === 'published') toast.success(`Đã duyệt và xuất bản “${d.name}”`);
+      else if (publicationStatus === 'pending_review') toast.success(`Đã gửi duyệt “${d.name}”`);
+      else if (publicationStatus === 'draft') toast.success(`Đã chuyển “${d.name}” về bản nháp`);
+      else toast.success(`Đã ẩn “${d.name}”`);
       query.reload();
     } catch (error) {
       toast.error('Không cập nhật được', toApiError(error).message);
@@ -85,8 +88,8 @@ export function AdminDestinationsPage() {
         title="Địa điểm"
         description={
           isPartner
-            ? 'Cập nhật nội dung địa điểm bạn quản lý. Xuất bản do quản trị viên duyệt.'
-            : 'Tạo, chỉnh sửa, xuất bản hoặc ẩn địa điểm. Địa điểm đang gắn QR/thử thách nên được ẩn thay vì xóa.'
+            ? 'Cập nhật nội dung địa điểm bạn quản lý. Chọn "Gửi duyệt" để Quản trị viên duyệt xuất bản.'
+            : 'Tạo, chỉnh sửa, duyệt, xuất bản hoặc ẩn địa điểm. Địa điểm đang gắn QR/thử thách nên được ẩn thay vì xóa.'
         }
         actions={<ButtonLink to="/admin/destinations/new" icon={<Plus className="size-4" aria-hidden />}>Thêm địa điểm</ButtonLink>}
       />
@@ -135,7 +138,13 @@ export function AdminDestinationsPage() {
                     </div>
                     <p className="mt-1 text-xs text-river-500">
                       {categoryLabel(d.category)} · {areaLabel(d.area)} · /{d.slug} · cập nhật {formatDateTime(d.updatedAt)}
+                      {d.managedByName && <span className="ml-2 font-medium text-teal-700">· Phụ trách: {d.managedByName}</span>}
                     </p>
+                    {d.reviewNote && (
+                      <p className="mt-1 rounded-control bg-sand-100 px-2 py-0.5 text-xs text-river-700">
+                        💬 Ghi chú duyệt: {d.reviewNote}
+                      </p>
+                    )}
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <ButtonLink to={`/admin/destinations/${d.id}/edit`} size="sm" variant="secondary" icon={<Pencil className="size-4" aria-hidden />}>
@@ -152,8 +161,27 @@ export function AdminDestinationsPage() {
                           </Button>
                         )}
                       </>
+                    ) : d.publicationStatus === 'pending_review' ? (
+                      !isPartner ? (
+                        <>
+                          <Button size="sm" variant="accent" icon={<Send className="size-4" aria-hidden />} loading={busyId === d.id} onClick={() => setPublication(d, 'published')}>
+                            Duyệt xuất bản
+                          </Button>
+                          <Button size="sm" variant="ghost" icon={<Pencil className="size-4" aria-hidden />} loading={busyId === d.id} onClick={() => setPublication(d, 'draft')}>
+                            Yêu cầu sửa
+                          </Button>
+                        </>
+                      ) : (
+                        <span className="inline-flex items-center rounded-control bg-teal-50 px-2.5 py-1 text-xs font-semibold text-teal-800">
+                          Chờ Admin duyệt
+                        </span>
+                      )
                     ) : (
-                      !isPartner && (
+                      isPartner ? (
+                        <Button size="sm" variant="secondary" icon={<Send className="size-4" aria-hidden />} loading={busyId === d.id} onClick={() => setPublication(d, 'pending_review')}>
+                          Gửi duyệt
+                        </Button>
+                      ) : (
                         <Button size="sm" variant="ghost" icon={d.publicationStatus === 'draft' ? <Send className="size-4" aria-hidden /> : <Eye className="size-4" aria-hidden />} loading={busyId === d.id} onClick={() => setPublication(d, 'published')}>
                           Xuất bản
                         </Button>

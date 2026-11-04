@@ -833,6 +833,10 @@ export function ItineraryCreatePage() {
                 draft.setV9Itinerary(alt);
                 toast.success('Đã chuyển sang phương án lịch trình tiết kiệm ngân sách');
               }}
+              onUpdateItinerary={(updated) => {
+                draft.setV9Itinerary(updated);
+                toast.success('Đã cập nhật thứ tự / danh sách điểm trong bản nháp');
+              }}
               placesById={placesById}
             />
           </div>

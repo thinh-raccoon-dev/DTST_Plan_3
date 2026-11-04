@@ -80,6 +80,7 @@ export function toAdminDestination(d: LeanDestination) {
   return {
     ...toDestinationDetail(d),
     publicationStatus: d.publicationStatus,
+    reviewNote: d.reviewNote ?? null,
     createdAt: (d as { createdAt?: Date }).createdAt ?? null,
     managedById: populated ? String(populated._id) : d.managedBy ? String(d.managedBy) : null,
     managedByEmail: populated?.email ?? null,
@@ -120,51 +121,44 @@ export function computeVerificationStatus(fields: VerifiableFields): 'verified' 
   return 'unverified';
 }
 
-/** Validation errors for "verified" claims that have nothing to back them. */
 export function verificationIssues(fields: VerifiableFields & { sourceUrls: string[]; lastVerifiedAt?: Date | null }) {
   const issues: Array<{ path: string; message: string }> = [];
-  const checks: Array<[keyof VerifiableFields['verification'], boolean, string]> = [
-    ['location', hasValue(fields.address) || hasValue(fields.coordinates), 'địa chỉ/tọa độ'],
-    ['openingHours', hasValue(fields.openingHours), 'giờ hoạt động'],
-    ['referencePrice', hasValue(fields.referencePrice), 'giá tham khảo'],
-    ['contactInfo', hasValue(fields.contactInfo), 'thông tin liên hệ'],
+  const entries: Array<[string, VerificationLevel, boolean]> = [
+    ['location', fields.verification.location, hasValue(fields.address) || hasValue(fields.coordinates)],
+    ['openingHours', fields.verification.openingHours, hasValue(fields.openingHours)],
+    ['referencePrice', fields.verification.referencePrice, hasValue(fields.referencePrice)],
+    ['contactInfo', fields.verification.contactInfo, hasValue(fields.contactInfo)],
   ];
-  for (const [key, present, label] of checks) {
-    if (fields.verification[key] === 'verified' && !present) {
-      issues.push({ path: `verification.${key}`, message: `Không thể đánh dấu "đã xác minh" khi chưa có ${label}.` });
+  for (const [key, level, present] of entries) {
+    if (level === 'verified' && !present) {
+      issues.push({ path: `verification.${key}`, message: 'Không thể đánh dấu đã xác minh khi chưa có thông tin.' });
     }
   }
-  const anyVerified = Object.values(fields.verification).includes('verified');
-  if (anyVerified && fields.sourceUrls.length === 0) {
-    issues.push({ path: 'sourceUrls', message: 'Cần ít nhất một nguồn khi đánh dấu thông tin đã xác minh.' });
+  const hasVerified = entries.some(([, level]) => level === 'verified');
+  if (hasVerified && fields.sourceUrls.length === 0) {
+    issues.push({ path: 'sourceUrls', message: 'Cần ít nhất một liên kết nguồn khi có thông tin được đánh dấu đã xác minh.' });
   }
-  if (anyVerified && !fields.lastVerifiedAt) {
-    issues.push({ path: 'lastVerifiedAt', message: 'Cần ngày xác minh khi đánh dấu thông tin đã xác minh.' });
+  if (hasVerified && !fields.lastVerifiedAt) {
+    issues.push({ path: 'lastVerifiedAt', message: 'Cần ngày xác minh gần nhất khi có thông tin được đánh dấu đã xác minh.' });
   }
   return issues;
 }
 
-/** Destination ids reachable through an active QR code (directly or via an active challenge). */
+export async function findPublishedDestinationBySlug(slug: string) {
+  return DestinationModel.findOne({ slug, ...PUBLIC_DESTINATION_FILTER }).lean<LeanDestination>();
+}
+
 export async function getActiveQrDestinationIds(): Promise<Set<string>> {
-  const qrCodes = await QrCodeModel.find({ status: 'active' }).select('targetType targetId').lean();
-  const ids = new Set<string>();
-  const challengeIds: Types.ObjectId[] = [];
-  for (const qr of qrCodes) {
-    if (qr.targetType === 'destination') ids.add(String(qr.targetId));
-    else challengeIds.push(qr.targetId);
-  }
-  if (challengeIds.length) {
-    const challenges = await ChallengeModel.find({ _id: { $in: challengeIds } }).select('destinationId').lean();
-    for (const challenge of challenges) ids.add(String(challenge.destinationId));
-  }
-  return ids;
+  const qrs = await QrCodeModel.find({ status: 'active' }).select('targetType targetId').lean();
+  const direct = qrs.filter((q) => q.targetType === 'destination').map((q) => String(q.targetId));
+  const challengeIds = qrs.filter((q) => q.targetType === 'challenge').map((q) => q.targetId);
+  const fromChallenges = challengeIds.length
+    ? (await ChallengeModel.find({ _id: { $in: challengeIds } }).distinct('destinationId')).map(String)
+    : [];
+  return new Set([...direct, ...fromChallenges]);
 }
 
 export async function getDestinationIdsWithActiveChallenges(): Promise<Set<string>> {
-  const ids: Types.ObjectId[] = await ChallengeModel.distinct('destinationId', { status: 'active' });
+  const ids = await ChallengeModel.find({ status: 'active' }).distinct('destinationId');
   return new Set(ids.map(String));
-}
-
-export async function findPublishedDestinationBySlug(slug: string) {
-  return DestinationModel.findOne({ slug, ...PUBLIC_DESTINATION_FILTER }).lean<LeanDestination>();
 }

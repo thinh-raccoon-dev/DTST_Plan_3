@@ -52,28 +52,24 @@ const coordinatesSchema = z
 
 const contactSchema = z
   .object({
-    phone: z
-      .string()
-      .trim()
-      .regex(/^[0-9+ ().-]{6,20}$/, 'Số điện thoại không hợp lệ.')
-      .optional()
-      .or(z.literal('')),
-    website: z.union([httpUrlSchema, z.literal('')]).optional(),
-    email: z.union([z.string().trim().email('Email không hợp lệ.'), z.literal('')]).optional(),
+    phone: nullableText(40),
+    website: z.union([httpUrlSchema, z.null()]).optional(),
+    email: z.union([z.string().trim().toLowerCase().email('Email không hợp lệ.').max(254), z.null()]).optional(),
   })
   .strict();
 
+const verificationLevelSchema = z.enum(VERIFICATION_LEVELS);
 const verificationSchema = z
   .object({
-    location: z.enum(VERIFICATION_LEVELS),
-    openingHours: z.enum(VERIFICATION_LEVELS),
-    referencePrice: z.enum(VERIFICATION_LEVELS),
-    contactInfo: z.enum(VERIFICATION_LEVELS),
+    location: verificationLevelSchema.default('unknown'),
+    openingHours: verificationLevelSchema.default('unknown'),
+    referencePrice: verificationLevelSchema.default('unknown'),
+    contactInfo: verificationLevelSchema.default('unknown'),
   })
   .strict();
 
-const destinationFields = {
-  name: z.string().trim().min(2, 'Tên cần ít nhất 2 ký tự.').max(160),
+export const destinationFields = {
+  name: z.string().trim().min(2, 'Tên địa điểm cần ít nhất 2 ký tự.').max(160),
   slug: z
     .string()
     .trim()
@@ -112,6 +108,7 @@ const destinationFields = {
   isIllustrative: z.boolean().default(false),
   lastVerifiedAt: z.union([z.coerce.date(), z.null()]).optional(),
   publicationStatus: z.enum(PUBLICATION_STATUSES).default('draft'),
+  reviewNote: nullableText(500),
   operationalStatus: z.enum(OPERATIONAL_STATUSES).default('active'),
   managedByEmail: z.union([z.string().trim().toLowerCase().email('Email đối tác không hợp lệ.'), z.literal('')]).optional(),
 };

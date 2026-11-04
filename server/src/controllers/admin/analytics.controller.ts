@@ -51,7 +51,17 @@ async function topBy(
 export async function getAnalytics(req: Request, res: Response) {
   const query = querySchema.parse(req.query);
   const range = resolveRange(query.from, query.to);
-  const match = { timestamp: { $gte: range.start, $lt: range.endExclusive } };
+
+  const isPartner = req.user?.role === 'partner';
+  let partnerDestIds: Types.ObjectId[] | null = null;
+  if (isPartner && req.user?.id) {
+    partnerDestIds = (await DestinationModel.find({ managedBy: req.user.id }).distinct('_id')) as Types.ObjectId[];
+  }
+
+  const match: Record<string, unknown> = { timestamp: { $gte: range.start, $lt: range.endExclusive } };
+  if (partnerDestIds !== null) {
+    match.destinationId = { $in: partnerDestIds };
+  }
 
   const [byType, daily, uniqueRows, topDest, topQr, topChallenges, publishedDestinations, activeQrCodes] = await Promise.all([
     AnalyticsEventModel.aggregate<{ _id: EventType; count: number }>([
@@ -81,8 +91,14 @@ export async function getAnalytics(req: Request, res: Response) {
     topBy('destinationId', 'destination_page_view', match),
     topBy('qrCodeId', 'qr_landing_view', match),
     topBy('challengeId', 'challenge_completed', match),
-    DestinationModel.countDocuments({ publicationStatus: 'published' }),
-    QrCodeModel.countDocuments({ status: 'active' }),
+    DestinationModel.countDocuments({
+      publicationStatus: 'published',
+      ...(partnerDestIds !== null ? { _id: { $in: partnerDestIds } } : {}),
+    }),
+    QrCodeModel.countDocuments({
+      status: 'active',
+      ...(partnerDestIds !== null ? { targetId: { $in: partnerDestIds } } : {}),
+    }),
   ]);
 
   const count = (type: EventType) => byType.find((row) => row._id === type)?.count ?? 0;
@@ -128,30 +144,19 @@ export async function getAnalytics(req: Request, res: Response) {
     uniqueVisitors: unique.total,
     uniqueAccounts: unique.accounts,
   };
+
   res.set('Cache-Control', 'no-store');
   res.json({
-    range: { from: range.from, to: range.to, timezone: TIMEZONE, days: range.days },
+    range: { from: range.from, to: range.to, days: range.days },
     current: { publishedDestinations, activeQrCodes },
     totals,
-    daily: [...dayMap.entries()].map(([date, values]) => ({ date, ...values })),
-    topDestinations: topDest.map((r) => {
-      const d = nameOf(destNames, r._id);
-      return { id: String(r._id), name: d?.name ?? '(đã xóa)', slug: d?.slug ?? null, count: r.count };
-    }),
-    topQrCodes: topQr.map((r) => {
-      const q = nameOf(qrNames, r._id);
-      return { id: String(r._id), code: q?.code ?? '(đã xóa)', label: q?.label ?? '', count: r.count };
-    }),
-    topChallenges: topChallenges.map((r) => ({ id: String(r._id), title: nameOf(challengeNames, r._id)?.title ?? '(đã xóa)', count: r.count })),
     funnel: {
       steps: [
-        { key: 'destinationPageViews', label: 'Xem trang địa điểm', count: totals.destinationPageViews },
-        { key: 'qrLandingViews', label: 'Mở từ QR', count: totals.qrLandingViews },
-        { key: 'checkIns', label: 'Check-in', count: totals.checkIns },
-        { key: 'challengeAttempts', label: 'Gửi đáp án thử thách', count: totals.challengeAttempts },
-        { key: 'challengeCompletions', label: 'Hoàn thành thử thách', count: totals.challengeCompletions },
-        { key: 'itinerariesGenerated', label: 'Tạo lịch trình', count: totals.itinerariesGenerated },
-        { key: 'itinerariesSaved', label: 'Lưu lịch trình', count: totals.itinerariesSaved },
+        { key: 'pageView', label: 'Xem trang địa điểm', count: totals.destinationPageViews },
+        { key: 'qrLanding', label: 'Mở trang từ QR', count: totals.qrLandingViews },
+        { key: 'checkIn', label: 'Check-in tại điểm', count: totals.checkIns },
+        { key: 'challengeAttempt', label: 'Gửi đáp án thử thách', count: totals.challengeAttempts },
+        { key: 'challengeCompletion', label: 'Hoàn thành thử thách', count: totals.challengeCompletions },
       ],
       rates: {
         pageViewToQr: rate(totals.qrLandingViews, totals.destinationPageViews),
@@ -161,15 +166,17 @@ export async function getAnalytics(req: Request, res: Response) {
         generateToSave: rate(totals.itinerariesSaved, totals.itinerariesGenerated),
       },
     },
+    daily: Array.from(dayMap.entries()).map(([date, counts]) => ({ date, ...counts })),
+    topDestinations: topDest.map((r) => ({ id: String(r._id), name: nameOf(destNames, r._id)?.name ?? 'Địa điểm', count: r.count })),
+    topQrCodes: topQr.map((r) => ({ id: String(r._id), code: nameOf(qrNames, r._id)?.code ?? 'QR', count: r.count })),
+    topChallenges: topChallenges.map((r) => ({ id: String(r._id), title: nameOf(challengeNames, r._id)?.title ?? 'Thử thách', count: r.count })),
     definitions: {
-      destinationPageViews: 'Số lần mở trang chi tiết địa điểm trực tiếp (gộp lần mở lặp lại của cùng trình duyệt trong 30 phút).',
-      qrLandingViews: 'Số lần mở trang đích từ mã QR (gộp lần mở lặp lại trong 10 phút). Không phải số khách du lịch thực tế.',
-      interactions: 'Số lần gửi đáp án thử thách cộng số lần check-in.',
-      challengeCompletions: 'Số lần hoàn thành thử thách lần đầu và được cấp điểm (mỗi tài khoản/trình duyệt tối đa 1 lần mỗi thử thách).',
-      uniqueVisitors:
-        'Số định danh khác nhau (tài khoản đã đăng nhập hoặc cookie ẩn danh của trình duyệt). Một người dùng nhiều thiết bị hoặc xóa cookie sẽ bị đếm nhiều lần; đây chỉ là ước lượng.',
-      funnel:
-        'Tỷ lệ chuyển đổi giữa các bước (phần trăm). Mẫu số bằng 0 thì không tính. Các bước không phải cùng một người dùng đi tuần tự nên đây là ước lượng phễu, không phải hành trình cá nhân.',
+      destinationPageViews: 'Lượt mở trang chi tiết địa điểm trực tiếp (loại trùng lặp cùng trình duyệt trong 30 phút).',
+      qrLandingViews: 'Lượt mở trang đích từ mã QR (loại trùng lặp trong 10 phút, không tính lượt xem trước của quản trị).',
+      interactions: 'Tổng số lượt gửi đáp án thử thách và check-in thành công.',
+      challengeCompletions: 'Số lượt trả lời đúng và được hệ thống công nhận hoàn thành.',
+      uniqueVisitors: 'Ước lượng du khách duy nhất dựa trên tài khoản đăng nhập hoặc mã phiên ẩn danh.',
+      funnel: 'Tỷ lệ chuyển đổi qua các bước; mỗi bước tính trên tổng số lượt ghi nhận trong khoảng thời gian đã chọn.',
     },
   });
 }

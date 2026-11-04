@@ -12,6 +12,8 @@ import { api } from '../../lib/api';
 import { formatDate, formatNumber, vnDateString } from '../../lib/format';
 import type { AnalyticsReport } from '../../types/api';
 
+import { useAuthStore } from '../../stores/authStore';
+
 const DAY = 24 * 60 * 60 * 1000;
 const presets = [
   { label: '7 ngày', days: 7 },
@@ -48,7 +50,9 @@ function TopList({ title, items, unit }: { title: string; items: Array<{ id: str
 }
 
 export function AdminDashboardPage() {
-  useDocumentTitle('Tổng quan quản trị');
+  const user = useAuthStore((s) => s.user);
+  const isPartner = user?.role === 'partner';
+  useDocumentTitle(isPartner ? 'Tổng quan đối tác' : 'Tổng quan quản trị');
   const [range, setRange] = useState(() => rangeFor(30));
   const [draft, setDraft] = useState(range);
   const query = useApiQuery(
@@ -61,8 +65,14 @@ export function AdminDashboardPage() {
   return (
     <>
       <AdminPageHeader
-        title="Tổng quan hoạt động"
-        description={report ? `Thống kê từ ${formatDate(report.range.from)} đến ${formatDate(report.range.to)} (giờ Việt Nam, ${report.range.days} ngày).` : 'Số liệu lấy trực tiếp từ cơ sở dữ liệu.'}
+        title={isPartner ? 'Tổng quan hoạt động đối tác' : 'Tổng quan hoạt động'}
+        description={
+          report
+            ? isPartner
+              ? `Thống kê các địa điểm do bạn phụ trách từ ${formatDate(report.range.from)} đến ${formatDate(report.range.to)} (${report.range.days} ngày).`
+              : `Thống kê từ ${formatDate(report.range.from)} đến ${formatDate(report.range.to)} (giờ Việt Nam, ${report.range.days} ngày).`
+            : 'Số liệu lấy trực tiếp từ cơ sở dữ liệu.'
+        }
       />
 
       <Card className="mb-6 p-4">

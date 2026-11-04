@@ -37,6 +37,7 @@ import { toast } from '../stores/toastStore';
 import type {
   ItineraryListItem,
   SavedItinerary,
+  V9ItineraryObject,
   V9Place,
   V9ReplanResponse,
 } from '../types/api';
@@ -269,6 +270,19 @@ export function ItineraryDetailPage() {
     }
   };
 
+  const handleUpdateV9Itinerary = async (updatedV9: V9ItineraryObject) => {
+    try {
+      const res = await api.patch<{ itinerary: SavedItinerary }>(`/itineraries/${id}`, {
+        title: title.trim(),
+        v9Itinerary: updatedV9,
+      });
+      query.setData(() => res.data.itinerary);
+      toast.success('Đã lưu thay đổi thứ tự / danh sách điểm');
+    } catch (error) {
+      toast.error('Không lưu được thay đổi', toApiError(error).message);
+    }
+  };
+
   const handleReplan = async (params: {
     stopId: string;
     event: 'arrived' | 'departed';
@@ -440,6 +454,7 @@ export function ItineraryDetailPage() {
             placesById={placesById}
             onReplan={handleReplan}
             replanningStopId={replanningStopId}
+            onUpdateItinerary={handleUpdateV9Itinerary}
           />
 
           {/* Replan History Log */}

@@ -57,7 +57,7 @@ function normalizePatch(patch: DestinationPatch): Record<string, unknown> {
 function assertPartnerCanWrite(req: Request, patch: DestinationPatch) {
   if (!isPartner(req)) return;
   if (patch.publicationStatus === 'published') {
-    throw forbidden('Đối tác không thể tự xuất bản địa điểm. Quản trị viên sẽ duyệt nội dung.');
+    throw forbidden('Đối tác không thể tự xuất bản địa điểm. Vui lòng chọn "Chờ duyệt" để Quản trị viên duyệt.');
   }
   if (patch.managedByEmail) {
     throw forbidden('Đối tác không thể chuyển quyền quản lý địa điểm.');
@@ -128,11 +128,17 @@ export async function createDestination(req: Request, res: Response) {
   const slug = input.slug || slugify(input.name);
   if (!slug) throw badRequest('Không tạo được slug từ tên địa điểm.', 'VALIDATION_ERROR', [{ path: 'slug', message: 'Vui lòng nhập slug.' }]);
   const managedBy = isPartner(req) ? req.user!.id : await resolveManagedBy(input.managedByEmail);
+  const initialStatus = isPartner(req)
+    ? input.publicationStatus === 'pending_review'
+      ? 'pending_review'
+      : 'draft'
+    : input.publicationStatus;
+
   const doc = new DestinationModel({
     slug,
-    ...(isPartner(req) ? { publicationStatus: 'draft', managedBy: req.user!.id } : {}),
+    ...(isPartner(req) ? { publicationStatus: initialStatus, managedBy: req.user!.id } : {}),
   });
-  const values = normalizePatch({ ...input, slug, ...(isPartner(req) ? { publicationStatus: 'draft' } : {}) });
+  const values = normalizePatch({ ...input, slug, ...(isPartner(req) ? { publicationStatus: initialStatus } : {}) });
   if (managedBy !== undefined) values.managedBy = managedBy;
   await applyAndSave(doc, values);
   await doc.populate(MANAGER_POPULATE);

@@ -1,5 +1,5 @@
 import clsx from 'clsx';
-import { Compass, Eye, Footprints, Landmark, Lightbulb, Lock, MapPinCheck, QrCode, RefreshCw, Smartphone, Sparkles, Stamp, Trophy } from 'lucide-react';
+import { Award, Compass, Eye, Footprints, Heart, Landmark, Lightbulb, Lock, MapPinCheck, Medal, QrCode, RefreshCw, Smartphone, Sparkles, Stamp, Star, Trophy } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { announceBadges } from '../components/challenge/ChallengeQuiz';
@@ -21,6 +21,11 @@ const badgeIcons: Record<BadgeInfo['icon'], typeof Trophy> = {
   lightbulb: Lightbulb,
   trophy: Trophy,
   landmark: Landmark,
+  star: Star,
+  medal: Medal,
+  award: Award,
+  heart: Heart,
+  sparkles: Sparkles,
 };
 
 export function PassportPage() {

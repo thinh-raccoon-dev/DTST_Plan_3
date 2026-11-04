@@ -1,0 +1,104 @@
+name: DTST Enterprise CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main", "dtst_V2.1", "master" ]
+  pull_request:
+    branches: [ "main", "dtst_V2.1", "master" ]
+
+jobs:
+  # ----------------------------------------------------------------------------
+  # Job 1: Verification, Typecheck & Tests
+  # ----------------------------------------------------------------------------
+  verify:
+    name: Lint, Typecheck & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Client Dependencies
+        run: |
+          cd client
+          npm ci
+
+      - name: Typecheck Client (TypeScript)
+        run: |
+          cd client
+          npm run typecheck
+
+      - name: Build Client (Vite Production Bundle)
+        run: |
+          cd client
+          npm run build
+
+      - name: Install Server Dependencies
+        run: |
+          cd server
+          npm ci
+
+      - name: Typecheck Server (TypeScript)
+        run: |
+          cd server
+          npm run typecheck
+
+      - name: Build Server (tsc)
+        run: |
+          cd server
+          npm run build
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Test Python Trip Planner V9 Syntax & Imports
+        run: |
+          cd documents/trip_planner_17_v9
+          python -m py_compile web_api.py trip_service.py progress.py assemble.py
+
+  # ----------------------------------------------------------------------------
+  # Job 2: Enterprise Container Build Check
+  # ----------------------------------------------------------------------------
+  docker-build:
+    name: Docker Images Build Validation
+    needs: verify
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: actions/setup-buildx-action@v3
+
+      - name: Build Server API Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./server
+          file: ./server/Dockerfile
+          push: false
+          tags: dtst-server-api:test
+
+      - name: Build Client Web Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./client
+          file: ./client/Dockerfile
+          push: false
+          tags: dtst-client-web:test
+
+      - name: Build Trip Planner V9 Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./documents/trip_planner_17_v9
+          file: ./documents/trip_planner_17_v9/Dockerfile
+          push: false
+          tags: dtst-planner-v9:test
