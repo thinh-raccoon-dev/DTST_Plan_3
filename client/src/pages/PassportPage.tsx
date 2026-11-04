@@ -1,11 +1,11 @@
 import clsx from 'clsx';
-import { Compass, Eye, Footprints, Landmark, Lightbulb, MapPinCheck, QrCode, RefreshCw, Smartphone, Stamp, Trophy } from 'lucide-react';
+import { Compass, Eye, Footprints, Landmark, Lightbulb, Lock, MapPinCheck, QrCode, RefreshCw, Smartphone, Sparkles, Stamp, Trophy } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { announceBadges } from '../components/challenge/ChallengeQuiz';
 import { PageContainer } from '../components/layout/PublicLayout';
 import { Button, ButtonLink } from '../components/ui/Button';
-import { Card, SectionHeading, StatCard } from '../components/ui/Card';
+import { Card, StatCard } from '../components/ui/Card';
 import { EmptyState, ErrorState, Notice, PageLoader } from '../components/ui/States';
 import { useApiQuery } from '../hooks/useApiQuery';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
@@ -54,11 +54,57 @@ export function PassportPage() {
 
   return (
     <PageContainer>
-      <SectionHeading
-        as="h1"
-        title="Hộ chiếu trải nghiệm số"
-        description="Điểm đã khám phá = điểm bạn đã check-in hoặc hoàn thành thử thách. Chỉ mở trang hay mở QR không được tính là khám phá."
-      />
+      {/* Digital Passport Cover Hero */}
+      <section className="tp-fade-up relative overflow-hidden rounded-panel bg-gradient-to-br from-leaf-900 via-leaf-800 to-leaf-600 p-6 text-white shadow-raised sm:p-8">
+        <div className="pointer-events-none absolute -right-12 -top-16 size-64 rounded-full bg-teal-300/20 blur-3xl" aria-hidden />
+        <div className="pointer-events-none absolute -bottom-20 left-1/4 size-72 rounded-full bg-lotus-300/20 blur-3xl" aria-hidden />
+        <div className="relative flex flex-col justify-between gap-6 lg:flex-row lg:items-center">
+          <div>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold ring-1 ring-white/20">
+              <Stamp className="size-3.5 text-teal-200" aria-hidden />
+              {user ? `Hộ chiếu của ${user.displayName}` : 'Hộ chiếu trên thiết bị này'}
+            </span>
+            <h1 className="mt-3 text-3xl text-white sm:text-4xl">Hộ chiếu trải nghiệm số</h1>
+            <p className="mt-2 max-w-xl text-sm leading-relaxed text-leaf-100 sm:text-base">
+              Điểm đã khám phá = điểm bạn đã check-in hoặc hoàn thành thử thách. Quét mã QR tại điểm đến thí điểm để nhận điểm thưởng và mở khóa huy hiệu.
+            </p>
+            <div className="mt-5 flex flex-wrap gap-3">
+              <ButtonLink to="/scan" variant="inverted" icon={<QrCode className="size-4" aria-hidden />}>
+                Quét mã QR ngay
+              </ButtonLink>
+              <ButtonLink to="/destinations?hasActivity=true" variant="outlineInverted" icon={<Compass className="size-4" aria-hidden />}>
+                Xem điểm có thử thách
+              </ButtonLink>
+            </div>
+          </div>
+
+          <div className="rounded-3xl bg-white/10 p-5 ring-1 ring-white/20 backdrop-blur-sm lg:min-w-72">
+            <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-leaf-100">
+              <span>Tiến độ khám phá</span>
+              <span className="text-teal-200">{percent}%</span>
+            </div>
+            <p className="mt-1 text-2xl font-extrabold text-white">
+              {p.progress.explored} <span className="text-base font-medium text-leaf-100">/ {p.progress.total} điểm QR</span>
+            </p>
+            <div
+              className="mt-3 h-3 overflow-hidden rounded-full bg-white/15"
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={percent}
+              aria-label="Tiến trình khám phá"
+            >
+              <div
+                className="tp-grow-x h-full rounded-full bg-gradient-to-r from-teal-300 via-leaf-300 to-lotus-300 transition-[width] duration-700"
+                style={{ width: `${Math.max(4, percent)}%` }}
+              />
+            </div>
+            <p className="mt-2.5 text-xs text-leaf-100">
+              Tổng điểm tích lũy: <strong className="text-white">{formatNumber(p.totals.points)} điểm</strong>
+            </p>
+          </div>
+        </div>
+      </section>
 
       <div className="mt-5 space-y-3">
         {p.mode === 'device' ? (
@@ -79,36 +125,27 @@ export function PassportPage() {
         )}
       </div>
 
-      <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatCard label="Tổng điểm" value={formatNumber(p.totals.points)} icon={<Trophy className="size-5 text-teal-500" aria-hidden />} />
+      <div className="mt-6 grid grid-cols-2 gap-3.5 lg:grid-cols-4">
+        <StatCard label="Tổng điểm" value={formatNumber(p.totals.points)} icon={<Trophy className="size-5 text-teal-600" aria-hidden />} />
         <StatCard label="Điểm đã khám phá" value={p.totals.exploredDestinations} icon={<Compass className="size-5" aria-hidden />} />
         <StatCard label="Thử thách hoàn thành" value={p.totals.completedChallenges} icon={<Lightbulb className="size-5" aria-hidden />} />
-        <StatCard label="Huy hiệu" value={`${p.totals.badges}/${p.badges.length}`} icon={<Stamp className="size-5" aria-hidden />} />
+        <StatCard label="Huy hiệu đạt được" value={`${p.totals.badges}/${p.badges.length}`} icon={<Stamp className="size-5" aria-hidden />} />
       </div>
 
-      <Card className="mt-4 p-5">
-        <div className="flex items-center justify-between text-sm">
-          <span className="font-semibold text-river-800">Tiến trình điểm thí điểm có QR</span>
-          <span className="text-river-600">
-            {p.progress.explored}/{p.progress.total}
-          </span>
-        </div>
-        <div className="mt-2 h-3 overflow-hidden rounded-full bg-sand-100" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} aria-label="Tiến trình khám phá">
-          <div className="h-full rounded-full bg-leaf-500 transition-[width]" style={{ width: `${percent}%` }} />
-        </div>
-        <dl className="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+      <Card className="tp-fade-up mt-5 p-5">
+        <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
           {[
             { icon: Eye, label: 'Đã mở trang địa điểm', value: p.totals.destinationsViewed },
             { icon: QrCode, label: 'Đã mở nội dung từ QR', value: p.totals.qrContentsOpened },
             { icon: MapPinCheck, label: 'Đã check-in', value: p.totals.checkIns },
             { icon: Trophy, label: 'Đã hoàn thành thử thách', value: p.totals.completedChallenges },
           ].map(({ icon: Icon, label, value }) => (
-            <div key={label} className="rounded-control bg-sand-50 p-3">
-              <dt className="flex items-center gap-1.5 text-xs text-river-600">
-                <Icon className="size-3.5" aria-hidden />
+            <div key={label} className="rounded-2xl bg-sand-50 p-3.5 transition hover:bg-leaf-50">
+              <dt className="flex items-center gap-1.5 text-xs font-medium text-river-600">
+                <Icon className="size-4 text-leaf-600" aria-hidden />
                 {label}
               </dt>
-              <dd className="mt-1 text-lg font-bold text-river-900">{value}</dd>
+              <dd className="mt-1.5 text-xl font-extrabold text-river-900">{value}</dd>
             </div>
           ))}
         </dl>
@@ -126,18 +163,53 @@ export function PassportPage() {
       )}
 
       <section className="mt-10" aria-labelledby="badges-heading">
-        <h2 id="badges-heading" className="text-xl">Huy hiệu</h2>
-        <ul className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-          {p.badges.map((badge) => {
+        <div className="flex items-end justify-between gap-2">
+          <div>
+            <p className="eyebrow">Bộ sưu tập</p>
+            <h2 id="badges-heading" className="mt-1 text-2xl">Huy hiệu ({p.totals.badges}/{p.badges.length})</h2>
+          </div>
+        </div>
+        <ul className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+          {p.badges.map((badge, idx) => {
             const Icon = badgeIcons[badge.icon];
             return (
-              <li key={badge.key} className={clsx('rounded-card border p-4 text-center', badge.earned ? 'border-teal-200 bg-teal-50' : 'border-dashed border-sand-300 bg-white')}>
-                <span className={clsx('mx-auto flex size-14 items-center justify-center rounded-full', badge.earned ? 'bg-teal-500 text-white' : 'bg-sand-100 text-sand-300')}>
-                  <Icon className="size-7" aria-hidden />
+              <li
+                key={badge.key}
+                style={{ animationDelay: `${idx * 60}ms` }}
+                className={clsx(
+                  'tp-fade-up group relative flex flex-col items-center rounded-card border p-5 text-center transition-all duration-300',
+                  badge.earned
+                    ? 'border-teal-300 bg-gradient-to-b from-teal-50 via-white to-white shadow-raised hover:-translate-y-1'
+                    : 'border-dashed border-sand-300 bg-white/70 opacity-85 hover:opacity-100',
+                )}
+              >
+                <span
+                  className={clsx(
+                    'relative mx-auto flex size-16 items-center justify-center rounded-2xl transition-transform duration-300 group-hover:scale-110',
+                    badge.earned
+                      ? 'bg-gradient-to-br from-teal-400 to-teal-600 text-white shadow-cta'
+                      : 'bg-sand-100 text-river-300',
+                  )}
+                >
+                  <Icon className="size-8" aria-hidden />
+                  {!badge.earned && (
+                    <span className="absolute -bottom-1 -right-1 grid size-6 place-items-center rounded-full bg-white text-river-400 shadow-card ring-1 ring-sand-200">
+                      <Lock className="size-3" aria-hidden />
+                    </span>
+                  )}
                 </span>
-                <p className={clsx('mt-3 text-sm font-semibold', badge.earned ? 'text-river-900' : 'text-river-500')}>{badge.name}</p>
-                <p className="mt-1 text-xs text-river-500">{badge.description}</p>
-                <p className="mt-2 text-xs font-medium">{badge.earned ? <span className="text-teal-700">Đạt {formatDateTime(badge.awardedAt)}</span> : <span className="text-river-400">Chưa đạt</span>}</p>
+                <p className={clsx('mt-3.5 text-sm font-bold', badge.earned ? 'text-river-900' : 'text-river-600')}>{badge.name}</p>
+                <p className="mt-1 text-xs leading-relaxed text-river-500">{badge.description}</p>
+                <p className="mt-auto pt-3 text-xs font-semibold">
+                  {badge.earned ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-teal-100/80 px-2.5 py-0.5 text-teal-800">
+                      <Sparkles className="size-3" aria-hidden />
+                      Đạt {formatDateTime(badge.awardedAt)}
+                    </span>
+                  ) : (
+                    <span className="text-river-400">Chưa mở khóa</span>
+                  )}
+                </p>
               </li>
             );
           })}
@@ -145,43 +217,53 @@ export function PassportPage() {
       </section>
 
       <div className="mt-10 grid gap-6 lg:grid-cols-2">
-        <Card className="p-5">
-          <h2 className="text-lg">Địa điểm đã check-in</h2>
+        <Card className="p-5 sm:p-6">
+          <h2 className="flex items-center gap-2 text-lg">
+            <MapPinCheck className="size-5 text-leaf-600" aria-hidden />
+            Địa điểm đã check-in ({p.checkIns.length})
+          </h2>
           {p.checkIns.length === 0 ? (
             <p className="mt-2 text-sm text-river-500">Chưa có check-in nào.</p>
           ) : (
-            <ul className="mt-3 divide-y divide-sand-200">
+            <ul className="mt-4 space-y-2.5">
               {p.checkIns.map((c, i) => (
-                <li key={i} className="flex items-center justify-between gap-3 py-3 text-sm">
+                <li key={i} className="flex items-center justify-between gap-3 rounded-2xl bg-sand-50 p-3 text-sm">
                   <span className="min-w-0">
                     {c.destination ? (
-                      <Link to={`/destinations/${c.destination.slug}`} className="font-medium text-river-900 hover:text-leaf-700">{c.destination.name}</Link>
+                      <Link to={`/destinations/${c.destination.slug}`} className="font-bold text-river-900 hover:text-leaf-700">{c.destination.name}</Link>
                     ) : (
                       <span className="text-river-500">Địa điểm đã bị xóa</span>
                     )}
                     <span className="block text-xs text-river-500">{formatDateTime(c.completedAt)}</span>
                   </span>
-                  <span className="shrink-0 font-semibold text-teal-700">+{c.scoreAwarded}</span>
+                  <span className="shrink-0 rounded-full bg-teal-50 px-3 py-1 text-xs font-bold text-teal-800 ring-1 ring-teal-200">
+                    +{c.scoreAwarded} điểm
+                  </span>
                 </li>
               ))}
             </ul>
           )}
         </Card>
-        <Card className="p-5">
-          <h2 className="text-lg">Thử thách đã hoàn thành</h2>
+        <Card className="p-5 sm:p-6">
+          <h2 className="flex items-center gap-2 text-lg">
+            <Trophy className="size-5 text-teal-600" aria-hidden />
+            Thử thách đã hoàn thành ({p.completions.length})
+          </h2>
           {p.completions.length === 0 ? (
             <p className="mt-2 text-sm text-river-500">Chưa hoàn thành thử thách nào.</p>
           ) : (
-            <ul className="mt-3 divide-y divide-sand-200">
+            <ul className="mt-4 space-y-2.5">
               {p.completions.map((c, i) => (
-                <li key={i} className="flex items-center justify-between gap-3 py-3 text-sm">
+                <li key={i} className="flex items-center justify-between gap-3 rounded-2xl bg-sand-50 p-3 text-sm">
                   <span className="min-w-0">
-                    <span className="font-medium text-river-900">{c.challenge?.title ?? 'Thử thách đã bị xóa'}</span>
+                    <span className="font-bold text-river-900">{c.challenge?.title ?? 'Thử thách đã bị xóa'}</span>
                     <span className="block text-xs text-river-500">
                       {c.destination?.name ?? '—'} · đúng {c.correctCount ?? '?'}/{c.totalQuestions ?? '?'} · {formatDateTime(c.completedAt)}
                     </span>
                   </span>
-                  <span className="shrink-0 font-semibold text-teal-700">+{c.scoreAwarded}</span>
+                  <span className="shrink-0 rounded-full bg-teal-50 px-3 py-1 text-xs font-bold text-teal-800 ring-1 ring-teal-200">
+                    +{c.scoreAwarded} điểm
+                  </span>
                 </li>
               ))}
             </ul>
@@ -196,7 +278,7 @@ export function PassportPage() {
           <ul className="mt-3 flex flex-wrap gap-2">
             {p.qrOpened.map((d) => (
               <li key={d.id}>
-                <Link to={`/destinations/${d.slug}`} className="inline-flex min-h-9 items-center rounded-full border border-sand-300 bg-white px-3 text-sm hover:border-leaf-400">
+                <Link to={`/destinations/${d.slug}`} className="inline-flex min-h-9 items-center rounded-full border border-sand-300 bg-white px-3.5 text-sm font-medium transition hover:border-leaf-400 hover:text-leaf-700">
                   {d.name}
                 </Link>
               </li>

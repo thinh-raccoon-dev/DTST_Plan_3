@@ -1,0 +1,63 @@
+{
+  "dongtam_home": {
+    "url": "https://trairandongtam.vn/",
+    "type": "venue_website",
+    "retrieved_at": "2026-10-30",
+    "result": "content_read"
+  },
+  "dongtam_museum": {
+    "url": "https://trairandongtam.vn/nha-bao-tang-ran/",
+    "type": "venue_website",
+    "retrieved_at": "2026-10-30",
+    "result": "content_read_limited_text"
+  },
+  "dongtam_restaurant": {
+    "url": "https://trairandongtam.vn/nha-hang-dong-tam/",
+    "type": "venue_website",
+    "retrieved_at": "2026-10-30",
+    "result": "content_read"
+  },
+  "dongtam_cafe": {
+    "url": "https://trairandongtam.vn/coffee-and-tea-dong-tam/",
+    "type": "venue_website",
+    "retrieved_at": "2026-10-30",
+    "result": "content_read_limited_text"
+  },
+  "dongtam_event": {
+    "url": "https://trairandongtam.vn/5965-2/",
+    "type": "venue_website",
+    "retrieved_at": "2026-10-30",
+    "published_date": "2026-09-01",
+    "result": "content_read"
+  },
+  "kylan_portal": {
+    "url": "https://dulich.dongthap.gov.vn/vi/matongkylan",
+    "type": "provincial_tourism_portal",
+    "retrieved_at": "2026-10-30",
+    "result": "content_read"
+  },
+  "congdoan_portal": {
+    "url": "https://dulich.dongthap.gov.vn/vi/congdoanthoison",
+    "type": "provincial_tourism_portal",
+    "retrieved_at": "2026-10-30",
+    "result": "content_read"
+  },
+  "vuonxanh_article": {
+    "url": "https://dulichcanhviet.com.vn/blog/khu-sinh-thai-vuon-xanh.htm",
+    "type": "third_party_tour_operator",
+    "retrieved_at": "2026-10-30",
+    "result": "content_read",
+    "identity_note": "Tên và Kiểng Phước/Gò Công Đông khớp khu vực, chưa đối chiếu tọa độ hoặc xác nhận từ chủ cơ sở."
+  },
+  "vuonxanh_facebook": {
+    "url": "https://www.facebook.com/share/188UoEVm1Z/",
+    "type": "venue_social_link_from_existing_dataset",
+    "retrieved_at": "2026-10-30",
+    "result": "title_only_no_activity_content"
+  },
+  "kylan_festival": {
+    "url": "https://lehoitraicay.vnptdongthap.vn/nha-vuon/diem-du-lich-mat-ong-ky-lan",
+    "retrieved_at": "2026-10-30",
+    "result": "http_503_not_used_as_evidence"
+  }
+}

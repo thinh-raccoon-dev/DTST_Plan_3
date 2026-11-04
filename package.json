@@ -8,7 +8,11 @@
     "client"
   ],
   "scripts": {
-    "dev": "concurrently -n server,client -c green,cyan \"npm run dev -w server\" \"npm run dev -w client\"",
+    "dev": "concurrently -n server,client,python -c green,cyan,yellow \"npm run dev -w server\" \"npm run dev -w client\" \"npm run python:api\"",
+    "python:api": "python -X utf8 documents/trip_planner_17_v9/web_api.py --port 8010 --valhalla-url http://127.0.0.1:8002",
+    "python:test": "python -X utf8 -m unittest discover -s documents/trip_planner_17_v9 -p \"test_*.py\" -v",
+    "valhalla:up": "docker compose up -d valhalla",
+    "valhalla:down": "docker compose stop valhalla",
     "build": "npm run build -w server && npm run build -w client",
     "typecheck": "npm run typecheck -w server && npm run typecheck -w client",
     "lint": "npm run typecheck",

@@ -1,0 +1,35 @@
+{
+  "so_mau": 7200,
+  "so_tinh_huong": 600,
+  "so_mau_train": 5760,
+  "so_mau_test": 1440,
+  "accuracy_test_gia_lap": 1.0,
+  "bao_cao": {
+    "0": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 1202.0
+    },
+    "1": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 238.0
+    },
+    "accuracy": 1.0,
+    "macro avg": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 1440.0
+    },
+    "weighted avg": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 1440.0
+    }
+  },
+  "canh_bao": "Kết quả chỉ đo độ tái hiện quy tắc gắn nhãn giả lập, không chứng minh hiệu quả với khách thật."
+}

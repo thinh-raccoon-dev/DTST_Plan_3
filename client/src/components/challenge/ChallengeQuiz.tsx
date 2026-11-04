@@ -1,5 +1,5 @@
 import clsx from 'clsx';
-import { CheckCircle2, RotateCcw, Trophy, XCircle } from 'lucide-react';
+import { BookOpen, CheckCircle2, RotateCcw, Trophy, XCircle } from 'lucide-react';
 import { useState } from 'react';
 import { api, toApiError } from '../../lib/api';
 import { toast } from '../../stores/toastStore';
@@ -8,6 +8,8 @@ import { Badge } from '../ui/Badge';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { Notice } from '../ui/States';
+
+const OPTION_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
 
 export function announceBadges(badges: BadgeInfo[]) {
   for (const badge of badges) toast.success(`Huy hiệu mới: ${badge.name}`, badge.description);
@@ -30,7 +32,8 @@ export function ChallengeQuiz({
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<CompletionResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const allAnswered = challenge.questions.every((q) => answers[q.id] !== undefined);
+  const answeredCount = challenge.questions.filter((q) => answers[q.id] !== undefined).length;
+  const allAnswered = answeredCount === challenge.questions.length;
 
   const submit = async () => {
     if (!allAnswered) {
@@ -60,18 +63,33 @@ export function ChallengeQuiz({
   const resultFor = (questionId: string) => result?.results.find((r) => r.questionId === questionId);
 
   return (
-    <Card className="p-5 sm:p-6">
+    <Card className="overflow-hidden border-sand-300 p-5 sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h3 className="flex items-center gap-2 text-lg">
-            <Trophy className="size-5 text-teal-500" aria-hidden />
-            {challenge.title}
-          </h3>
-          {challenge.description && <p className="mt-1 text-sm text-river-600">{challenge.description}</p>}
+        <div className="flex items-start gap-3">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-teal-50 text-teal-600 ring-1 ring-teal-200/70">
+            <Trophy className="size-5" aria-hidden />
+          </span>
+          <div>
+            <h3 className="text-lg font-bold text-river-900">{challenge.title}</h3>
+            {challenge.description && <p className="mt-0.5 text-sm text-river-600">{challenge.description}</p>}
+          </div>
         </div>
-        <Badge tone={completed ? 'leaf' : 'teal'}>{completed ? 'Đã hoàn thành' : `+${challenge.rewardPoints} điểm`}</Badge>
+        <div className="flex items-center gap-2">
+          <span className="rounded-pill bg-sand-100 px-2.5 py-1 text-xs font-medium text-river-600">
+            Đã chọn {answeredCount}/{challenge.questions.length}
+          </span>
+          <Badge tone={completed ? 'leaf' : 'teal'}>{completed ? 'Đã hoàn thành' : `+${challenge.rewardPoints} điểm`}</Badge>
+        </div>
       </div>
-      {challenge.story && <p className="mt-4 rounded-card bg-sand-100 p-4 text-sm leading-relaxed text-river-800">{challenge.story}</p>}
+
+      {challenge.story && (
+        <div className="mt-4 rounded-card border border-sand-200 bg-gradient-to-br from-sand-50 to-leaf-50/40 p-4 text-sm leading-relaxed text-river-800">
+          <p className="mb-1.5 inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-leaf-700">
+            <BookOpen className="size-3.5" aria-hidden /> Câu chuyện điểm đến
+          </p>
+          <p>{challenge.story}</p>
+        </div>
+      )}
 
       <form
         className="mt-5 space-y-5"
@@ -83,43 +101,57 @@ export function ChallengeQuiz({
         {challenge.questions.map((question, qIndex) => {
           const graded = resultFor(question.id);
           return (
-            <fieldset key={question.id} disabled={disabled || submitting || result?.passed}>
-              <legend className="text-sm font-semibold text-river-900">
+            <fieldset key={question.id} disabled={disabled || submitting || result?.passed} className="rounded-card border border-sand-200 bg-sand-50/40 p-4">
+              <legend className="px-1 text-sm font-semibold text-river-900">
                 Câu {qIndex + 1}. {question.prompt}
               </legend>
-              <div className="mt-2 grid gap-2">
+              <div className="mt-2.5 grid gap-2">
                 {question.options.map((option, optionIndex) => {
                   const selected = answers[question.id] === optionIndex;
                   const isCorrectAnswer = graded?.correctOptionIndex === optionIndex;
+                  const letter = OPTION_LETTERS[optionIndex] ?? String(optionIndex + 1);
                   return (
                     <label
                       key={optionIndex}
                       className={clsx(
-                        'flex min-h-11 cursor-pointer items-center gap-3 rounded-control border px-3 py-2 text-sm transition-colors',
+                        'flex min-h-11 cursor-pointer items-center gap-3 rounded-control border px-3.5 py-2.5 text-sm transition-all duration-150',
                         isCorrectAnswer
-                          ? 'border-leaf-500 bg-leaf-50'
+                          ? 'border-leaf-500 bg-leaf-50 font-medium text-leaf-900 shadow-xs'
                           : selected
-                            ? 'border-leaf-500 bg-white ring-2 ring-leaf-100'
-                            : 'border-sand-300 bg-white hover:border-leaf-300',
+                            ? 'border-leaf-600 bg-white font-medium text-river-900 shadow-xs ring-2 ring-leaf-100'
+                            : 'border-sand-300 bg-white hover:border-leaf-300 hover:bg-sand-50/60',
                       )}
                     >
                       <input
                         type="radio"
                         name={`q-${challenge.id}-${question.id}`}
-                        className="size-4 accent-leaf-600"
+                        className="sr-only"
                         checked={selected}
                         onChange={() => {
                           setAnswers((a) => ({ ...a, [question.id]: optionIndex }));
                           if (result && !result.passed) setResult(null);
                         }}
                       />
-                      <span>{option}</span>
+                      <span
+                        className={clsx(
+                          'flex size-6 shrink-0 items-center justify-center rounded-md text-xs font-bold transition-colors',
+                          isCorrectAnswer
+                            ? 'bg-leaf-600 text-white'
+                            : selected
+                              ? 'bg-leaf-700 text-white'
+                              : 'bg-sand-100 text-river-700',
+                        )}
+                        aria-hidden
+                      >
+                        {letter}
+                      </span>
+                      <span className="flex-1">{option}</span>
                     </label>
                   );
                 })}
               </div>
               {graded && (
-                <p className={clsx('mt-2 inline-flex items-center gap-1.5 text-sm font-medium', graded.correct ? 'text-leaf-700' : 'text-red-700')}>
+                <p className={clsx('mt-2.5 inline-flex items-center gap-1.5 text-sm font-medium', graded.correct ? 'text-leaf-700' : 'text-red-700')}>
                   {graded.correct ? <CheckCircle2 className="size-4" aria-hidden /> : <XCircle className="size-4" aria-hidden />}
                   {graded.correct ? 'Chính xác' : 'Chưa đúng'}
                   {graded.explanation && <span className="font-normal text-river-600"> — {graded.explanation}</span>}

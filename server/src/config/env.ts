@@ -19,6 +19,7 @@ const envSchema = z.object({
   TRUST_PROXY: z.coerce.number().int().min(0).default(0),
   RATE_LIMIT_ENABLED: booleanString.default('true'),
   SERVE_CLIENT_DIR: z.string().optional(),
+  TRIP_PLANNER_API_URL: z.string().url().default('http://127.0.0.1:8010'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).optional(),
 });
 
@@ -46,6 +47,7 @@ export const env = {
   cookieSecure: raw.COOKIE_SECURE ?? isProduction,
   rateLimitEnabled: isProduction ? true : raw.RATE_LIMIT_ENABLED,
   publicAppUrl: raw.PUBLIC_APP_URL.replace(/\/+$/, ''),
+  tripPlannerApiUrl: raw.TRIP_PLANNER_API_URL.replace(/\/+$/, ''),
   logLevel: raw.LOG_LEVEL ?? (isTest ? 'silent' : isProduction ? 'info' : 'debug'),
 };
 

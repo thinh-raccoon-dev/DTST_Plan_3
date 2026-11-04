@@ -1,0 +1,24 @@
+{
+  "goal": "sightseeing",
+  "days": 2,
+  "people": 4,
+  "budget_vnd": 5000000,
+  "start_date": "2026-11-01",
+  "interests": [
+    "thiên nhiên",
+    "du lịch sinh thái"
+  ],
+  "mode_of_transport": "car",
+  "nearby_max_minutes": 30,
+  "mode": "ai",
+  "start_id": "new_001",
+  "primary_limit": 3,
+  "use_model": true,
+  "daily_start": "08:00",
+  "daily_end": "20:00",
+  "pace": "balanced",
+  "assemble_itinerary": true,
+  "allow_unknown_hours": true,
+  "include_breakfast": true,
+  "meal_duration_minutes": 60
+}

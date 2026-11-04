@@ -22,6 +22,19 @@ const daySchema = new Schema(
   { _id: false },
 );
 
+const replanEventSchema = new Schema(
+  {
+    eventId: { type: String, required: true, trim: true, maxlength: 120 },
+    stopId: { type: String, required: true, trim: true, maxlength: 120 },
+    event: { type: String, enum: ['arrived', 'departed'], required: true },
+    occurredAt: { type: String, required: true },
+    itineraryVersion: { type: Number, required: true, min: 1 },
+    response: { type: Schema.Types.Mixed, required: true },
+    createdAt: { type: Date, default: Date.now },
+  },
+  { _id: false },
+);
+
 const itinerarySchema = new Schema(
   {
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
@@ -34,6 +47,12 @@ const itinerarySchema = new Schema(
     numberOfDays: { type: Number, required: true, min: 1, max: 7 },
     days: { type: [daySchema], default: [] },
     estimatedDurationMinutes: { type: Number, required: true, min: 0 },
+    // Trip Planner V9 fields
+    plannerVersion: { type: String, enum: ['legacy', 'v9'], default: 'legacy' },
+    itineraryVersion: { type: Number, default: 1, min: 1 },
+    v9Itinerary: { type: Schema.Types.Mixed, default: null },
+    v9Meta: { type: Schema.Types.Mixed, default: null },
+    replanHistory: { type: [replanEventSchema], default: [] },
   },
   { timestamps: true },
 );

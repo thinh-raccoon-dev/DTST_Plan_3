@@ -12,3 +12,6 @@ playwright/.cache/
 Thumbs.db
 .vscode/*
 !.vscode/extensions.json
+.obsidian/
+__pycache__/
+*.py[cod]

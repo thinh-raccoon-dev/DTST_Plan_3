@@ -1,4 +1,4 @@
-import { Heart, MapPin, QrCode, Route, Trophy } from 'lucide-react';
+import { Heart, MapPin, QrCode, Route, Sparkles, Trophy } from 'lucide-react';
 import { useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { CategoryIcon } from '../components/destination/CategoryIcon';
@@ -69,42 +69,62 @@ export function DestinationDetailPage() {
     <PageContainer>
       <Breadcrumb items={[{ label: 'Trang chủ', to: '/' }, { label: 'Khám phá', to: '/destinations' }, { label: d.name }]} />
 
-      <div className="mt-5 grid gap-6 lg:grid-cols-[1.5fr_1fr]">
-        <div className="aspect-[16/10] overflow-hidden rounded-panel border border-sand-200">
-          <DestinationImage image={heroImage} category={d.category} name={d.name} showPlaceholderNote />
-        </div>
-        <div className="flex flex-col">
-          <p className="flex items-center gap-1.5 text-sm font-semibold uppercase tracking-wide text-leaf-700">
-            <CategoryIcon category={d.category} className="size-4" />
-            {categoryLabel(d.category)}
-          </p>
-          <h1 className="mt-2 text-3xl leading-tight">{d.name}</h1>
-          <p className="mt-2 inline-flex items-center gap-1.5 text-river-600">
-            <MapPin className="size-4" aria-hidden />
-            {areaLabel(d.area)}
-          </p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <VerificationStatusBadge status={d.verificationStatus} />
-            {d.isIllustrative && <IllustrativeBadge />}
-            {d.operationalStatus !== 'active' && <Badge tone="red">{d.operationalStatus === 'closed' ? 'Ngừng hoạt động' : 'Tạm đóng cửa'}</Badge>}
-            {d.tags.map((tag) => (
-              <Badge key={tag}>{tag}</Badge>
-            ))}
+      <div className="tp-fade-up mt-5 overflow-hidden rounded-panel border border-sand-200 bg-white shadow-card">
+        <div className="grid gap-0 lg:grid-cols-[1.45fr_1fr]">
+          <div className="relative aspect-[16/10] overflow-hidden bg-sand-100 lg:aspect-auto lg:min-h-[360px]">
+            <DestinationImage image={heroImage} category={d.category} name={d.name} showPlaceholderNote />
+            {hasActiveQr && (
+              <span className="absolute left-4 top-4 inline-flex items-center gap-1.5 rounded-pill bg-river-950/80 px-3 py-1 text-xs font-semibold text-teal-300 backdrop-blur-md">
+                <QrCode className="size-3.5" aria-hidden /> Có trạm QR tương tác
+              </span>
+            )}
           </div>
-          {d.summary && <p className="mt-4 text-river-700">{d.summary}</p>}
-          <div className="mt-auto flex flex-wrap gap-2 pt-6">
-            <Button
-              variant={favorite.favorited ? 'secondary' : 'primary'}
-              onClick={favorite.toggle}
-              loading={favorite.busy}
-              aria-pressed={favorite.favorited}
-              icon={<Heart className={`size-4 ${favorite.favorited ? 'fill-lotus-500 text-lotus-500' : ''}`} aria-hidden />}
-            >
-              {favorite.favorited ? 'Đã yêu thích' : 'Lưu yêu thích'}
-            </Button>
-            <ButtonLink to="/itinerary/create" state={{ priorityDestinationId: d.id }} variant="secondary" icon={<Route className="size-4" aria-hidden />}>
-              Thêm vào lịch trình
-            </ButtonLink>
+          <div className="flex flex-col p-6 sm:p-8">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 rounded-pill bg-leaf-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-leaf-700 ring-1 ring-leaf-200">
+                <CategoryIcon category={d.category} className="size-3.5" />
+                {categoryLabel(d.category)}
+              </span>
+              <span className="inline-flex items-center gap-1 text-xs font-medium text-river-600">
+                <MapPin className="size-3.5 text-leaf-600" aria-hidden />
+                {areaLabel(d.area)}
+              </span>
+            </div>
+
+            <h1 className="mt-3 text-2xl leading-tight sm:text-3xl">{d.name}</h1>
+
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              <VerificationStatusBadge status={d.verificationStatus} />
+              {d.isIllustrative && <IllustrativeBadge />}
+              {d.operationalStatus !== 'active' && (
+                <Badge tone="red">{d.operationalStatus === 'closed' ? 'Ngừng hoạt động' : 'Tạm đóng cửa'}</Badge>
+              )}
+              {d.tags.map((tag) => (
+                <Badge key={tag}>{tag}</Badge>
+              ))}
+            </div>
+
+            {d.summary && <p className="mt-4 text-sm leading-relaxed text-river-700 sm:text-base">{d.summary}</p>}
+
+            <div className="mt-auto flex flex-wrap gap-2.5 border-t border-sand-200 pt-6">
+              <Button
+                variant={favorite.favorited ? 'secondary' : 'primary'}
+                onClick={favorite.toggle}
+                loading={favorite.busy}
+                aria-pressed={favorite.favorited}
+                icon={<Heart className={`size-4 transition-transform ${favorite.favorited ? 'scale-110 fill-lotus-500 text-lotus-500' : ''}`} aria-hidden />}
+              >
+                {favorite.favorited ? 'Đã yêu thích' : 'Lưu yêu thích'}
+              </Button>
+              <ButtonLink
+                to="/itinerary/create"
+                state={{ priorityDestinationId: d.id }}
+                variant="secondary"
+                icon={<Route className="size-4" aria-hidden />}
+              >
+                Thêm vào lịch trình
+              </ButtonLink>
+            </div>
           </div>
         </div>
       </div>
@@ -112,17 +132,25 @@ export function DestinationDetailPage() {
       <div className="mt-8 grid gap-6 lg:grid-cols-[1.5fr_1fr]">
         <div className="space-y-6">
           <Card className="p-5 sm:p-6">
-            <h2 className="text-lg">Giới thiệu</h2>
-            <div className="mt-3 space-y-3 whitespace-pre-line text-river-800">{d.description}</div>
+            <h2 className="flex items-center gap-2 text-lg">
+              <Sparkles className="size-5 text-leaf-600" aria-hidden />
+              Giới thiệu điểm đến
+            </h2>
+            <div className="mt-3 space-y-3 whitespace-pre-line leading-relaxed text-river-800">{d.description}</div>
           </Card>
 
-          <Card className="p-5 sm:p-6">
-            <h2 className="flex items-center gap-2 text-lg">
-              <QrCode className="size-5 text-teal-500" aria-hidden />
-              Trải nghiệm & thử thách QR
-            </h2>
+          <Card className="overflow-hidden border-teal-200/80 p-5 sm:p-6">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="flex items-center gap-2 text-lg">
+                <span className="flex size-8 items-center justify-center rounded-lg bg-teal-50 text-teal-600">
+                  <QrCode className="size-5" aria-hidden />
+                </span>
+                Trải nghiệm & thử thách QR
+              </h2>
+              {hasActiveQr && <Badge tone="teal">Đang mở tại điểm</Badge>}
+            </div>
             {challenges.length === 0 ? (
-              <p className="mt-2 text-sm text-river-600">Địa điểm này chưa có thử thách đang hoạt động.</p>
+              <p className="mt-3 text-sm text-river-600">Địa điểm này chưa có thử thách đang hoạt động.</p>
             ) : (
               <>
                 <p className="mt-2 text-sm text-river-600">
@@ -132,12 +160,17 @@ export function DestinationDetailPage() {
                 </p>
                 <ul className="mt-4 space-y-3">
                   {challenges.map((c) => (
-                    <li key={c.id} className="flex items-start gap-3 rounded-card border border-sand-200 p-4">
-                      <Trophy className="mt-0.5 size-5 shrink-0 text-teal-500" aria-hidden />
+                    <li
+                      key={c.id}
+                      className="flex items-start gap-3.5 rounded-card border border-sand-200 bg-gradient-to-r from-white to-sand-50/70 p-4 transition-all hover:border-teal-300 hover:shadow-sm"
+                    >
+                      <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-teal-50 text-teal-600 ring-1 ring-teal-200/60">
+                        <Trophy className="size-5" aria-hidden />
+                      </span>
                       <div className="min-w-0 flex-1">
                         <p className="font-semibold text-river-900">{c.title}</p>
-                        {c.description && <p className="text-sm text-river-600">{c.description}</p>}
-                        <p className="mt-1 text-xs text-river-500">
+                        {c.description && <p className="mt-0.5 text-sm text-river-600">{c.description}</p>}
+                        <p className="mt-1.5 text-xs font-medium text-river-500">
                           {c.questionCount} câu hỏi · cần đúng {c.minCorrect} câu
                         </p>
                       </div>
@@ -146,7 +179,7 @@ export function DestinationDetailPage() {
                   ))}
                 </ul>
                 {hasActiveQr && (
-                  <ButtonLink to="/scan" variant="accent" size="sm" className="mt-4" icon={<QrCode className="size-4" aria-hidden />}>
+                  <ButtonLink to="/scan" variant="accent" size="sm" className="mt-5" icon={<QrCode className="size-4" aria-hidden />}>
                     Mở máy quét QR
                   </ButtonLink>
                 )}

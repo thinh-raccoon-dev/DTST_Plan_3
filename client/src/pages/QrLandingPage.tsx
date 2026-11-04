@@ -21,7 +21,12 @@ import type { CheckInResult, QrContent } from '../types/api';
 function QrProblem({ code, title, description }: { code: string; title: string; description: string }) {
   return (
     <PageContainer width="narrow">
-      <EmptyState icon={<QrCode className="size-6" aria-hidden />} title={title} description={description} action={<ButtonLink to="/destinations">Khám phá các địa điểm khác</ButtonLink>} />
+      <EmptyState
+        icon={<QrCode className="size-6" aria-hidden />}
+        title={title}
+        description={description}
+        action={<ButtonLink to="/destinations">Khám phá các địa điểm khác</ButtonLink>}
+      />
       <Card className="mt-6 p-5">
         <p className="mb-3 text-sm text-river-600">
           Mã đã mở: <strong className="font-mono">{code}</strong>. Nếu bạn nhập nhầm, hãy thử lại:
@@ -51,15 +56,30 @@ export function QrLandingPage() {
     });
   }, [query.data, code, preview]);
 
-  if (query.loading && !query.data) return <PageContainer><PageLoader /></PageContainer>;
+  if (query.loading && !query.data)
+    return (
+      <PageContainer>
+        <PageLoader />
+      </PageContainer>
+    );
   if (query.error) {
     const errorCode = query.error.code;
     if (errorCode === 'QR_NOT_FOUND') return <QrProblem code={code} title="Mã QR không tồn tại" description="Không tìm thấy nội dung cho mã này trong hệ thống." />;
     if (errorCode === 'QR_INACTIVE')
-      return <QrProblem code={code} title="Mã QR tạm ngừng hoạt động" description="Nội dung của điểm này đang được cập nhật hoặc tạm dừng. Cảm ơn bạn đã ghé thăm, vui lòng quay lại sau." />;
+      return (
+        <QrProblem
+          code={code}
+          title="Mã QR tạm ngừng hoạt động"
+          description="Nội dung của điểm này đang được cập nhật hoặc tạm dừng. Cảm ơn bạn đã ghé thăm, vui lòng quay lại sau."
+        />
+      );
     if (errorCode === 'QR_TARGET_UNAVAILABLE')
       return <QrProblem code={code} title="Nội dung chưa sẵn sàng" description="Nội dung gắn với mã QR này hiện chưa được xuất bản." />;
-    return <PageContainer><ErrorState error={query.error} onRetry={query.reload} /></PageContainer>;
+    return (
+      <PageContainer>
+        <ErrorState error={query.error} onRetry={query.reload} />
+      </PageContainer>
+    );
   }
   if (!query.data) return null;
 
@@ -109,31 +129,43 @@ export function QrLandingPage() {
         </div>
       )}
 
-      <div className="overflow-hidden rounded-panel border border-sand-200 bg-white shadow-card">
+      <div className="tp-fade-up overflow-hidden rounded-panel border border-sand-200 bg-white shadow-raised">
         <div className="grid md:grid-cols-[1.2fr_1fr]">
           <div className="aspect-[16/10] md:aspect-auto">
             <DestinationImage image={heroImage} category={d.category} name={d.name} showPlaceholderNote />
           </div>
           <div className="flex flex-col p-5 sm:p-7">
-            <p className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-teal-600">
-              <QrCode className="size-4" aria-hidden />
+            <span className="inline-flex w-fit items-center gap-1.5 rounded-pill bg-teal-50 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-teal-700 ring-1 ring-teal-200">
+              <QrCode className="size-3.5" aria-hidden />
               {qr.label}
-            </p>
-            <h1 className="mt-2 text-2xl leading-tight sm:text-3xl">{d.name}</h1>
-            <p className="mt-1 text-sm text-river-600">
+            </span>
+            <h1 className="mt-3 text-2xl leading-tight sm:text-3xl">{d.name}</h1>
+            <p className="mt-1 text-sm font-medium text-river-600">
               {categoryLabel(d.category)} · {areaLabel(d.area)}
             </p>
-            {d.isIllustrative && <div className="mt-3"><IllustrativeBadge /></div>}
-            <p className="mt-4 text-river-700">{d.summary || d.description.slice(0, 220)}</p>
+            {d.isIllustrative && (
+              <div className="mt-3">
+                <IllustrativeBadge />
+              </div>
+            )}
+            <p className="mt-4 text-sm leading-relaxed text-river-700 sm:text-base">{d.summary || d.description.slice(0, 220)}</p>
 
-            <div className="mt-auto pt-6">
+            <div className="mt-auto border-t border-sand-200 pt-5">
               {progress.checkedIn ? (
-                <p className="inline-flex items-center gap-2 rounded-control bg-leaf-50 px-4 py-3 text-sm font-semibold text-leaf-800">
-                  <MapPinCheck className="size-5" aria-hidden />
+                <p className="inline-flex items-center gap-2 rounded-card border border-leaf-300 bg-leaf-50 px-4 py-3 text-sm font-semibold text-leaf-800 shadow-xs">
+                  <MapPinCheck className="size-5 text-leaf-600" aria-hidden />
                   Bạn đã check-in tại điểm này
                 </p>
               ) : (
-                <Button variant="primary" size="lg" onClick={checkIn} loading={checkingIn} disabled={preview} icon={<Stamp className="size-5" aria-hidden />}>
+                <Button
+                  variant="primary"
+                  size="lg"
+                  onClick={checkIn}
+                  loading={checkingIn}
+                  disabled={preview}
+                  className="tp-pulse-ring"
+                  icon={<Stamp className="size-5" aria-hidden />}
+                >
                   Check-in vào hộ chiếu
                 </Button>
               )}
@@ -150,11 +182,16 @@ export function QrLandingPage() {
       <div className="mt-5">
         <Notice icon={<Info className="size-4" aria-hidden />}>
           {user ? (
-            <>Kết quả được lưu vào hộ chiếu của tài khoản <strong>{user.displayName}</strong>.</>
+            <>
+              Kết quả được lưu vào hộ chiếu của tài khoản <strong>{user.displayName}</strong>.
+            </>
           ) : (
             <>
               Bạn chưa đăng nhập: kết quả được lưu cho trình duyệt này và có thể mất khi xóa dữ liệu trình duyệt.{' '}
-              <Link to="/login" state={{ from: `/qr/${code}` }} className="font-semibold underline">Đăng nhập</Link> để đồng bộ vào tài khoản.
+              <Link to="/login" state={{ from: `/qr/${code}` }} className="font-semibold underline">
+                Đăng nhập
+              </Link>{' '}
+              để đồng bộ vào tài khoản.
             </>
           )}
         </Notice>
@@ -162,7 +199,9 @@ export function QrLandingPage() {
 
       <div className="mt-8 grid gap-6 lg:grid-cols-[1.5fr_1fr]">
         <section className="space-y-5" aria-labelledby="challenges-heading">
-          <h2 id="challenges-heading" className="text-xl">Câu chuyện & thử thách</h2>
+          <h2 id="challenges-heading" className="text-xl">
+            Câu chuyện & thử thách
+          </h2>
           {challenges.length === 0 ? (
             <Card className="p-5">
               <p className="whitespace-pre-line text-river-800">{d.description}</p>
@@ -179,7 +218,10 @@ export function QrLandingPage() {
                 onCompleted={() =>
                   query.setData((current) =>
                     current
-                      ? { ...current, progress: { ...current.progress, completedChallengeIds: [...new Set([...current.progress.completedChallengeIds, challenge.id])] } }
+                      ? {
+                          ...current,
+                          progress: { ...current.progress, completedChallengeIds: [...new Set([...current.progress.completedChallengeIds, challenge.id])] },
+                        }
                       : current,
                   )
                 }
