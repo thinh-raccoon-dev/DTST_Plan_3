@@ -27,6 +27,7 @@ export const AREAS = [
   'hong-ngu',
   'my-tho',
   'cai-be',
+  'thoi-son',
 ] as const;
 export type Area = (typeof AREAS)[number];
 
@@ -39,6 +40,7 @@ export const AREA_LABELS: Record<Area, string> = {
   'hong-ngu': 'Hồng Ngự',
   'my-tho': 'Mỹ Tho',
   'cai-be': 'Cái Bè',
+  'thoi-son': 'Cù lao Thới Sơn',
 };
 
 export const VERIFICATION_LEVELS = ['verified', 'unverified', 'unknown'] as const;

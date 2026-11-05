@@ -37,7 +37,7 @@ def load_data(root=None):
              'tags':by_name[p['name']]['nhan'],'opening_hours':{'date_schedule':schedule},'visit_duration_minutes':duration,
              'cost':dict(extra['cost'],raw_text=p.get('price_text')),'quality_flags':[],
              'provenance':{'detail_url':p.get('google_maps_url'),'source_date':p.get('data_date')},
-             'duration_status':status,'record_type':'accommodation' if hotel else ('restaurant' if i<2 else 'candidate'),
+             'duration_status':status,'record_type':'accommodation' if hotel else ('restaurant' if i in (0,1,9,10,12) else 'candidate'),
              'source_record':deepcopy(p)}
         detail=enrichment.get(ident)
         if detail:

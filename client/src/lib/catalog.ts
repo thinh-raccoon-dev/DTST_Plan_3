@@ -18,6 +18,7 @@ export const AREA_OPTIONS: Array<{ value: Area; label: string }> = [
   { value: 'hong-ngu', label: 'Hồng Ngự' },
   { value: 'my-tho', label: 'Mỹ Tho' },
   { value: 'cai-be', label: 'Cái Bè' },
+  { value: 'thoi-son', label: 'Cù lao Thới Sơn' },
 ];
 
 export const categoryLabel = (value: Category | null | undefined) =>

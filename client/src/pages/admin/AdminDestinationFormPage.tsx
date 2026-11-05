@@ -44,7 +44,7 @@ const formSchema = z
     summary: z.string().trim().max(300, 'Tối đa 300 ký tự'),
     description: z.string().trim().min(20, 'Mô tả cần ít nhất 20 ký tự').max(8000),
     category: z.enum(['nature', 'eco', 'culture', 'history', 'food', 'local_experience']),
-    area: z.enum(['cao-lanh', 'sa-dec', 'thap-muoi', 'tam-nong', 'lai-vung', 'hong-ngu', 'my-tho', 'cai-be']),
+    area: z.enum(['cao-lanh', 'sa-dec', 'thap-muoi', 'tam-nong', 'lai-vung', 'hong-ngu', 'my-tho', 'cai-be', 'thoi-son']),
     tagsText: z.string(),
     address: z.string().trim().max(300),
     lat: optionalNumber(8, 24, 'Vĩ độ phải nằm trong khoảng 8–24 (Việt Nam)'),

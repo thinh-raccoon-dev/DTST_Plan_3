@@ -117,8 +117,8 @@
     }
   },
   "new_010": {
-    "name": "KARAOKE TẤN LỘC",
-    "visit_duration_minutes": null,
+    "name": "Quán Hủ tiếu Sa Đéc Bà Sẩm",
+    "visit_duration_minutes": 45,
     "weekday_schedule": null,
     "cost": {
       "confirmed_max_vnd": null,
@@ -130,8 +130,8 @@
     }
   },
   "new_011": {
-    "name": "288 CLUB",
-    "visit_duration_minutes": null,
+    "name": "Quán Hủ tiếu Mỹ Tho Cô Dung & Trung Lương",
+    "visit_duration_minutes": 45,
     "weekday_schedule": null,
     "cost": {
       "confirmed_max_vnd": null,
@@ -156,8 +156,8 @@
     }
   },
   "new_013": {
-    "name": "Vua Nám Bà Tư Spa Sa Đéc",
-    "visit_duration_minutes": null,
+    "name": "Nhà hàng Sinh thái Mekong Taste Thới Sơn",
+    "visit_duration_minutes": 90,
     "weekday_schedule": null,
     "cost": {
       "confirmed_max_vnd": null,
