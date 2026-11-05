@@ -9,7 +9,7 @@ from ranking import rating_info,ranking_key,explanation,POLICY
 GOALS={'sightseeing':'attraction','food':'restaurant','relaxation':'wellness','nightlife':'entertainment','stay':'accommodation'}
 ROLES={**{f'new_{i:03d}':'restaurant' for i in [1,2,10,11,13]},
        **{f'new_{i:03d}':'accommodation' for i in range(3,8)},
-       **{f'new_{i:03d}':'entertainment' for i in [8,9]},
+       **{'new_008':'attraction','new_009':'entertainment'},
        **{'new_012':'wellness'},
        **{f'new_{i:03d}':'attraction' for i in range(14,18)}}
 

@@ -91,8 +91,8 @@
     }
   },
   "new_008": {
-    "name": "Cosy 1 Karaoke",
-    "visit_duration_minutes": null,
+    "name": "Chùa Vĩnh Tràng Mỹ Tho",
+    "visit_duration_minutes": 90,
     "weekday_schedule": null,
     "cost": {
       "confirmed_max_vnd": null,

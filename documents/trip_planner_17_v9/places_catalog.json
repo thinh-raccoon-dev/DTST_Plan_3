@@ -156,26 +156,29 @@
       "phone": "+84 379 262 962"
     },
     {
-      "google_rating": 4.2,
-      "google_review_count": 380,
-      "rating_adjusted_for_review_count": 4.153488,
+      "google_rating": 4.6,
+      "google_review_count": 3200,
+      "rating_adjusted_for_review_count": 4.587692,
       "rating_status": "source_snapshot",
       "rating_source_date": "2026-10-28",
       "id": "new_008",
-      "name": "Cosy 1 Karaoke",
-      "role": "entertainment",
+      "name": "Chùa Vĩnh Tràng Mỹ Tho",
+      "role": "attraction",
       "tags": [
-        "giải trí",
-        "ca hát"
+        "tham quan",
+        "văn hóa",
+        "tâm linh",
+        "di tích lịch sử",
+        "kiến trúc"
       ],
       "activities_available": [],
-      "address": "80 Lê Văn Phẩm, Đạo Thạnh, Đồng Tháp, Việt Nam",
+      "address": "Đường Nguyễn Trung Trực, Ấp Mỹ An, Xã Mỹ Phong, TP. Mỹ Tho, Tiền Giang",
       "coordinates": [
-        106.34955289999999,
-        10.3590754
+        106.3748,
+        10.3627
       ],
-      "visit_duration_minutes": 15,
-      "phone": "+84 943 920 065"
+      "visit_duration_minutes": 90,
+      "phone": "+84 273 3873 427"
     },
     {
       "google_rating": 4.0,

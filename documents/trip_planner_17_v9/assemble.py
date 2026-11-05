@@ -137,12 +137,12 @@ def assemble(data,routing,request,recommendations, *, economy=False):
     def timestamp(day, minutes):
         return (datetime.combine(day,time.min)+timedelta(minutes=minutes)).isoformat(timespec='minutes')
 
-    daily=[];overnights=0
+    daily=[];overnights=0;trip_meal_counts={}
     for offset in range(days):
         day=first+timedelta(days=offset)
         origin=start if offset==0 else places[daily[-1]['actual_end_place_id']]
         end=finish_point if offset==days-1 else (hotel or start)
-        current=origin;now=t0;steps=[];visit_count=0;day_problem=False
+        current=origin;now=t0;steps=[];visit_count=0;day_problem=False;day_meal_counts={};last_meal_id=None
         previous_stay = daily[-1]['overnight_stay'] if offset else None
         if previous_stay:
             now = max(now, previous_stay['ready_next_day_minute'])
@@ -177,8 +177,16 @@ def assemble(data,routing,request,recommendations, *, economy=False):
             road_km+=r['distance_km'];now+=duration;current=p
         def visits_before(deadline):
             nonlocal now,visit_count
-            while pending and visit_count<quota:
-                candidates = pending if request.get('mode','ai') == 'ai' else pending[:1]
+            effective_quota = quota
+            if request.get('mode', 'ai') == 'ai' and effective_quota == 0 and visit_count < PACEs[pace]:
+                effective_quota = PACEs[pace]
+            while visit_count<effective_quota:
+                if pending:
+                    candidates = pending if request.get('mode','ai') == 'ai' else pending[:1]
+                elif request.get('mode', 'ai') == 'ai':
+                    candidates = [p for p in data['attractions'] if p['_id'] not in completed and role(p) not in ('restaurant','accommodation') and p['_id'] not in request.get('excluded_ids',[])]
+                else:
+                    break
                 for p in candidates:
                     if role(p) in ('restaurant','accommodation'):continue
                     source_duration=int(number(p.get('visit_duration_minutes',90),'visit_duration_minutes',1,1440))
@@ -205,14 +213,18 @@ def assemble(data,routing,request,recommendations, *, economy=False):
                     'activities_note':'Các hoạt động có thể chọn, không phải lịch đã bao gồm tất cả trò hoặc xác nhận lịch diễn.',
                     'estimated_group_cost_vnd':amount,**contact(p)})
                 cost_items.append({'kind':'primary_visit','place_id':p['_id'],'amount_vnd':amount})
-                now=stop;completed.append(p['_id']);pending.remove(p);visit_count+=1
+                now=stop;completed.append(p['_id'])
+                if p in pending:pending.remove(p)
+                visit_count+=1
         def meal(spec):
-            nonlocal now, day_problem
+            nonlocal now, day_problem, last_meal_id
             kind,label,target,latest=spec;latest=min(latest,t1)
             requested=pending[0] if pending and role(pending[0])=='restaurant' else None
             pool=[requested] if requested else restaurants
             choices=[]
             for p in pool:
+                if day_meal_counts.get(p['_id'], 0) >= 2:
+                    continue
                 out=route(current,p);back=route(p,end)
                 if out is None or back is None or out['duration_minutes']>maximum:continue
                 window=fit(p,day,now+mins(out,current,p),meal_minutes,latest,max(t0,target))
@@ -220,9 +232,21 @@ def assemble(data,routing,request,recommendations, *, economy=False):
                 begin,stop,status=window
                 if stop+mins(back,p,end)>t1:continue
                 rank = service_rank(ranking_key(p,out['duration_minutes']), estimate(p,people,minutes=meal_minutes), economy)
-                choices.append((rank,p,out,begin,stop,status))
+                
+                day_penalty = day_meal_counts.get(p['_id'], 0)
+                consecutive_penalty = 1 if p['_id'] == last_meal_id else 0
+                trip_penalty = trip_meal_counts.get(p['_id'], 0)
+                is_bf = any(w in p['name'].lower() for w in ['hủ tiếu', 'bún', 'cháo', 'phở', 'điểm tâm']) or \
+                        any(x.get('name') == 'Bữa sáng' for x in (p.get('source_record') or {}).get('about', {}).get('Nổi tiếng về', []))
+                fit_penalty = 0 if (kind == 'breakfast' and is_bf) or (kind != 'breakfast' and not is_bf) else 1
+                
+                meal_key = (day_penalty, consecutive_penalty, trip_penalty, fit_penalty, *rank)
+                choices.append((meal_key,p,out,begin,stop,status))
             if choices:
                 choices.sort(key=lambda x:x[0]);_,p,out,begin,stop,status=choices[0]
+                day_meal_counts[p['_id']] = day_meal_counts.get(p['_id'], 0) + 1
+                trip_meal_counts[p['_id']] = trip_meal_counts.get(p['_id'], 0) + 1
+                last_meal_id = p['_id']
                 move(p,out);wait(begin)
                 amount=estimate(p,people,minutes=meal_minutes)
                 steps.append({'type':'meal','meal':kind,'place_id':p['_id'],'name':label+' — '+p['name'],
@@ -240,8 +264,9 @@ def assemble(data,routing,request,recommendations, *, economy=False):
                 steps.append({'type':'meal_unassigned','meal':kind,'name':label+' — tự chọn quán gần vị trí hiện tại',
                     'start':clock(begin),'end':clock(stop),'anchor_id':current['_id'],
                     'spending_target_group_vnd':round(food_target) if food_target is not None else None,
-                    'note':'Chưa tìm được quán phù hợp trong dữ liệu/khung giờ; chưa tính chặng đến quán sẽ chọn.'})
+                    'note':'Chưa tìm được quán phù hợp trong dữ liệu/khung giờ hoặc đã giới hạn lặp lại quán cũ trong ngày; tự do chọn quán lân cận.'})
                 now=stop;cost_items.append({'kind':'meal_unassigned','amount_vnd':None})
+                last_meal_id = None
             else:
                 day_problem = True
                 steps.append({'type':'meal_unscheduled','meal':kind,'name':label+' — không đủ điều kiện xếp',
