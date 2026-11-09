@@ -128,12 +128,16 @@ async function enrichAllImages() {
 
   for (let i = 0; i < destinations.length; i++) {
     const d = destinations[i];
+    if (!d) continue;
+
     if (d.images && d.images.length > 0) {
       continue;
     }
 
     const pool = CATEGORY_POOLS[d.category] || CATEGORY_POOLS.nature;
+    if (!pool || pool.length === 0) continue;
     const selectedPhoto = pool[i % pool.length];
+    if (!selectedPhoto) continue;
 
     await DestinationModel.updateOne(
       { _id: d._id },

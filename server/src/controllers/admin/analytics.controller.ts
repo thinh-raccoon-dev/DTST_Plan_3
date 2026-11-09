@@ -156,7 +156,7 @@ export async function getAnalytics(req: Request, res: Response) {
         { key: 'qrLanding', label: 'Mở trang từ QR', count: totals.qrLandingViews },
         { key: 'checkIn', label: 'Check-in tại điểm', count: totals.checkIns },
         { key: 'challengeAttempt', label: 'Gửi đáp án thử thách', count: totals.challengeAttempts },
-        { key: 'challengeCompletion', label: 'Hoàn thành thử thách', count: totals.challengeCompletions },
+        { key: 'challengeCompletions', label: 'Hoàn thành thử thách', count: totals.challengeCompletions },
       ],
       rates: {
         pageViewToQr: rate(totals.qrLandingViews, totals.destinationPageViews),
@@ -167,12 +167,15 @@ export async function getAnalytics(req: Request, res: Response) {
       },
     },
     daily: Array.from(dayMap.entries()).map(([date, counts]) => ({ date, ...counts })),
-    topDestinations: topDest.map((r) => ({ id: String(r._id), name: nameOf(destNames, r._id)?.name ?? 'Địa điểm', count: r.count })),
+    topDestinations: topDest.map((r) => {
+      const dest = nameOf(destNames, r._id);
+      return { id: String(r._id), name: dest?.name ?? 'Địa điểm', slug: dest?.slug, count: r.count };
+    }),
     topQrCodes: topQr.map((r) => ({ id: String(r._id), code: nameOf(qrNames, r._id)?.code ?? 'QR', count: r.count })),
     topChallenges: topChallenges.map((r) => ({ id: String(r._id), title: nameOf(challengeNames, r._id)?.title ?? 'Thử thách', count: r.count })),
     definitions: {
       destinationPageViews: 'Lượt mở trang chi tiết địa điểm trực tiếp (loại trùng lặp cùng trình duyệt trong 30 phút).',
-      qrLandingViews: 'Lượt mở trang đích từ mã QR (loại trùng lặp trong 10 phút, không tính lượt xem trước của quản trị).',
+      qrLandingViews: 'Lượt mở trang đích từ mã QR (loại trùng lặp trong 10 phút, không tính lượt xem trước của quản trị). Không phải số khách truy cập duy nhất.',
       interactions: 'Tổng số lượt gửi đáp án thử thách và check-in thành công.',
       challengeCompletions: 'Số lượt trả lời đúng và được hệ thống công nhận hoàn thành.',
       uniqueVisitors: 'Ước lượng du khách duy nhất dựa trên tài khoản đăng nhập hoặc mã phiên ẩn danh.',

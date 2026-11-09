@@ -79,8 +79,8 @@ export function buildApiRouter(): Router {
   const admin = Router();
   admin.use(requireStaff);
 
-  // Analytics: Admin views overall system, Partner views their managed destinations
-  admin.get('/analytics', adminAnalytics.getAnalytics);
+  // Analytics: Admin views overall system
+  admin.get('/analytics', requireAdmin, adminAnalytics.getAnalytics);
 
   // Destinations management (Staff)
   admin.get('/destinations', adminDestinations.listAdminDestinations);

@@ -107,7 +107,7 @@ async function computeStats(identity: Identity): Promise<ExtendedPassportStats> 
   const [checkIns, completions, entries, itineraryCount] = await Promise.all([
     PassportEntryModel.countDocuments({ ...owner, entryType: 'check_in' }),
     PassportEntryModel.find({ ...owner, entryType: 'challenge_completed' }).select('destinationId').lean(),
-    PassportEntryModel.find(owner).select('scoreAwarded').lean(),
+    PassportEntryModel.find({ ...owner, entryType: { $ne: 'badge_awarded' } }).select('scoreAwarded').lean(),
     identity.userId ? ItineraryModel.countDocuments({ userId: identity.userId }) : Promise.resolve(0),
   ]);
 
@@ -174,7 +174,7 @@ export async function evaluateBadges(identity: Identity): Promise<AwardedBadgeDt
         ...ownerFields(identity),
         entryType: 'badge_awarded',
         badgeKey: badge.key,
-        scoreAwarded: badge.rewardPoints ?? 0,
+        scoreAwarded: 0,
         source: 'system',
       });
       awarded.push({
@@ -353,7 +353,7 @@ export async function getPassport(identity: Identity) {
   return {
     mode: identity.userId ? ('account' as const) : ('device' as const),
     totals: {
-      points: entries.reduce((sum, e) => sum + (e.scoreAwarded ?? 0), 0),
+      points: entries.filter((e) => e.entryType !== 'badge_awarded').reduce((sum, e) => sum + (e.scoreAwarded ?? 0), 0),
       exploredDestinations: explored.size,
       checkIns: checkIns.length,
       completedChallenges: completions.length,
