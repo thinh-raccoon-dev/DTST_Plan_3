@@ -127,10 +127,21 @@ async function enrichV9Places(places: V9Place[], userId?: string): Promise<{
     }
   }
 
+  const V9_ID_TO_DEST_SLUG: Record<string, string> = {
+    new_008: 'chua-vinh-trang-my-tho',
+    new_010: 'hu-tieu-sa-dec-ba-sam',
+    new_011: 'hu-tieu-my-tho-trung-luong',
+    new_013: 'nha-hang-mekong-taste-thoi-son',
+    new_014: 'trai-ran-dong-tam',
+    new_015: 'trai-ong-mat-hoa-nhan-thoi-son',
+    new_016: 'khu-du-lich-sinh-thai-thoi-son',
+  };
+
   const enriched = places.map((place) => {
     const norm = normalizeText(place.name);
     const slug = slugify(place.name);
-    const dest = destByNormName.get(norm) ?? destBySlug.get(slug);
+    const mappedSlug = V9_ID_TO_DEST_SLUG[place.id];
+    const dest = (mappedSlug ? destBySlug.get(mappedSlug) : undefined) ?? destByNormName.get(norm) ?? destBySlug.get(slug);
 
     let isPersonalizedMatch = false;
     let personalizationReason: string | undefined;
