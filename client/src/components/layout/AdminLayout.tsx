@@ -1,5 +1,20 @@
 import clsx from 'clsx';
-import { Award, BarChart3, ExternalLink, Image, LogOut, MapPinned, Menu, QrCode, Trophy, X } from 'lucide-react';
+import {
+  Award,
+  BarChart3,
+  ExternalLink,
+  FileText,
+  Image,
+  LogOut,
+  MapPinned,
+  Menu,
+  QrCode,
+  Route,
+  Settings,
+  Trophy,
+  Users,
+  X,
+} from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Navigate, NavLink, Outlet, ScrollRestoration, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
@@ -9,10 +24,14 @@ import { Logo } from './Logo';
 const allItems = [
   { to: '/admin', label: 'Tổng quan', icon: BarChart3, end: true, adminOnly: false },
   { to: '/admin/destinations', label: 'Địa điểm', icon: MapPinned, adminOnly: false },
+  { to: '/admin/itineraries', label: 'Lịch trình du khách', icon: Route, adminOnly: true },
+  { to: '/admin/passport-logs', label: 'Nhật ký Check-in', icon: FileText, adminOnly: true },
   { to: '/admin/badges', label: 'Huy hiệu & Thành tựu', icon: Award, adminOnly: true },
   { to: '/admin/qr', label: 'Mã QR', icon: QrCode, adminOnly: true },
   { to: '/admin/challenges', label: 'Thử thách', icon: Trophy, adminOnly: true },
   { to: '/admin/banners', label: 'Banner', icon: Image, adminOnly: true },
+  { to: '/admin/users', label: 'Tài khoản & Phân quyền', icon: Users, adminOnly: true },
+  { to: '/admin/system', label: 'Hệ thống & Dịch vụ', icon: Settings, adminOnly: true },
 ];
 
 function SideNav({ onNavigate }: { onNavigate?: () => void }) {

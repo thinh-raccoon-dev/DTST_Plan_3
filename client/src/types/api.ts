@@ -696,3 +696,178 @@ export interface AdminBanner extends PublicBanner {
   createdAt: string | null;
   updatedAt: string | null;
 }
+
+// ----------------------------------------------------
+// Upgraded Admin Types (Users, Itineraries, Passport Logs, System)
+// ----------------------------------------------------
+
+export interface AdminUserItem {
+  id: string;
+  email: string;
+  displayName: string;
+  role: UserRole;
+  status: 'active' | 'disabled';
+  preferences?: UserPreferences;
+  createdAt: string;
+  updatedAt: string;
+  stats: {
+    itinerariesCount: number;
+    checkInsCount: number;
+    badgesCount: number;
+  };
+}
+
+export interface AdminUsersResponse {
+  items: AdminUserItem[];
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  stats: {
+    totalUsers: number;
+    tourists: number;
+    partners: number;
+    admins: number;
+    disabled: number;
+  };
+}
+
+export interface AdminItineraryItem {
+  id: string;
+  title: string;
+  numberOfDays: number;
+  totalStops: number;
+  estimatedDurationMinutes: number;
+  preferences?: {
+    areas?: Area[];
+    interests?: Category[];
+    hoursPerDay?: number;
+  };
+  plannerVersion?: string;
+  itineraryVersion?: number;
+  user: {
+    id: string;
+    email: string;
+    displayName: string;
+    role: UserRole;
+  } | null;
+  destinationNames: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminItinerariesResponse {
+  items: AdminItineraryItem[];
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  stats: {
+    totalItineraries: number;
+    oneDayCount: number;
+    twoDayCount: number;
+    multiDayCount: number;
+  };
+}
+
+export interface AdminPassportLogItem {
+  id: string;
+  entryType: 'check_in' | 'challenge_completed' | 'badge_awarded';
+  scoreAwarded: number;
+  completedAt: string;
+  source: 'qr' | 'system';
+  badgeKey?: string;
+  metadata?: {
+    correctCount?: number;
+    totalQuestions?: number;
+  };
+  user: {
+    id: string;
+    email: string;
+    displayName: string;
+    role: UserRole;
+  };
+  destination?: {
+    id: string;
+    name: string;
+    slug: string;
+    category: string;
+    area: string;
+    imageUrl?: string;
+  } | null;
+  challenge?: {
+    id: string;
+    title: string;
+    rewardPoints: number;
+  } | null;
+  qrCode?: {
+    id: string;
+    code: string;
+    label: string;
+  } | null;
+}
+
+export interface AdminPassportLogsResponse {
+  items: AdminPassportLogItem[];
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  stats: {
+    totalCheckIns: number;
+    totalChallenges: number;
+    totalBadges: number;
+    totalPoints: number;
+    todayActivities: number;
+  };
+}
+
+export interface SystemServiceInfo {
+  status: string;
+  uptimeSeconds?: number;
+  nodeVersion?: string;
+  platform?: string;
+  memoryUsageMB?: {
+    rss: number;
+    heapUsed: number;
+    heapTotal: number;
+  };
+  name?: string;
+  readyState?: number;
+  counts?: Record<string, number>;
+  online?: boolean;
+  routingStatus?: string;
+  targetUrl?: string;
+}
+
+export interface SystemStatusResponse {
+  status: 'healthy' | 'degraded';
+  services: {
+    backend: SystemServiceInfo;
+    database: SystemServiceInfo;
+    aiEngine: SystemServiceInfo;
+  };
+  systemTime: string;
+}
+
+export interface SystemSettings {
+  announcement: {
+    enabled: boolean;
+    message: string;
+    tone: 'info' | 'warning' | 'success' | 'lotus';
+    linkUrl?: string;
+  };
+  general: {
+    maintenanceMode: boolean;
+    defaultCheckInPoints: number;
+    defaultQuizPoints: number;
+    enablePublicRegistration: boolean;
+    enableAiPlanner: boolean;
+  };
+  contact: {
+    hotline: string;
+    supportEmail: string;
+    organizationName: string;
+  };
+}
+

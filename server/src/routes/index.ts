@@ -4,7 +4,11 @@ import * as adminBadges from '../controllers/admin/badges.controller.js';
 import * as adminBanners from '../controllers/admin/banners.controller.js';
 import * as adminChallenges from '../controllers/admin/challenges.controller.js';
 import * as adminDestinations from '../controllers/admin/destinations.controller.js';
+import * as adminItineraries from '../controllers/admin/itineraries.controller.js';
+import * as adminPassportLogs from '../controllers/admin/passportLogs.controller.js';
 import * as adminQr from '../controllers/admin/qr.controller.js';
+import * as adminSystem from '../controllers/admin/system.controller.js';
+import * as adminUsers from '../controllers/admin/users.controller.js';
 import * as auth from '../controllers/auth.controller.js';
 import * as banners from '../controllers/banner.controller.js';
 import * as destinations from '../controllers/destination.controller.js';
@@ -118,6 +122,30 @@ export function buildApiRouter(): Router {
   admin.get('/banners/:id', requireAdmin, adminBanners.getBanner);
   admin.patch('/banners/:id', requireAdmin, adminBanners.updateBanner);
   admin.delete('/banners/:id', requireAdmin, adminBanners.deleteBanner);
+
+  // Users & Permissions management (Admin only)
+  admin.get('/users', requireAdmin, adminUsers.listUsers);
+  admin.post('/users', requireAdmin, adminUsers.createUser);
+  admin.patch('/users/:id/role', requireAdmin, adminUsers.updateUserRole);
+  admin.patch('/users/:id/status', requireAdmin, adminUsers.updateUserStatus);
+  admin.post('/users/:id/reset-password', requireAdmin, adminUsers.resetUserPassword);
+  admin.delete('/users/:id', requireAdmin, adminUsers.deleteUser);
+
+  // Tourist Itineraries management (Admin only)
+  admin.get('/itineraries', requireAdmin, adminItineraries.listAdminItineraries);
+  admin.get('/itineraries/:id', requireAdmin, adminItineraries.getAdminItinerary);
+  admin.delete('/itineraries/:id', requireAdmin, adminItineraries.deleteAdminItinerary);
+
+  // Passport & Activity logs (Admin only)
+  admin.get('/passport-logs', requireAdmin, adminPassportLogs.listPassportLogs);
+
+  // System Health & Settings (Admin only)
+  admin.get('/system/status', requireAdmin, adminSystem.getSystemStatus);
+  admin.get('/system/settings', requireAdmin, adminSystem.getSystemSettings);
+  admin.put('/system/settings', requireAdmin, adminSystem.updateSystemSettings);
+
+  // Public announcement & info
+  api.get('/system/announcement', adminSystem.getPublicAnnouncement);
 
   api.use('/admin', admin);
   return api;
