@@ -1,4 +1,4 @@
-# API v1
+# API v2.1
 
 Base URL: `/api/v1`. Mọi phản hồi là JSON (trừ ảnh QR). Lỗi có dạng thống nhất:
 
@@ -9,21 +9,21 @@ Base URL: `/api/v1`. Mọi phản hồi là JSON (trừ ảnh QR). Lỗi có d�
 ## Xác thực, CSRF, phiên ẩn danh
 
 | Cookie | Mục đích |
-| --- | --- |
+| :--- | :--- |
 | `dtst_access` | JWT (HS256) HttpOnly, SameSite theo `COOKIE_SAMESITE`, Secure trong production, hạn 7 ngày. Vai trò/trạng thái luôn đọc lại từ DB mỗi request. |
 | `dtst_csrf` | Token CSRF HttpOnly (double-submit). |
 | `dtst_anon` | UUID ngẫu nhiên cho hộ chiếu khách và ước lượng người dùng duy nhất. |
 
-- Mọi request **POST/PUT/PATCH/DELETE** phải gửi header `x-csrf-token` lấy từ `GET /csrf` (client axios tự xử lý và thử lại một
-  lần khi nhận `CSRF_INVALID`).
+- Mọi request **POST/PUT/PATCH/DELETE** phải gửi header `x-csrf-token` lấy từ `GET /csrf` (client axios tự xử lý và thử lại một lần khi nhận `CSRF_INVALID`).
 - `401 UNAUTHORIZED` khi chưa đăng nhập; `403 FORBIDDEN` khi đăng nhập nhưng không đủ quyền.
-- Rate limit (429 `RATE_LIMITED`): API chung 300/phút; đăng nhập 10/15 phút; đăng ký 10/giờ; check-in & nộp thử thách 30/10 phút;
-  ghi sự kiện & tạo lịch trình 60/phút.
+- Rate limit (429 `RATE_LIMITED`): API chung 300/phút; đăng nhập 10/15 phút; đăng ký 10/giờ; check-in & nộp thử thách 30/10 phút; ghi sự kiện & tạo lịch trình 60/phút.
 
-## Công khai / du khách
+---
+
+## Công khai / Du khách
 
 | Method | Path | Ghi chú |
-| --- | --- | --- |
+| :--- | :--- | :--- |
 | GET | `/health` | `{status, database}`; 503 nếu mất kết nối DB |
 | GET | `/csrf` | `{csrfToken}` |
 | POST | `/auth/register` | `{email, password(8–128), displayName}` → luôn tạo vai trò `tourist`. 409 `EMAIL_TAKEN` |
@@ -36,42 +36,46 @@ Base URL: `/api/v1`. Mọi phản hồi là JSON (trừ ảnh QR). Lỗi có d�
 | GET | `/destinations/:slug` | `{destination, challenges, hasActiveQr}`; 404 nếu chưa xuất bản |
 | GET | `/destinations/:slug/related` | Gợi ý cùng loại hình/khu vực |
 | POST | `/events/destination-view` | `{slug}` – ghi `destination_page_view` (gộp trong 30 phút/phiên) |
-| POST | `/itineraries/generate` | `{numberOfDays 1–7, hoursPerDay 2–12, areas[], interests[], priorityDestinationIds[]}` → `PlanResult` (ngày, lý do, cảnh báo, điểm không xếp được, giả định) |
-| POST | `/itineraries` 🔒 | Lưu lịch trình `{title, preferences, days[{dayNumber, items[{destinationId, note?}]}]}` |
-| GET | `/itineraries/my` 🔒 | Danh sách của chính người dùng |
-| GET/PATCH/DELETE | `/itineraries/:id` 🔒 | Chỉ chủ sở hữu; người khác nhận 404 |
-| GET | `/qr/:code` | Nội dung đích (chỉ đọc, không ghi thống kê). 404 `QR_NOT_FOUND`, 410 `QR_INACTIVE`, 410 `QR_TARGET_UNAVAILABLE` |
-| POST | `/qr/:code/scan` | Ghi `qr_landing_view` (gộp trong 10 phút/phiên). Trang xem trước của admin (`?preview=1`) không gọi API này |
-| POST | `/qr/:code/check-in` | Check-in tự xác nhận, +10 điểm, tối đa một lần/điểm/chủ sở hữu → `{created, pointsAwarded, newBadges}` |
+| GET | `/trip-planner/health` | Kiểm tra trạng thái AI Trip Planner V9 & Valhalla routing |
+| GET | `/trip-planner/places` | Danh mục địa điểm làm giàu từ MongoDB, gắn thẻ cá nhân hóa theo `req.user` |
+| POST | `/trip-planner/recommend` | Gợi ý phương án lịch trình AI V9 theo sở thích, ngày, phương tiện |
+| POST | `/trip-planner/itinerary` | Lập lịch trình tối ưu đa ràng buộc V9 (Valhalla routing matrix) |
+| POST | `/itineraries/generate` | Bộ lập lịch legacy (heuristics) |
+| POST | `/itineraries` 🔒 | Lưu lịch trình legacy hoặc `{title, v9Itinerary, v9Meta}` |
+| GET | `/itineraries/my` 🔒 | Danh sách lịch trình đã lưu của người dùng |
+| GET/PATCH/DELETE | `/itineraries/:id` 🔒 | Xem chi tiết, cập nhật tên/thứ tự điểm dừng, xóa lịch trình |
+| POST | `/itineraries/:id/replan` 🔒 | **Live Replan thực địa**: `{itinerary_version, event_id, stop_id, event: arrived\|departed, occurred_at}`. Idempotent check qua `event_id` |
+| GET | `/qr/:code` | Nội dung đích (chỉ đọc, không ghi thống kê). 404 `QR_NOT_FOUND`, 410 `QR_INACTIVE` |
+| POST | `/qr/:code/scan` | Ghi `qr_landing_view` (gộp trong 10 phút/phiên) |
+| POST | `/qr/:code/check-in` | Check-in tự xác nhận GPS thực địa, +10 điểm, tối đa một lần/điểm/chủ sở hữu → `{created, pointsAwarded, newBadges}` |
 | GET | `/challenges/:id` | Câu hỏi **không kèm đáp án** |
-| POST | `/challenges/:id/complete` | `{qrCode, answers[{questionId, optionIndex}]}` – máy chủ chấm. Cần mã QR đang hoạt động thuộc cùng địa điểm (`QR_CHALLENGE_MISMATCH`). Đáp án/giải thích chỉ trả về khi đạt. Thưởng một lần (`alreadyCompleted`) |
-| GET | `/passport/me` | Hộ chiếu của tài khoản hoặc của trình duyệt (`mode: account\|device`), kèm `pendingDeviceEntries` |
-| POST | `/passport/claim` 🔒 | Chuyển mục của trình duyệt vào tài khoản; mục trùng bị bỏ qua (không cộng điểm hai lần) |
-| GET | `/favorites` 🔒 | `{items, hiddenCount}` |
-| POST/DELETE | `/favorites/:destinationId` 🔒 | Thêm (idempotent) / bỏ yêu thích |
+| POST | `/challenges/:id/complete` | Máy chủ chấm câu đố, kiểm tra mã QR hợp lệ, thưởng điểm và huy hiệu |
+| GET | `/passport/me` | Hộ chiếu của tài khoản hoặc trình duyệt kèm điểm, danh hiệu và huy hiệu động |
+| POST | `/passport/claim` 🔒 | Chuyển con dấu/điểm từ thiết bị khách vào tài khoản chính thức |
+| GET | `/favorites` 🔒 | Danh sách địa điểm yêu thích của người dùng |
+| POST/DELETE | `/favorites/:destinationId` 🔒 | Thêm/xóa địa điểm yêu thích (idempotent) |
 
 🔒 = cần đăng nhập.
 
-## Quản trị (`/admin/*`, cần vai trò admin)
+---
 
-| Method | Path | Ghi chú |
-| --- | --- | --- |
-| GET | `/admin/analytics?from=YYYY-MM-DD&to=YYYY-MM-DD` | Khoảng ngày theo giờ Việt Nam (mặc định 30 ngày, tối đa 366). Trả `totals`, `daily`, top địa điểm/QR/thử thách và `definitions` |
-| GET | `/admin/destinations` | Query `q`, `category`, `publicationStatus`, `page`, `limit≤100` |
-| POST | `/admin/destinations` | Tạo; slug tự sinh nếu trống. 409 `SLUG_TAKEN`. Không cho đánh dấu "đã xác minh" khi thiếu dữ liệu, nguồn hoặc ngày xác minh |
-| GET/PATCH | `/admin/destinations/:id` | PATCH từng phần (vd. `{publicationStatus: "published"}`) |
-| DELETE | `/admin/destinations/:id` | 409 `DESTINATION_IN_USE` nếu còn QR/thử thách gắn vào (hãy ẩn thay vì xóa) |
-| GET/POST | `/admin/qr` | Tạo `{code?, label, targetType: destination\|challenge, targetId, status, notes}`; code trống → `DT-XXXXXX`. 409 `QR_CODE_TAKEN` |
-| GET/PATCH | `/admin/qr/:id` | GET kèm thống kê; PATCH đổi nhãn/trạng thái/đích (mã không đổi được) |
-| GET | `/admin/qr/:id/image?format=png\|svg&download=1` | Ảnh QR chứa `{PUBLIC_APP_URL}/qr/{code}` |
-| GET/POST | `/admin/challenges` | Query `destinationId`, `status`. Kèm số lượt gửi đáp án & hoàn thành |
-| GET/PUT/DELETE | `/admin/challenges/:id` | DELETE bị chặn (409 `CHALLENGE_IN_USE`) khi đã có người hoàn thành hoặc có QR trỏ tới |
-| PATCH | `/admin/challenges/:id/status` | `{status: active\|inactive}` |
-| GET/POST | `/admin/banners` | Query `status`, `page`, `limit≤100`. Tạo `{kind: cover\|event\|promo, theme: forest\|lotus\|cream, eyebrow?, title, subtitle?, imageUrl?, imageAlt?, linkUrl?, linkLabel?, sponsorName?, status, startAt?, endAt?, sortOrder}`. `linkUrl`/`imageUrl` chỉ nhận http(s) hoặc đường dẫn nội bộ `/...`; `kind=promo` bắt buộc `sponsorName`; `startAt ≤ endAt`. Trả kèm `isLive`, `impressions`, `clicks` |
-| GET/PATCH/DELETE | `/admin/banners/:id` | PATCH từng phần; gửi `""`/`null` để xóa một trường (vd. bỏ lịch hiển thị) |
+## Cổng Đối tác & Quản trị (`/admin/*`)
 
-## Sự kiện thống kê
-
-`destination_page_view`, `qr_landing_view`, `challenge_started` (mỗi lần nộp đáp án), `challenge_completed` (lần đầu đạt),
-`destination_check_in`, `itinerary_generated`, `itinerary_saved`, `passport_badge_awarded`. Chỉ máy chủ ghi sự kiện; lỗi ghi
-sự kiện không chặn thao tác của người dùng.
+| Method | Path | Quyền | Ghi chú |
+| :--- | :--- | :--- | :--- |
+| GET | `/admin/analytics` | `partner` \| `admin` | Admin xem toàn tỉnh; Partner xem báo cáo phân vùng các điểm mình quản lý (`managedBy`) |
+| GET | `/admin/destinations` | `partner` \| `admin` | Admin xem toàn bộ; Partner chỉ xem danh sách điểm do mình phụ trách |
+| POST | `/admin/destinations` | `partner` \| `admin` | Partner tạo với trạng thái `draft` hoặc `pending_review`; Admin có thể đặt `published` |
+| GET/PATCH | `/admin/destinations/:id` | `partner` \| `admin` | Đối tác gửi duyệt (`pending_review` + `reviewNote`); Admin duyệt (`published`) hoặc yêu cầu sửa (`draft` + `reviewNote`) |
+| DELETE | `/admin/destinations/:id` | `admin` | Xóa điểm đến (bị chặn nếu có QR hoặc thử thách đang liên kết) |
+| GET/POST | `/admin/badges` | `admin` | Quản lý danh mục Huy hiệu Động: xem danh sách, tạo mới huy hiệu sự kiện |
+| GET | `/admin/badges/analytics` | `admin` | Báo cáo tỷ lệ mở khóa huy hiệu, danh sách vinh danh gần đây |
+| GET/PATCH/DELETE | `/admin/badges/:id` | `admin` | Cập nhật thông tin, chuyển đổi trạng thái `active`/`inactive`, soft-delete |
+| GET/POST | `/admin/qr` | `admin` | Quản lý mã QR in ấn thực địa |
+| GET/PATCH | `/admin/qr/:id` | `admin` | Sửa thông tin mã QR, đổi đích đến |
+| GET | `/admin/qr/:id/image` | `admin` | Tải ảnh mã QR định dạng PNG/SVG |
+| GET/POST | `/admin/challenges` | `admin` | Quản lý bộ câu hỏi trắc nghiệm thử thách văn hóa |
+| GET/PUT/DELETE | `/admin/challenges/:id` | `admin` | Xem, sửa nội dung, xóa câu hỏi thử thách |
+| PATCH | `/admin/challenges/:id/status` | `admin` | Đổi trạng thái kích hoạt thử thách |
+| GET/POST | `/admin/banners` | `admin` | Quản lý banner truyền thông trang chủ |
+| GET/PATCH/DELETE | `/admin/banners/:id` | `admin` | Sửa, đổi trạng thái, xóa banner |

@@ -156,26 +156,29 @@
       "phone": "+84 379 262 962"
     },
     {
-      "google_rating": 4.2,
-      "google_review_count": 380,
-      "rating_adjusted_for_review_count": 4.153488,
+      "google_rating": 4.6,
+      "google_review_count": 3200,
+      "rating_adjusted_for_review_count": 4.587692,
       "rating_status": "source_snapshot",
       "rating_source_date": "2026-10-28",
       "id": "new_008",
-      "name": "Cosy 1 Karaoke",
-      "role": "entertainment",
+      "name": "Chùa Vĩnh Tràng Mỹ Tho",
+      "role": "attraction",
       "tags": [
-        "giải trí",
-        "ca hát"
+        "tham quan",
+        "văn hóa",
+        "tâm linh",
+        "di tích lịch sử",
+        "kiến trúc"
       ],
       "activities_available": [],
-      "address": "80 Lê Văn Phẩm, Đạo Thạnh, Đồng Tháp, Việt Nam",
+      "address": "Đường Nguyễn Trung Trực, Ấp Mỹ An, Xã Mỹ Phong, TP. Mỹ Tho, Tiền Giang",
       "coordinates": [
-        106.34955289999999,
-        10.3590754
+        106.3748,
+        10.3627
       ],
-      "visit_duration_minutes": 15,
-      "phone": "+84 943 920 065"
+      "visit_duration_minutes": 90,
+      "phone": "+84 273 3873 427"
     },
     {
       "google_rating": 4.0,
@@ -200,48 +203,52 @@
       "phone": "+84 273 3827 999"
     },
     {
-      "google_rating": 4.0,
-      "google_review_count": 266,
-      "rating_adjusted_for_review_count": 3.968354,
+      "google_rating": 4.3,
+      "google_review_count": 1250,
+      "rating_adjusted_for_review_count": 4.280769,
       "rating_status": "source_snapshot",
       "rating_source_date": "2026-10-28",
       "id": "new_010",
-      "name": "KARAOKE TẤN LỘC",
-      "role": "entertainment",
+      "name": "Quán Hủ tiếu Sa Đéc Bà Sẩm",
+      "role": "restaurant",
       "tags": [
-        "giải trí",
-        "ca hát"
+        "ẩm thực",
+        "ăn uống",
+        "đặc sản Sa Đéc",
+        "món địa phương"
       ],
       "activities_available": [],
-      "address": "99C8+846, Đạo Thạnh, Đồng Tháp, Việt Nam",
+      "address": "Số 188 Trần Hưng Đạo, Phường 1, TP. Sa Đéc, Đồng Tháp",
       "coordinates": [
-        106.36527,
-        10.370781
+        105.7588,
+        10.2974
       ],
-      "visit_duration_minutes": 180,
-      "phone": "+84 907 208 988"
+      "visit_duration_minutes": 45,
+      "phone": "+84 277 3861 456"
     },
     {
-      "google_rating": 3.5,
-      "google_review_count": 8,
-      "rating_adjusted_for_review_count": 3.758621,
+      "google_rating": 4.4,
+      "google_review_count": 980,
+      "rating_adjusted_for_review_count": 4.370874,
       "rating_status": "source_snapshot",
       "rating_source_date": "2026-10-28",
       "id": "new_011",
-      "name": "288 CLUB",
-      "role": "entertainment",
+      "name": "Quán Hủ tiếu Mỹ Tho Cô Dung & Trung Lương",
+      "role": "restaurant",
       "tags": [
-        "giải trí",
-        "ban đêm"
+        "ẩm thực",
+        "ăn uống",
+        "đặc sản Mỹ Tho",
+        "hủ tiếu"
       ],
       "activities_available": [],
-      "address": "19 Phạm Thanh, Đạo Thạnh, Đồng Tháp, Việt Nam",
+      "address": "Ngã ba Trung Lương, Phường 10, TP. Mỹ Tho, Tiền Giang",
       "coordinates": [
-        106.3506529,
-        10.361925099999999
+        106.3421,
+        10.3705
       ],
-      "visit_duration_minutes": 90,
-      "phone": null
+      "visit_duration_minutes": 45,
+      "phone": "+84 273 3855 442"
     },
     {
       "google_rating": 4.9,
@@ -266,26 +273,28 @@
       "phone": "+84 888 370 139"
     },
     {
-      "google_rating": null,
-      "google_review_count": null,
-      "rating_adjusted_for_review_count": null,
-      "rating_status": "missing",
+      "google_rating": 4.5,
+      "google_review_count": 620,
+      "rating_adjusted_for_review_count": 4.447761,
+      "rating_status": "source_snapshot",
       "rating_source_date": "2026-10-28",
       "id": "new_013",
-      "name": "Vua Nám Bà Tư Spa Sa Đéc",
-      "role": "wellness",
+      "name": "Nhà hàng Sinh thái Mekong Taste Thới Sơn",
+      "role": "restaurant",
       "tags": [
-        "thư giãn",
-        "chăm sóc da"
+        "ẩm thực",
+        "ăn uống",
+        "sinh thái miệt vườn",
+        "đặc sản Thới Sơn"
       ],
       "activities_available": [],
-      "address": "321 Đường Nguyễn Huệ, Sa Đéc, Đồng Tháp, Việt Nam",
+      "address": "Ấp Thới Thạnh, Xã Thới Sơn, TP. Mỹ Tho, Tiền Giang (Cù lao Thới Sơn)",
       "coordinates": [
-        105.7673598,
-        10.295564299999999
+        106.3458,
+        10.3395
       ],
       "visit_duration_minutes": 90,
-      "phone": "+84 773 971 920"
+      "phone": "+84 908 123 456"
     },
     {
       "google_rating": 4.3,

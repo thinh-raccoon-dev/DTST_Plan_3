@@ -89,6 +89,7 @@ const destinationSchema = new Schema(
     isIllustrative: { type: Boolean, default: false },
     lastVerifiedAt: { type: Date },
     publicationStatus: { type: String, enum: PUBLICATION_STATUSES, default: 'draft', required: true },
+    reviewNote: { type: String, trim: true, maxlength: 500 },
     operationalStatus: { type: String, enum: OPERATIONAL_STATUSES, default: 'active', required: true },
     managedBy: { type: Schema.Types.ObjectId, ref: 'User' },
     searchText: { type: String, select: false },

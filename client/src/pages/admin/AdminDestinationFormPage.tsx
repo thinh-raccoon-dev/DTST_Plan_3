@@ -44,7 +44,7 @@ const formSchema = z
     summary: z.string().trim().max(300, 'Tối đa 300 ký tự'),
     description: z.string().trim().min(20, 'Mô tả cần ít nhất 20 ký tự').max(8000),
     category: z.enum(['nature', 'eco', 'culture', 'history', 'food', 'local_experience']),
-    area: z.enum(['cao-lanh', 'sa-dec', 'thap-muoi', 'tam-nong', 'lai-vung', 'hong-ngu', 'my-tho', 'cai-be']),
+    area: z.enum(['cao-lanh', 'sa-dec', 'thap-muoi', 'tam-nong', 'lai-vung', 'hong-ngu', 'my-tho', 'cai-be', 'thoi-son']),
     tagsText: z.string(),
     address: z.string().trim().max(300),
     lat: optionalNumber(8, 24, 'Vĩ độ phải nằm trong khoảng 8–24 (Việt Nam)'),
@@ -74,7 +74,8 @@ const formSchema = z
     verification: z.object({ location: level, openingHours: level, referencePrice: level, contactInfo: level }),
     isIllustrative: z.boolean(),
     lastVerifiedAt: z.string(),
-    publicationStatus: z.enum(['draft', 'published', 'hidden']),
+    publicationStatus: z.enum(['draft', 'pending_review', 'published', 'hidden']),
+    reviewNote: z.string().trim().max(500).optional(),
     operationalStatus: z.enum(['active', 'temporarily_closed', 'closed']),
     managedByEmail: z.string().trim().refine((v) => v === '' || z.string().email().safeParse(v).success, 'Email đối tác không hợp lệ'),
   })
@@ -136,6 +137,7 @@ const emptyValues: FormValues = {
   isIllustrative: false,
   lastVerifiedAt: '',
   publicationStatus: 'draft',
+  reviewNote: '',
   operationalStatus: 'active',
   managedByEmail: '',
 };
@@ -166,6 +168,7 @@ function toFormValues(d: AdminDestination): FormValues {
     isIllustrative: d.isIllustrative,
     lastVerifiedAt: d.lastVerifiedAt ? d.lastVerifiedAt.slice(0, 10) : '',
     publicationStatus: d.publicationStatus,
+    reviewNote: d.reviewNote ?? '',
     operationalStatus: d.operationalStatus,
     managedByEmail: d.managedByEmail ?? '',
   };
@@ -204,6 +207,7 @@ function toBody(v: FormValues) {
     isIllustrative: v.isIllustrative,
     lastVerifiedAt: v.lastVerifiedAt ? `${v.lastVerifiedAt}T00:00:00+07:00` : null,
     publicationStatus: v.publicationStatus,
+    reviewNote: orNull(v.reviewNote ?? ''),
     operationalStatus: v.operationalStatus,
     managedByEmail: v.managedByEmail,
   };
@@ -227,7 +231,7 @@ function serverPathToField(path: string): FieldPath<FormValues> | null {
   if (path.startsWith('tags.')) return 'tagsText';
   if (/^images\.\d+\.(url|alt|credit|license|sourceUrl)$/.test(path)) return path as FieldPath<FormValues>;
   if (/^verification\.(location|openingHours|referencePrice|contactInfo)$/.test(path)) return path as FieldPath<FormValues>;
-  const flat = ['name', 'slug', 'summary', 'description', 'category', 'area', 'address', 'openingHours', 'referencePrice', 'lastVerifiedAt', 'publicationStatus', 'operationalStatus', 'managedByEmail'];
+  const flat = ['name', 'slug', 'summary', 'description', 'category', 'area', 'address', 'openingHours', 'referencePrice', 'lastVerifiedAt', 'publicationStatus', 'reviewNote', 'operationalStatus', 'managedByEmail'];
   return flat.includes(path) ? (path as FieldPath<FormValues>) : null;
 }
 
@@ -459,8 +463,15 @@ function DestinationForm({ initial, id }: { initial?: AdminDestination; id?: str
         )}
       </Card>
 
-      <Section title="Xuất bản">
-        <FormField label="Trạng thái xuất bản" hint={isPartner ? 'Đối tác không thể tự xuất bản. Quản trị viên sẽ duyệt.' : 'Chỉ “Đã xuất bản” mới hiển thị với du khách.'} error={errors.publicationStatus?.message}>
+      <Section title="Xuất bản & Kiểm duyệt">
+        {initial?.reviewNote && (
+          <div className="sm:col-span-2">
+            <Notice tone="warning" title="Phản hồi duyệt từ Quản trị viên">
+              {initial.reviewNote}
+            </Notice>
+          </div>
+        )}
+        <FormField label="Trạng thái xuất bản" hint={isPartner ? 'Chọn “Chờ duyệt” để gửi Quản trị viên duyệt xuất bản.' : 'Chỉ “Đã xuất bản” mới hiển thị với du khách.'} error={errors.publicationStatus?.message}>
           <Select {...reg('publicationStatus')} disabled={isPartner && initial?.publicationStatus === 'published'}>
             {(Object.entries(PUBLICATION_LABELS) as Array<[PublicationStatus, string]>)
               .filter(([value]) => !isPartner || value !== 'published' || initial?.publicationStatus === 'published')
@@ -473,9 +484,14 @@ function DestinationForm({ initial, id }: { initial?: AdminDestination; id?: str
           </Select>
         </FormField>
         {!isPartner && (
-          <FormField label="Email đối tác quản lý" hint="Tài khoản vai trò đối tác sẽ thấy và sửa địa điểm này." error={errors.managedByEmail?.message} className="sm:col-span-2">
-            <Input type="email" {...reg('managedByEmail')} placeholder="partner@example.com" />
-          </FormField>
+          <>
+            <FormField label="Email đối tác quản lý" hint="Tài khoản vai trò đối tác sẽ thấy và sửa địa điểm này." error={errors.managedByEmail?.message}>
+              <Input type="email" {...reg('managedByEmail')} placeholder="partner@example.com" />
+            </FormField>
+            <FormField label="Ghi chú duyệt / Yêu cầu chỉnh sửa" hint="Ghi chú hoặc lý do cần sửa gửi cho đối tác." error={errors.reviewNote?.message}>
+              <Input {...reg('reviewNote')} placeholder="Nhập lý do hoặc hướng dẫn cho đối tác..." />
+            </FormField>
+          </>
         )}
       </Section>
 

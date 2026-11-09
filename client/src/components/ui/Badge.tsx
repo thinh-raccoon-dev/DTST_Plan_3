@@ -25,6 +25,7 @@ const statusTones: Record<string, BadgeTone> = {
   published: 'leaf',
   active: 'leaf',
   verified: 'leaf',
+  pending_review: 'teal',
   draft: 'neutral',
   inactive: 'neutral',
   unknown: 'neutral',

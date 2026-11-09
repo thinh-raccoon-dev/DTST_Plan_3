@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import * as adminAnalytics from '../controllers/admin/analytics.controller.js';
+import * as adminBadges from '../controllers/admin/badges.controller.js';
 import * as adminBanners from '../controllers/admin/banners.controller.js';
 import * as adminChallenges from '../controllers/admin/challenges.controller.js';
 import * as adminDestinations from '../controllers/admin/destinations.controller.js';
@@ -74,23 +75,36 @@ export function buildApiRouter(): Router {
   api.post('/favorites/:destinationId', requireAuth, passport.addFavorite);
   api.delete('/favorites/:destinationId', requireAuth, passport.removeFavorite);
 
-  // Staff (admin + partner) can manage destinations. Analytics, QR, challenges and banners stay admin-only.
+  // Staff (admin + partner)
   const admin = Router();
   admin.use(requireStaff);
+
+  // Analytics: Admin views overall system
   admin.get('/analytics', requireAdmin, adminAnalytics.getAnalytics);
 
+  // Destinations management (Staff)
   admin.get('/destinations', adminDestinations.listAdminDestinations);
   admin.post('/destinations', adminDestinations.createDestination);
   admin.get('/destinations/:id', adminDestinations.getAdminDestination);
   admin.patch('/destinations/:id', adminDestinations.updateDestination);
   admin.delete('/destinations/:id', adminDestinations.deleteDestination);
 
+  // Badges & Achievements management (Admin only)
+  admin.get('/badges', requireAdmin, adminBadges.listBadges);
+  admin.post('/badges', requireAdmin, adminBadges.createBadge);
+  admin.get('/badges/analytics', requireAdmin, adminBadges.getBadgeAnalytics);
+  admin.get('/badges/:id', requireAdmin, adminBadges.getBadge);
+  admin.patch('/badges/:id', requireAdmin, adminBadges.updateBadge);
+  admin.delete('/badges/:id', requireAdmin, adminBadges.deleteBadge);
+
+  // QR codes management (Admin only)
   admin.get('/qr', requireAdmin, adminQr.listQrCodes);
   admin.post('/qr', requireAdmin, adminQr.createQrCode);
   admin.get('/qr/:id', requireAdmin, adminQr.getQrCode);
   admin.patch('/qr/:id', requireAdmin, adminQr.updateQrCode);
   admin.get('/qr/:id/image', requireAdmin, adminQr.getQrImage);
 
+  // Challenges management (Admin only)
   admin.get('/challenges', requireAdmin, adminChallenges.listAdminChallenges);
   admin.post('/challenges', requireAdmin, adminChallenges.createChallenge);
   admin.get('/challenges/:id', requireAdmin, adminChallenges.getAdminChallenge);
@@ -98,6 +112,7 @@ export function buildApiRouter(): Router {
   admin.patch('/challenges/:id/status', requireAdmin, adminChallenges.updateChallengeStatus);
   admin.delete('/challenges/:id', requireAdmin, adminChallenges.deleteChallenge);
 
+  // Banners management (Admin only)
   admin.get('/banners', requireAdmin, adminBanners.listBanners);
   admin.post('/banners', requireAdmin, adminBanners.createBanner);
   admin.get('/banners/:id', requireAdmin, adminBanners.getBanner);

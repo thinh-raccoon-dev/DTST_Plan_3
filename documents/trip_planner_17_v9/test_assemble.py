@@ -96,7 +96,7 @@ class AssemblyTests(unittest.TestCase):
   it=self.runtrip(routes=Fail())['itinerary'];self.assertTrue(it['routing_failures']);self.assertTrue(it['unassigned_primary_places'])
   self.assertFalse(any(x['type']=='travel' for d in it['days'] for x in d['activities']))
  def test_no_restaurant_meal_unassigned(self):
-  self.data['attractions']=[x for x in self.data['attractions'] if x['_id'] not in ('new_001','new_002')]
+  self.data['attractions']=[x for x in self.data['attractions'] if x.get('record_type') != 'restaurant' and x['_id'] not in ('new_001','new_002','new_010','new_011','new_013')]
   r=self.runtrip(dict(self.req,start_id='new_014'));self.assertTrue(any(x['type']=='meal_unassigned' for d in r['itinerary']['days'] for x in d['activities']))
  def test_bad_schedule_inputs(self):
   for extra in [{'daily_start':'21:00','daily_end':'20:00'},{'pace':'bad'},{'meal_duration_minutes':-1},{'visit_duration_overrides':{'bad':20}},{'assemble_itinerary':'yes'}]:

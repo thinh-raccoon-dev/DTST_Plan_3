@@ -7,10 +7,10 @@ from routing import coordinates, RoutingError
 from ranking import rating_info,ranking_key,explanation,POLICY
 
 GOALS={'sightseeing':'attraction','food':'restaurant','relaxation':'wellness','nightlife':'entertainment','stay':'accommodation'}
-ROLES={**{f'new_{i:03d}':'restaurant' for i in [1,2]},
+ROLES={**{f'new_{i:03d}':'restaurant' for i in [1,2,10,11,13]},
        **{f'new_{i:03d}':'accommodation' for i in range(3,8)},
-       **{f'new_{i:03d}':'entertainment' for i in range(8,12)},
-       **{f'new_{i:03d}':'wellness' for i in [12,13]},
+       **{'new_008':'attraction','new_009':'entertainment'},
+       **{'new_012':'wellness'},
        **{f'new_{i:03d}':'attraction' for i in range(14,18)}}
 
 def number(value, name, low=0, high=float('inf'), integer=False):

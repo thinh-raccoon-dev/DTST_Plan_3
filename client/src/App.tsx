@@ -80,6 +80,7 @@ const router = createBrowserRouter([
               { path: 'destinations', lazy: lazyPage(() => import('./pages/admin/AdminDestinationsPage'), (m) => m.AdminDestinationsPage) },
               { path: 'destinations/new', lazy: lazyPage(() => import('./pages/admin/AdminDestinationFormPage'), (m) => m.AdminDestinationFormPage) },
               { path: 'destinations/:id/edit', lazy: lazyPage(() => import('./pages/admin/AdminDestinationFormPage'), (m) => m.AdminDestinationFormPage) },
+              { path: 'badges', lazy: lazyPage(() => import('./pages/admin/AdminBadgesPage'), (m) => m.AdminBadgesPage) },
               { path: 'qr', lazy: lazyPage(() => import('./pages/admin/AdminQrPages'), (m) => m.AdminQrListPage) },
               { path: 'qr/new', lazy: lazyPage(() => import('./pages/admin/AdminQrPages'), (m) => m.AdminQrNewPage) },
               { path: 'qr/:id', lazy: lazyPage(() => import('./pages/admin/AdminQrPages'), (m) => m.AdminQrDetailPage) },

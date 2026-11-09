@@ -1,0 +1,153 @@
+# ==============================================================================
+# Enterprise Production Docker Compose Configuration
+# Nền tảng Du lịch Thông minh và Hộ chiếu Trải nghiệm số Đồng Tháp & Trip Planner V9
+# ==============================================================================
+version: '3.8'
+
+services:
+  # ----------------------------------------------------------------------------
+  # 1. MongoDB Database
+  # ----------------------------------------------------------------------------
+  mongodb:
+    image: mongo:7.0
+    container_name: dtst-mongodb
+    restart: unless-stopped
+    ports:
+      - "${MONGODB_PORT:-27017}:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:-dtst_admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASS:-dtst_secure_password_2026}
+      MONGO_INITDB_DATABASE: ${MONGO_DB_NAME:-dong_thap_tourism}
+    volumes:
+      - dtst_mongo_data:/data/db
+      - dtst_mongo_config:/data/configdb
+    networks:
+      - dtst_net
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ----------------------------------------------------------------------------
+  # 2. Valhalla Routing Engine (Đồng Tháp Road Distance Matrix)
+  # ----------------------------------------------------------------------------
+  valhalla:
+    image: ghcr.io/gis-ops/docker-valhalla/valhalla:latest
+    container_name: dtst-valhalla
+    restart: unless-stopped
+    ports:
+      - "8002:8002"
+    volumes:
+      - ./documents:/custom_files
+    environment:
+      - use_tiles_ignore_pbf=True
+      - build_elevation=False
+      - build_admins=False
+      - build_time_zones=False
+    networks:
+      - dtst_net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8002/status || exit 0"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  # ----------------------------------------------------------------------------
+  # 3. Python Trip Planner V9 AI Service
+  # ----------------------------------------------------------------------------
+  planner-v9:
+    build:
+      context: ./documents/trip_planner_17_v9
+      dockerfile: Dockerfile
+    container_name: dtst-planner-v9
+    restart: unless-stopped
+    ports:
+      - "8010:8010"
+    environment:
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      valhalla:
+        condition: service_started
+    networks:
+      - dtst_net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8010/health || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ----------------------------------------------------------------------------
+  # 4. Node.js Express Backend API
+  # ----------------------------------------------------------------------------
+  server-api:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: dtst-server-api
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    environment:
+      - NODE_ENV=production
+      - PORT=4000
+      - MONGO_URI=mongodb://${MONGO_ROOT_USER:-dtst_admin}:${MONGO_ROOT_PASS:-dtst_secure_password_2026}@mongodb:27017/${MONGO_DB_NAME:-dong_thap_tourism}?authSource=admin
+      - JWT_SECRET=${JWT_SECRET:-dtst_production_enterprise_super_secret_key_2026_change_in_env}
+      - JWT_EXPIRES_IN=7d
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost,http://localhost:80,https://dulich.dongthap.gov.vn}
+      - TRIP_PLANNER_API_URL=http://planner-v9:8010
+      - COOKIE_DOMAIN=${COOKIE_DOMAIN:-localhost}
+      - COOKIE_SECURE=${COOKIE_SECURE:-false}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      planner-v9:
+        condition: service_healthy
+    networks:
+      - dtst_net
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:4000/health || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ----------------------------------------------------------------------------
+  # 5. Nginx Frontend Web Application (SPA Reverse Proxy)
+  # ----------------------------------------------------------------------------
+  client-web:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: dtst-client-web
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-80}:80"
+    depends_on:
+      server-api:
+        condition: service_healthy
+    networks:
+      - dtst_net
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost/ || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+# ------------------------------------------------------------------------------
+# Volumes & Networks
+# ------------------------------------------------------------------------------
+volumes:
+  dtst_mongo_data:
+    name: dtst_mongo_data
+  dtst_mongo_config:
+    name: dtst_mongo_config
+
+networks:
+  dtst_net:
+    name: dtst_network
+    driver: bridge

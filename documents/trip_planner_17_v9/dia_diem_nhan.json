@@ -71,10 +71,13 @@
     "khoang_cach_duong_km": null
   },
   {
-    "ten": "Cosy 1 Karaoke",
+    "ten": "Chùa Vĩnh Tràng Mỹ Tho",
     "nhan": [
-      "giải trí",
-      "ca hát"
+      "tham quan",
+      "văn hóa",
+      "tâm linh",
+      "di tích lịch sử",
+      "kiến trúc"
     ],
     "gia_moi_nguoi_vnd": null,
     "tong_thoi_gian_phut": null,
@@ -91,20 +94,24 @@
     "khoang_cach_duong_km": null
   },
   {
-    "ten": "KARAOKE TẤN LỘC",
+    "ten": "Quán Hủ tiếu Sa Đéc Bà Sẩm",
     "nhan": [
-      "giải trí",
-      "ca hát"
+      "ẩm thực",
+      "ăn uống",
+      "đặc sản Sa Đéc",
+      "món địa phương"
     ],
     "gia_moi_nguoi_vnd": null,
     "tong_thoi_gian_phut": null,
     "khoang_cach_duong_km": null
   },
   {
-    "ten": "288 CLUB",
+    "ten": "Quán Hủ tiếu Mỹ Tho Cô Dung & Trung Lương",
     "nhan": [
-      "giải trí",
-      "ban đêm"
+      "ẩm thực",
+      "ăn uống",
+      "đặc sản Mỹ Tho",
+      "hủ tiếu"
     ],
     "gia_moi_nguoi_vnd": null,
     "tong_thoi_gian_phut": null,
@@ -121,10 +128,12 @@
     "khoang_cach_duong_km": null
   },
   {
-    "ten": "Vua Nám Bà Tư Spa Sa Đéc",
+    "ten": "Nhà hàng Sinh thái Mekong Taste Thới Sơn",
     "nhan": [
-      "thư giãn",
-      "chăm sóc da"
+      "ẩm thực",
+      "ăn uống",
+      "sinh thái miệt vườn",
+      "đặc sản Thới Sơn"
     ],
     "gia_moi_nguoi_vnd": null,
     "tong_thoi_gian_phut": null,

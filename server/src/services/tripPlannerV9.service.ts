@@ -30,6 +30,14 @@ export interface V9Place {
   rating_adjusted_for_review_count?: number | null;
   rating_status?: string;
   rating_source_date?: string | null;
+  mongoId?: string;
+  slug?: string;
+  summary?: string;
+  images?: Array<{ url: string; alt?: string }>;
+  area?: string;
+  category?: string;
+  isPersonalizedMatch?: boolean;
+  personalizationReason?: string;
 }
 
 export interface V9StopIssue {

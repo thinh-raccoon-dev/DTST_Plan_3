@@ -1,8 +1,8 @@
 export type Category = 'nature' | 'eco' | 'culture' | 'history' | 'food' | 'local_experience';
-export type Area = 'cao-lanh' | 'sa-dec' | 'thap-muoi' | 'tam-nong' | 'lai-vung' | 'hong-ngu' | 'my-tho' | 'cai-be';
+export type Area = 'cao-lanh' | 'sa-dec' | 'thap-muoi' | 'tam-nong' | 'lai-vung' | 'hong-ngu' | 'my-tho' | 'cai-be' | 'thoi-son';
 export type VerificationLevel = 'verified' | 'unverified' | 'unknown';
 export type VerificationStatus = 'verified' | 'partially_verified' | 'unverified';
-export type PublicationStatus = 'draft' | 'published' | 'hidden';
+export type PublicationStatus = 'draft' | 'pending_review' | 'published' | 'hidden';
 export type OperationalStatus = 'active' | 'temporarily_closed' | 'closed';
 
 export interface Paginated<T> {
@@ -98,11 +98,24 @@ export interface DestinationResponse {
   hasActiveQr: boolean;
 }
 
+export type BadgeIcon =
+  | 'footprints'
+  | 'compass'
+  | 'lightbulb'
+  | 'trophy'
+  | 'landmark'
+  | 'star'
+  | 'medal'
+  | 'award'
+  | 'heart'
+  | 'sparkles';
+
 export interface BadgeInfo {
   key: string;
   name: string;
   description: string;
-  icon: 'footprints' | 'compass' | 'lightbulb' | 'trophy' | 'landmark';
+  icon: BadgeIcon;
+  rewardPoints?: number;
 }
 
 export interface QrContent {
@@ -258,6 +271,14 @@ export interface V9Place {
   source_price_text?: string | null;
   price_status?: string;
   hours_status?: string;
+  mongoId?: string;
+  slug?: string;
+  summary?: string;
+  images?: Array<{ url: string; alt?: string }>;
+  area?: string;
+  category?: string;
+  isPersonalizedMatch?: boolean;
+  personalizationReason?: string;
 }
 
 export interface V9PlanRequest {
@@ -513,10 +534,62 @@ export interface ItineraryListItem {
 
 export interface AdminDestination extends DestinationDetail {
   publicationStatus: PublicationStatus;
+  reviewNote?: string | null;
   createdAt: string | null;
   managedById: string | null;
   managedByEmail: string | null;
   managedByName: string | null;
+}
+
+export type BadgeCriteriaType =
+  | 'checkin_count'
+  | 'challenge_count'
+  | 'heritage_challenge_count'
+  | 'points_threshold'
+  | 'itinerary_created';
+
+export interface AdminBadge {
+  _id: string;
+  id?: string;
+  key: string;
+  name: string;
+  description: string;
+  icon: BadgeIcon;
+  criteriaType: BadgeCriteriaType;
+  targetCount: number;
+  rewardPoints: number;
+  status: 'active' | 'inactive';
+  awardedCount?: number;
+  uniqueUsersCount?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface BadgeAnalyticsReport {
+  summary: {
+    totalBadges: number;
+    activeBadges: number;
+    totalAwards: number;
+    totalUsers: number;
+  };
+  badgeStats: Array<{
+    key: string;
+    name: string;
+    icon: BadgeIcon;
+    status: 'active' | 'inactive';
+    awardedCount: number;
+    unlockRate: number;
+  }>;
+  recentAwards: Array<{
+    id: string;
+    badgeKey: string;
+    badgeName: string;
+    badgeIcon: string;
+    userDisplayName: string;
+    userEmail: string | null;
+    scoreAwarded: number;
+    completedAt: string;
+  }>;
 }
 
 export interface AdminQr {

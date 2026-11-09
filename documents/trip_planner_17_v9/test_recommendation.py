@@ -59,7 +59,7 @@ class RecommendationTests(unittest.TestCase):
         self.req.update(mode='manual',selected_ids=['new_014'])
         r=recommend(self.data,Variable(),self.req)
         food=r['related_by_primary'][0]['suggestions']['restaurant']
-        self.assertEqual([x['id'] for x in food],['new_001','new_002'])
+        self.assertEqual([x['id'] for x in food],['new_001','new_002','new_013'])
     def test_input_validation(self):
         for kwargs in [{'people':True},{'days':1.5},{'budget_vnd':-1},{'interests':'food'},{'nearby_max_minutes':float('nan')}]:
             with self.assertRaises(ValueError):recommend(self.data,Routes(),dict(self.req,**kwargs))
