@@ -49,6 +49,8 @@ export interface DestinationSummary {
   verificationStatus: VerificationStatus;
   operationalStatus: OperationalStatus;
   estimatedVisitDuration: VisitDuration | null;
+  address?: string | null;
+  coordinates?: { lat: number; lng: number } | null;
   hasCoordinates: boolean;
   hasChallenge: boolean;
 }
