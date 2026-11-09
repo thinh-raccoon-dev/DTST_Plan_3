@@ -36,8 +36,7 @@ function Footer() {
             và trải nghiệm địa phương.
           </p>
           <p className="max-w-md text-xs leading-relaxed text-river-500">
-            Một số nội dung đang là dữ liệu minh họa và được gắn nhãn rõ ràng; vui lòng kiểm tra thông tin với nguồn chính thức trước
-            chuyến đi.
+            Hệ sinh thái số hóa 56 điểm đến di tích, văn hóa và sinh thái tại Đồng Tháp & vùng phụ cận, tích hợp bản đồ số và trợ lý lập lịch trình thông minh AI V9.
           </p>
         </div>
 
@@ -105,7 +104,7 @@ function Footer() {
         </div>
       </div>
       <p className="border-t border-sand-200 py-4 text-center text-xs text-river-500">
-        © {new Date().getFullYear()} Đồng Tháp Smart Travel · Bản đồ: © OpenStreetMap contributors
+        © {new Date().getFullYear()} Đồng Tháp Smart Travel · Nền tảng Du lịch Thông minh & Hộ chiếu Trải nghiệm số.
       </p>
     </footer>
   );
