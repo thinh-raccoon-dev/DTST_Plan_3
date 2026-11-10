@@ -248,6 +248,15 @@ export async function deleteReviewResponse(req: Request, res: Response) {
   review.response = undefined;
   await review.save();
 
+  await logAuditEvent({
+    req,
+    action: 'review.respond.delete',
+    targetType: 'review',
+    targetId: review._id,
+    targetName: `Đánh giá của ${review.authorName}`,
+    destinationId: review.destinationId,
+  });
+
   res.json({ success: true, message: 'Đã xóa phản hồi của ban quản lý.' });
 }
 
@@ -329,6 +338,16 @@ export async function deleteReview(req: Request, res: Response) {
   if (!deleted) {
     throw notFound('Đánh giá không tồn tại.', 'REVIEW_NOT_FOUND');
   }
+
+  await logAuditEvent({
+    req,
+    action: 'review.delete',
+    targetType: 'review',
+    targetId: deleted._id,
+    targetName: `Đánh giá của ${deleted.authorName}`,
+    destinationId: deleted.destinationId,
+    details: { rating: deleted.rating, contentPreview: deleted.content.slice(0, 80) },
+  });
 
   res.json({ success: true, message: 'Đã xóa đánh giá vĩnh viễn.' });
 }

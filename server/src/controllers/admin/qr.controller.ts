@@ -7,6 +7,7 @@ import { ChallengeModel } from '../../models/Challenge.js';
 import { DestinationModel } from '../../models/Destination.js';
 import { PassportEntryModel } from '../../models/PassportEntry.js';
 import { QrCodeModel, type QrTargetType } from '../../models/QrCode.js';
+import { logAuditEvent } from '../../services/audit.service.js';
 import { idParamsSchema, paginate } from '../../schemas/common.js';
 import { adminQrQuerySchema, qrImageQuerySchema, qrInputSchema, qrPatchSchema } from '../../schemas/qr.schemas.js';
 import { qrPublicUrl, type LeanQrCode } from '../../services/qr.service.js';
@@ -124,6 +125,17 @@ export async function createQrCode(req: Request, res: Response) {
     for (let attempt = 0; attempt < 5 && (await QrCodeModel.exists({ code })); attempt += 1) code = randomCode();
   }
   const qr = await QrCodeModel.create({ ...input, code });
+
+  await logAuditEvent({
+    req,
+    action: 'qr.create',
+    targetType: 'qr',
+    targetId: qr._id,
+    targetName: qr.label,
+    destinationId: qr.targetType === 'destination' ? qr.targetId : undefined,
+    details: { code: qr.code, targetType: qr.targetType },
+  });
+
   res.status(201).json({ qr: await serialize(qr.toObject() as LeanQrCode) });
 }
 
@@ -135,6 +147,17 @@ export async function updateQrCode(req: Request, res: Response) {
   if (patch.targetType && patch.targetId) await ensureTargetExists(patch.targetType, patch.targetId);
   qr.set(patch);
   await qr.save();
+
+  await logAuditEvent({
+    req,
+    action: 'qr.update',
+    targetType: 'qr',
+    targetId: qr._id,
+    targetName: qr.label,
+    destinationId: qr.targetType === 'destination' ? qr.targetId : undefined,
+    details: { changedKeys: Object.keys(patch) },
+  });
+
   const stats = await landingStats([qr._id]);
   res.json({ qr: await serialize(qr.toObject() as LeanQrCode, stats.get(String(qr._id))) });
 }

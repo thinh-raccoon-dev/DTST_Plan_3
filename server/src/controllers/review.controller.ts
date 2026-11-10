@@ -6,7 +6,6 @@ import { PassportEntryModel } from '../models/PassportEntry.js';
 import { ReviewModel } from '../models/Review.js';
 import { createReviewSchema, reportReviewSchema, reviewQuerySchema } from '../schemas/review.schemas.js';
 import { PUBLIC_DESTINATION_FILTER } from '../services/destination.service.js';
-import { identityFromRequest } from '../services/identity.js';
 import { notFound } from '../utils/errors.js';
 
 const destinationParamSchema = z.object({
@@ -18,9 +17,8 @@ const reviewIdParamSchema = z.object({
 });
 
 async function resolveDestination(idOrSlug: string) {
-  const isObjectId = Types.ObjectId.isValid(idOrSlug);
   const destination = await DestinationModel.findOne({
-    $or: [{ ...(isObjectId ? { _id: idOrSlug } : { _id: null }) }, { slug: idOrSlug }],
+    ...(Types.ObjectId.isValid(idOrSlug) ? { _id: new Types.ObjectId(idOrSlug) } : { slug: idOrSlug }),
     ...PUBLIC_DESTINATION_FILTER,
   }).select('_id name slug').lean();
 
@@ -119,7 +117,6 @@ export async function createReview(req: Request, res: Response) {
   const destination = await resolveDestination(idOrSlug);
 
   const user = req.user;
-  const identity = identityFromRequest(req);
 
   // Check if user has verified visit (already checked in at this destination)
   let isVerifiedVisitor = false;

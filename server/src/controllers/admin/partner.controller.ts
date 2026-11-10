@@ -16,6 +16,18 @@ function partnerUserId(req: Request): Types.ObjectId {
   return new Types.ObjectId(req.user!.id);
 }
 
+function resolveTargetDestinationFilter(req: Request, explicitId?: unknown): Record<string, unknown> {
+  const user = req.user!;
+  if (user.role === 'partner') {
+    return { managedBy: { $in: [user.id, partnerUserId(req)] } };
+  }
+  const destId = (explicitId || req.body?.destinationId || req.query?.destinationId) as string | undefined;
+  if (!destId || !Types.ObjectId.isValid(destId)) {
+    throw badRequest('Vui lòng chọn địa điểm du lịch hợp lệ.');
+  }
+  return { _id: new Types.ObjectId(destId) };
+}
+
 export async function getPartnerOverview(req: Request, res: Response) {
   const user = req.user!;
   const isPartner = user.role === 'partner';
@@ -49,12 +61,15 @@ export async function getPartnerOverview(req: Request, res: Response) {
 
   const destId = destination._id;
 
-  // 2. Fetch metrics
+  // 2. Fetch destination challenges first to accurately scope QRs
+  const challenges = await ChallengeModel.find({ destinationId: destId }).sort({ createdAt: -1 }).lean();
+  const challengeIds = challenges.map((c) => c._id);
+
+  // 3. Fetch metrics in parallel
   const [
     totalViews,
     totalCheckIns,
     reviewStats,
-    challenges,
     qrCodes,
     badges,
     recentCheckIns,
@@ -89,16 +104,13 @@ export async function getPartnerOverview(req: Request, res: Response) {
       },
     ]),
 
-    // Challenges list
-    ChallengeModel.find({ destinationId: destId }).sort({ createdAt: -1 }).lean(),
-
-    // Qr codes list
+    // Qr codes strictly scoped to this destination or its challenges
     QrCodeModel.find({
       $or: [
         { targetType: 'destination', targetId: destId },
-        { targetType: 'challenge' }, // will filter by destination's challenges
+        { targetType: 'challenge', targetId: { $in: challengeIds } },
       ],
-    }).lean(),
+    }).sort({ createdAt: -1 }).lean(),
 
     // Badges of this destination
     BadgeModel.find({ destinationId: destId }).sort({ createdAt: -1 }).lean(),
@@ -118,20 +130,12 @@ export async function getPartnerOverview(req: Request, res: Response) {
   ]);
 
   // Challenge participation stats
-  const challengeIds = challenges.map((c) => c._id);
   const challengeCompletions = await PassportEntryModel.aggregate([
     { $match: { challengeId: { $in: challengeIds }, entryType: 'challenge_completed' } },
     { $group: { _id: '$challengeId', count: { $sum: 1 } } },
   ]);
   const completionMap = new Map(challengeCompletions.map((r) => [String(r._id), r.count]));
-
-  // Filter QRs specifically for this destination or its challenges
-  const validChallengeIdStrs = new Set(challengeIds.map((id) => String(id)));
-  const relevantQrs = qrCodes.filter(
-    (q) =>
-      (q.targetType === 'destination' && String(q.targetId) === String(destId)) ||
-      (q.targetType === 'challenge' && validChallengeIdStrs.has(String(q.targetId))),
-  );
+  const relevantQrs = qrCodes;
 
   const reviewsSummary = reviewStats[0] || { avgRating: 5.0, total: 0, responded: 0 };
 
@@ -360,19 +364,8 @@ const toggleOperationalSchema = z.object({
 });
 
 export async function toggleOperationalStatus(req: Request, res: Response) {
-  const user = req.user!;
   const body = toggleOperationalSchema.parse(req.body);
-  const isPartner = user.role === 'partner';
-
-  let destinationFilter: Record<string, unknown> = {};
-  if (isPartner) {
-    destinationFilter = { managedBy: { $in: [user.id, new Types.ObjectId(user.id)] } };
-  } else {
-    const destId = req.body.destinationId;
-    if (destId && Types.ObjectId.isValid(destId)) {
-      destinationFilter = { _id: new Types.ObjectId(destId) };
-    }
-  }
+  const destinationFilter = resolveTargetDestinationFilter(req, (req.body as { destinationId?: unknown })?.destinationId);
 
   const destination = await DestinationModel.findOne(destinationFilter);
   if (!destination) {
@@ -427,19 +420,8 @@ const createPartnerChallengeSchema = z.object({
 });
 
 export async function createPartnerChallenge(req: Request, res: Response) {
-  const user = req.user!;
   const body = createPartnerChallengeSchema.parse(req.body);
-  const isPartner = user.role === 'partner';
-
-  let destinationFilter: Record<string, unknown> = {};
-  if (isPartner) {
-    destinationFilter = { managedBy: { $in: [user.id, new Types.ObjectId(user.id)] } };
-  } else {
-    const destId = req.query.destinationId as string;
-    if (destId && Types.ObjectId.isValid(destId)) {
-      destinationFilter = { _id: new Types.ObjectId(destId) };
-    }
-  }
+  const destinationFilter = resolveTargetDestinationFilter(req);
 
   const destination = await DestinationModel.findOne(destinationFilter);
   if (!destination) {
@@ -497,19 +479,8 @@ const createPartnerQrSchema = z.object({
 });
 
 export async function createPartnerQr(req: Request, res: Response) {
-  const user = req.user!;
   const body = createPartnerQrSchema.parse(req.body);
-  const isPartner = user.role === 'partner';
-
-  let destinationFilter: Record<string, unknown> = {};
-  if (isPartner) {
-    destinationFilter = { managedBy: { $in: [user.id, new Types.ObjectId(user.id)] } };
-  } else {
-    const destId = req.query.destinationId as string;
-    if (destId && Types.ObjectId.isValid(destId)) {
-      destinationFilter = { _id: new Types.ObjectId(destId) };
-    }
-  }
+  const destinationFilter = resolveTargetDestinationFilter(req);
 
   const destination = await DestinationModel.findOne(destinationFilter);
   if (!destination) {
@@ -599,17 +570,7 @@ const createPartnerBadgeSchema = z.object({
 export async function createPartnerBadge(req: Request, res: Response) {
   const user = req.user!;
   const body = createPartnerBadgeSchema.parse(req.body);
-  const isPartner = user.role === 'partner';
-
-  let destinationFilter: Record<string, unknown> = {};
-  if (isPartner) {
-    destinationFilter = { managedBy: { $in: [user.id, new Types.ObjectId(user.id)] } };
-  } else {
-    const destId = req.query.destinationId as string;
-    if (destId && Types.ObjectId.isValid(destId)) {
-      destinationFilter = { _id: new Types.ObjectId(destId) };
-    }
-  }
+  const destinationFilter = resolveTargetDestinationFilter(req);
 
   const destination = await DestinationModel.findOne(destinationFilter);
   if (!destination) {

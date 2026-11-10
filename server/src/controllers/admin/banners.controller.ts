@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import { BannerModel, type Banner, type BannerDocument } from '../../models/Banner.js';
+import { logAuditEvent } from '../../services/audit.service.js';
 import { adminBannerQuerySchema, bannerInputSchema, bannerPatchSchema } from '../../schemas/banner.schemas.js';
 import { idParamsSchema, paginate } from '../../schemas/common.js';
 import { badRequest, notFound } from '../../utils/errors.js';
@@ -76,6 +77,16 @@ export async function getBanner(req: Request, res: Response) {
 export async function createBanner(req: Request, res: Response) {
   const input = bannerInputSchema.parse(req.body);
   const doc = await applyAndSave(new BannerModel(), normalize(input));
+
+  await logAuditEvent({
+    req,
+    action: 'banner.create',
+    targetType: 'banner',
+    targetId: doc._id,
+    targetName: doc.title,
+    details: { kind: doc.kind, placement: doc.placement },
+  });
+
   res.status(201).json({ banner: toAdminBanner(doc.toObject() as LeanBanner) });
 }
 
@@ -92,12 +103,34 @@ export async function updateBanner(req: Request, res: Response) {
     throw badRequest('Banner quảng cáo cần ghi rõ đơn vị tài trợ.', 'VALIDATION_ERROR');
   }
   await applyAndSave(doc, values);
+
+  await logAuditEvent({
+    req,
+    action: 'banner.update',
+    targetType: 'banner',
+    targetId: doc._id,
+    targetName: doc.title,
+    details: { changedKeys: Object.keys(patch) },
+  });
+
   res.json({ banner: toAdminBanner(doc.toObject() as LeanBanner) });
 }
 
 export async function deleteBanner(req: Request, res: Response) {
   const { id } = idParamsSchema.parse(req.params);
-  const result = await BannerModel.deleteOne({ _id: id });
-  if (result.deletedCount === 0) throw notFound('Không tìm thấy banner.');
+  const doc = await BannerModel.findById(id);
+  if (!doc) throw notFound('Không tìm thấy banner.');
+
+  const bannerInfo = { id: String(doc._id), title: doc.title };
+  await doc.deleteOne();
+
+  await logAuditEvent({
+    req,
+    action: 'banner.delete',
+    targetType: 'banner',
+    targetId: bannerInfo.id,
+    targetName: bannerInfo.title,
+  });
+
   res.status(204).end();
 }

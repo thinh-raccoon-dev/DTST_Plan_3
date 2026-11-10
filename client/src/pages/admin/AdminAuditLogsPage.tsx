@@ -26,14 +26,30 @@ const actionConfig: Record<string, { label: string; tone: 'leaf' | 'teal' | 'lot
   'destination.delete': { label: 'Xóa KDL', tone: 'lotus' },
   'destination.operational_status.toggle': { label: 'Đổi trạng thái vận hành', tone: 'teal' },
   'qr.create': { label: 'Tạo mã QR', tone: 'leaf' },
+  'qr.update': { label: 'Cập nhật mã QR', tone: 'neutral' },
   'challenge.create': { label: 'Tạo thử thách KDL', tone: 'teal' },
+  'challenge.update': { label: 'Sửa thử thách', tone: 'neutral' },
+  'challenge.status.update': { label: 'Đổi trạng thái thử thách', tone: 'teal' },
+  'challenge.delete': { label: 'Xóa thử thách', tone: 'lotus' },
   'badge.create': { label: 'Tạo Huy hiệu mới', tone: 'lotus' },
+  'badge.update': { label: 'Sửa huy hiệu', tone: 'neutral' },
+  'badge.deactivate': { label: 'Tạm dừng huy hiệu', tone: 'neutral' },
+  'badge.delete': { label: 'Xóa huy hiệu', tone: 'lotus' },
   'review.respond': { label: 'Phản hồi đánh giá', tone: 'teal' },
+  'review.respond.delete': { label: 'Xóa phản hồi', tone: 'lotus' },
   'review.moderate': { label: 'Duyệt đánh giá', tone: 'river' },
   'review.flag': { label: 'Báo cáo đánh giá', tone: 'lotus' },
+  'review.delete': { label: 'Xóa đánh giá vĩnh viễn', tone: 'lotus' },
   'user.create': { label: 'Tạo người dùng', tone: 'leaf' },
   'user.role.update': { label: 'Đổi phân quyền', tone: 'lotus' },
   'user.status.update': { label: 'Đổi trạng thái tài khoản', tone: 'neutral' },
+  'user.password.reset': { label: 'Đặt lại mật khẩu', tone: 'lotus' },
+  'user.delete': { label: 'Xóa tài khoản', tone: 'lotus' },
+  'banner.create': { label: 'Tạo banner mới', tone: 'leaf' },
+  'banner.update': { label: 'Cập nhật banner', tone: 'neutral' },
+  'banner.delete': { label: 'Xóa banner', tone: 'lotus' },
+  'itinerary.delete': { label: 'Xóa lịch trình', tone: 'lotus' },
+  'system.settings.update': { label: 'Cập nhật cấu hình hệ thống', tone: 'teal' },
 };
 
 function formatAction(action: string) {
@@ -152,6 +168,9 @@ export function AdminAuditLogsPage() {
             <option value="badge">Huy hiệu & Thành tựu (Badge)</option>
             <option value="review">Đánh giá du khách (Review)</option>
             <option value="user">Người dùng & Tài khoản (User)</option>
+            <option value="banner">Banner & Quảng cáo (Banner)</option>
+            <option value="itinerary">Lịch trình du khách (Itinerary)</option>
+            <option value="system">Cấu hình hệ thống (System)</option>
           </Select>
         </div>
       </Card>

@@ -12,6 +12,7 @@ import { PassportEntryModel } from '../../models/PassportEntry.js';
 import { QrCodeModel } from '../../models/QrCode.js';
 import { SystemSettingModel } from '../../models/SystemSetting.js';
 import { UserModel } from '../../models/User.js';
+import { logAuditEvent } from '../../services/audit.service.js';
 import { updateSystemSettingsSchema } from '../../schemas/system.schemas.js';
 import { getPlannerHealth } from '../../services/tripPlannerV9.service.js';
 
@@ -109,6 +110,15 @@ export async function updateSystemSettings(req: Request, res: Response) {
     { $set: update },
     { upsert: true, new: true },
   ).lean();
+
+  await logAuditEvent({
+    req,
+    action: 'system.settings.update',
+    targetType: 'system',
+    targetId: 'global',
+    targetName: 'Cấu hình toàn hệ thống',
+    details: { updatedSections: Object.keys(update) },
+  });
 
   res.json({ settings, message: 'Cập nhật cấu hình hệ thống thành công.' });
 }

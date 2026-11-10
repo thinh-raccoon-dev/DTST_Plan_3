@@ -5,6 +5,7 @@ import { ChallengeModel } from '../../models/Challenge.js';
 import { DestinationModel } from '../../models/Destination.js';
 import { PassportEntryModel } from '../../models/PassportEntry.js';
 import { QrCodeModel } from '../../models/QrCode.js';
+import { logAuditEvent } from '../../services/audit.service.js';
 import {
   adminChallengeQuerySchema,
   challengeInputSchema,
@@ -108,6 +109,17 @@ export async function createChallenge(req: Request, res: Response) {
   const input = challengeInputSchema.parse(req.body);
   await ensureDestination(input.destinationId);
   const doc = await ChallengeModel.create({ ...input, type: 'quiz' });
+
+  await logAuditEvent({
+    req,
+    action: 'challenge.create',
+    targetType: 'challenge',
+    targetId: doc._id,
+    targetName: doc.title,
+    destinationId: doc.destinationId,
+    details: { rewardPoints: doc.scoringRules.rewardPoints, questionsCount: doc.questions.length },
+  });
+
   const [challenge] = await serializeMany([doc.toObject() as LeanChallenge]);
   res.status(201).json({ challenge });
 }
@@ -120,6 +132,16 @@ export async function updateChallenge(req: Request, res: Response) {
   await ensureDestination(input.destinationId);
   doc.set({ ...input, type: 'quiz' });
   await doc.save();
+
+  await logAuditEvent({
+    req,
+    action: 'challenge.update',
+    targetType: 'challenge',
+    targetId: doc._id,
+    targetName: doc.title,
+    destinationId: doc.destinationId,
+  });
+
   const [challenge] = await serializeMany([doc.toObject() as LeanChallenge]);
   res.json({ challenge });
 }
@@ -129,6 +151,17 @@ export async function updateChallengeStatus(req: Request, res: Response) {
   const { status } = challengeStatusSchema.parse(req.body);
   const doc = await ChallengeModel.findByIdAndUpdate(id, { status }, { new: true, runValidators: true }).lean<LeanChallenge>();
   if (!doc) throw notFound('Không tìm thấy thử thách.');
+
+  await logAuditEvent({
+    req,
+    action: 'challenge.status.update',
+    targetType: 'challenge',
+    targetId: doc._id,
+    targetName: doc.title,
+    destinationId: doc.destinationId,
+    details: { newStatus: status },
+  });
+
   const [challenge] = await serializeMany([doc]);
   res.json({ challenge });
 }
@@ -147,6 +180,17 @@ export async function deleteChallenge(req: Request, res: Response) {
       'CHALLENGE_IN_USE',
     );
   }
+  const challengeInfo = { id: String(doc._id), title: doc.title, destinationId: doc.destinationId };
   await doc.deleteOne();
+
+  await logAuditEvent({
+    req,
+    action: 'challenge.delete',
+    targetType: 'challenge',
+    targetId: challengeInfo.id,
+    targetName: challengeInfo.title,
+    destinationId: challengeInfo.destinationId,
+  });
+
   res.status(204).end();
 }

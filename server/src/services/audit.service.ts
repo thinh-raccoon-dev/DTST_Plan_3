@@ -5,15 +5,15 @@ import { logger } from '../utils/logger.js';
 
 export interface AuditEventParams {
   req?: Request;
-  actorId?: string | Types.ObjectId;
-  actorEmail?: string;
-  actorName?: string;
+  actorId?: string | Types.ObjectId | null;
+  actorEmail?: string | null;
+  actorName?: string | null;
   actorRole?: AuditRole;
   action: string;
   targetType: AuditTargetType;
-  targetId?: string | Types.ObjectId;
-  targetName?: string;
-  destinationId?: string | Types.ObjectId;
+  targetId?: string | Types.ObjectId | null;
+  targetName?: string | null;
+  destinationId?: string | Types.ObjectId | null;
   details?: Record<string, unknown>;
   status?: 'success' | 'failed';
 }
@@ -26,8 +26,11 @@ export async function logAuditEvent(params: AuditEventParams): Promise<void> {
   try {
     const { req } = params;
 
+    const rawActorId = params.actorId ?? req?.user?.id;
     const actorId =
-      params.actorId ?? (req?.user?.id ? new Types.ObjectId(req.user.id) : undefined);
+      rawActorId && Types.ObjectId.isValid(String(rawActorId))
+        ? new Types.ObjectId(String(rawActorId))
+        : undefined;
     const actorEmail = params.actorEmail ?? req?.user?.email ?? '';
     const actorRole =
       params.actorRole ?? (req?.user?.role as AuditRole) ?? 'system';
@@ -39,6 +42,11 @@ export async function logAuditEvent(params: AuditEventParams): Promise<void> {
       '';
     const userAgent = req?.get('user-agent') || '';
 
+    const destinationId =
+      params.destinationId && Types.ObjectId.isValid(String(params.destinationId))
+        ? new Types.ObjectId(String(params.destinationId))
+        : undefined;
+
     await AuditLogModel.create({
       actorId,
       actorEmail,
@@ -48,9 +56,7 @@ export async function logAuditEvent(params: AuditEventParams): Promise<void> {
       targetType: params.targetType,
       targetId: params.targetId ? String(params.targetId) : '',
       targetName: params.targetName || '',
-      destinationId: params.destinationId
-        ? new Types.ObjectId(String(params.destinationId))
-        : undefined,
+      destinationId,
       details: params.details || {},
       ipAddress,
       userAgent,

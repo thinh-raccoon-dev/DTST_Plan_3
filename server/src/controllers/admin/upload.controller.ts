@@ -10,22 +10,23 @@ if (!existsSync(uploadsDir)) {
   mkdirSync(uploadsDir, { recursive: true });
 }
 
-const ALLOWED_MIME_TYPES = new Set([
-  'image/jpeg',
-  'image/png',
-  'image/webp',
-  'image/gif',
-  'image/svg+xml',
-  'image/avif',
-]);
+const MIME_TO_EXT: Record<string, string> = {
+  'image/jpeg': '.jpg',
+  'image/png': '.png',
+  'image/webp': '.webp',
+  'image/gif': '.gif',
+  'image/avif': '.avif',
+};
+
+const ALLOWED_MIME_TYPES = new Set(Object.keys(MIME_TO_EXT));
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => {
     cb(null, uploadsDir);
   },
   filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase() || '.jpg';
-    const randomHex = crypto.randomBytes(6).toString('hex');
+    const ext = MIME_TO_EXT[file.mimetype.toLowerCase()] || '.jpg';
+    const randomHex = crypto.randomBytes(8).toString('hex');
     const safeName = `img-${Date.now()}-${randomHex}${ext}`;
     cb(null, safeName);
   },

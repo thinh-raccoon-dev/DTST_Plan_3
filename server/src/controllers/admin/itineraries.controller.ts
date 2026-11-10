@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import { isValidObjectId } from 'mongoose';
 import { ItineraryModel } from '../../models/Itinerary.js';
 import { UserModel } from '../../models/User.js';
+import { logAuditEvent } from '../../services/audit.service.js';
 import { notFound } from '../../utils/errors.js';
 
 function escapeRegex(text: string): string {
@@ -130,6 +131,15 @@ export async function deleteAdminItinerary(req: Request, res: Response) {
 
   const itinerary = await ItineraryModel.findByIdAndDelete(id);
   if (!itinerary) throw notFound('Không tìm thấy lịch trình.');
+
+  await logAuditEvent({
+    req,
+    action: 'itinerary.delete',
+    targetType: 'itinerary',
+    targetId: itinerary._id,
+    targetName: itinerary.title,
+    details: { numberOfDays: itinerary.numberOfDays, userId: String(itinerary.userId) },
+  });
 
   res.status(204).end();
 }

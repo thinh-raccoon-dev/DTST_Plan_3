@@ -502,10 +502,10 @@ function DestinationForm({ initial, id }: { initial?: AdminDestination; id?: str
             destinationName={form.watch('name')}
             disabled={images.fields.length >= 10}
             onImagesAdded={(newImages) => {
-              newImages.forEach((img) => {
-                if (images.fields.length < 10) {
-                  images.append(img);
-                }
+              const remaining = 10 - images.fields.length;
+              if (remaining <= 0) return;
+              newImages.slice(0, remaining).forEach((img) => {
+                images.append(img);
               });
             }}
           />

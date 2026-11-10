@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import { Types } from 'mongoose';
+import { BadgeModel } from '../../models/Badge.js';
 import { ChallengeModel } from '../../models/Challenge.js';
 import { DestinationModel, type DestinationDocument } from '../../models/Destination.js';
 import { FavoriteModel } from '../../models/Favorite.js';
@@ -195,13 +196,14 @@ export async function deleteDestination(req: Request, res: Response) {
   if (!doc) throw notFound('Không tìm thấy địa điểm.');
 
   const challengeIds = await ChallengeModel.find({ destinationId: doc._id }).distinct('_id');
-  const [qrCount, challengeCount] = await Promise.all([
+  const [qrCount, challengeCount, badgeCount] = await Promise.all([
     QrCodeModel.countDocuments({ targetId: { $in: [doc._id, ...challengeIds] } }),
     Promise.resolve(challengeIds.length),
+    BadgeModel.countDocuments({ destinationId: doc._id }),
   ]);
-  if (qrCount > 0 || challengeCount > 0) {
+  if (qrCount > 0 || challengeCount > 0 || badgeCount > 0) {
     throw conflict(
-      'Địa điểm đang gắn với mã QR hoặc thử thách. Hãy ẩn địa điểm thay vì xóa để không làm hỏng QR đã in.',
+      'Địa điểm đang gắn với mã QR, thử thách hoặc huy hiệu KDL. Hãy ẩn địa điểm thay vì xóa để không làm hỏng dữ liệu du khách.',
       'DESTINATION_IN_USE',
     );
   }

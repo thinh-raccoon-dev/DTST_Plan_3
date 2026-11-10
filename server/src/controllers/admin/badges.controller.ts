@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import { BadgeModel } from '../../models/Badge.js';
 import { PassportEntryModel } from '../../models/PassportEntry.js';
 import { UserModel } from '../../models/User.js';
+import { logAuditEvent } from '../../services/audit.service.js';
 import { idParamsSchema } from '../../schemas/common.js';
 import { createBadgeSchema, updateBadgeSchema } from '../../schemas/badge.schemas.js';
 import { ensureDefaultBadges } from '../../services/passport.service.js';
@@ -114,6 +115,17 @@ export async function createBadge(req: Request, res: Response) {
   if (exists) throw conflict('Mã huy hiệu (key) đã tồn tại trong hệ thống.', 'BADGE_KEY_TAKEN');
 
   const badge = await BadgeModel.create(input);
+
+  await logAuditEvent({
+    req,
+    action: 'badge.create',
+    targetType: 'badge',
+    targetId: badge._id,
+    targetName: badge.name,
+    destinationId: badge.destinationId,
+    details: { key: badge.key, criteriaType: badge.criteriaType, rewardPoints: badge.rewardPoints },
+  });
+
   res.status(201).json({ badge });
 }
 
@@ -136,6 +148,17 @@ export async function updateBadge(req: Request, res: Response) {
   }
 
   await badge.save();
+
+  await logAuditEvent({
+    req,
+    action: 'badge.update',
+    targetType: 'badge',
+    targetId: badge._id,
+    targetName: badge.name,
+    destinationId: badge.destinationId,
+    details: { changedKeys: Object.keys(patch) },
+  });
+
   res.json({ badge });
 }
 
@@ -149,10 +172,32 @@ export async function deleteBadge(req: Request, res: Response) {
     // If already awarded to visitors, deactivate rather than deleting to preserve passport history
     badge.status = 'inactive';
     await badge.save();
+
+    await logAuditEvent({
+      req,
+      action: 'badge.deactivate',
+      targetType: 'badge',
+      targetId: badge._id,
+      targetName: badge.name,
+      destinationId: badge.destinationId,
+      details: { reason: 'Preserved passport history', awardCount },
+    });
+
     res.json({ message: 'Huy hiệu đã được trao cho du khách nên được chuyển sang trạng thái Tạm dừng hoạt động.', badge });
     return;
   }
 
+  const badgeInfo = { id: String(badge._id), name: badge.name, key: badge.key, destinationId: badge.destinationId };
   await badge.deleteOne();
+
+  await logAuditEvent({
+    req,
+    action: 'badge.delete',
+    targetType: 'badge',
+    targetId: badgeInfo.id,
+    targetName: badgeInfo.name,
+    destinationId: badgeInfo.destinationId,
+  });
+
   res.status(204).end();
 }

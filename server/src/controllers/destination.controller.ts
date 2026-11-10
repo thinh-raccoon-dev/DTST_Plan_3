@@ -198,9 +198,8 @@ export async function checkInDestinationGps(req: Request, res: Response) {
   const { id } = checkInParamSchema.parse(req.params);
   const body = checkInGpsBodySchema.parse(req.body);
 
-  const isObjectId = Types.ObjectId.isValid(id);
   const destination = await DestinationModel.findOne({
-    $or: [{ ...(isObjectId ? { _id: id } : { _id: null }) }, { slug: id }],
+    ...(Types.ObjectId.isValid(id) ? { _id: new Types.ObjectId(id) } : { slug: id }),
     ...PUBLIC_DESTINATION_FILTER,
   });
 

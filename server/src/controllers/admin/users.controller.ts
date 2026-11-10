@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs';
 import type { Request, Response } from 'express';
 import { isValidObjectId } from 'mongoose';
+import { DestinationModel } from '../../models/Destination.js';
 import { ItineraryModel } from '../../models/Itinerary.js';
 import { PassportEntryModel } from '../../models/PassportEntry.js';
 import { UserModel } from '../../models/User.js';
@@ -226,6 +227,15 @@ export async function resetUserPassword(req: Request, res: Response) {
   const user = await UserModel.findByIdAndUpdate(id, { $set: { passwordHash } }, { new: true }).lean();
   if (!user) throw notFound('Không tìm thấy người dùng.');
 
+  await logAuditEvent({
+    req,
+    action: 'user.password.reset',
+    targetType: 'user',
+    targetId: user._id,
+    targetName: user.displayName || user.email,
+    details: { email: user.email },
+  });
+
   res.json({ message: 'Đặt lại mật khẩu thành công.' });
 }
 
@@ -240,11 +250,21 @@ export async function deleteUser(req: Request, res: Response) {
   const user = await UserModel.findByIdAndDelete(id);
   if (!user) throw notFound('Không tìm thấy người dùng.');
 
-  // Clean up user itineraries and user passport entries
+  // Clean up user itineraries, passport entries and managed destination references
   await Promise.all([
     ItineraryModel.deleteMany({ userId: id }),
     PassportEntryModel.deleteMany({ userId: id }),
+    DestinationModel.updateMany({ managedBy: id }, { $unset: { managedBy: 1 } }),
   ]);
+
+  await logAuditEvent({
+    req,
+    action: 'user.delete',
+    targetType: 'user',
+    targetId: user._id,
+    targetName: user.displayName || user.email,
+    details: { email: user.email, role: user.role },
+  });
 
   res.status(204).end();
 }
