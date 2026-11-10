@@ -92,7 +92,7 @@ export function DigitalTravelerPass({ user, passport }: TravelerPassProps) {
   const totalDestinations = passport.progress.total || 56;
   const badgesCount = passport.totals.badges;
 
-  // Draw high-resolution canvas card for downloading (1200x756px)
+  // Draw high-resolution canvas card for downloading (1200x756px) - supports Front and Back synchronized
   const downloadCardImage = useCallback(async () => {
     setDownloading(true);
     try {
@@ -102,7 +102,7 @@ export function DigitalTravelerPass({ user, passport }: TravelerPassProps) {
       const ctx = canvas.getContext('2d');
       if (!ctx) throw new Error('Không thể khởi tạo đồ họa.');
 
-      // 1. Base Dark Emerald Background
+      // 1. Base Gradient matching tier (synchronized on both Front & Back)
       const bgGrad = ctx.createLinearGradient(0, 0, 1200, 756);
       if (points >= 300) {
         bgGrad.addColorStop(0, '#190a16');
@@ -112,18 +112,22 @@ export function DigitalTravelerPass({ user, passport }: TravelerPassProps) {
         bgGrad.addColorStop(0, '#1c1605');
         bgGrad.addColorStop(0.5, '#2c220a');
         bgGrad.addColorStop(1, '#0b2419');
+      } else if (points >= 50) {
+        bgGrad.addColorStop(0, '#071f16');
+        bgGrad.addColorStop(0.5, '#0e3b2b');
+        bgGrad.addColorStop(1, '#122b22');
       } else {
-        bgGrad.addColorStop(0, '#071e16');
-        bgGrad.addColorStop(0.5, '#0e3829');
-        bgGrad.addColorStop(1, '#112920');
+        bgGrad.addColorStop(0, '#081b15');
+        bgGrad.addColorStop(0.5, '#103026');
+        bgGrad.addColorStop(1, '#132822');
       }
       ctx.fillStyle = bgGrad;
       ctx.beginPath();
       ctx.roundRect(0, 0, 1200, 756, 40);
       ctx.fill();
 
-      // 2. Outer Golden Rim
-      ctx.strokeStyle = points >= 150 ? '#f59e0b' : '#34d399';
+      // 2. Outer Rim matching tier accent
+      ctx.strokeStyle = tier.accentColor;
       ctx.lineWidth = 4;
       ctx.beginPath();
       ctx.roundRect(16, 16, 1168, 724, 32);
@@ -140,151 +144,265 @@ export function DigitalTravelerPass({ user, passport }: TravelerPassProps) {
       ctx.roundRect(0, 0, 1200, 756, 40);
       ctx.fill();
 
-      // 4. Stylized Lotus Graphic / Circuits (Top Right)
-      ctx.save();
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.07)';
-      ctx.lineWidth = 2;
-      for (let r = 80; r <= 320; r += 60) {
+      if (flipped) {
+        // ==================== BACK SIDE CANVAS ====================
+        // Concentric Circles Ambient on Back (Left)
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
+        ctx.lineWidth = 2;
+        for (let r = 80; r <= 320; r += 60) {
+          ctx.beginPath();
+          ctx.arc(150, 600, r, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        ctx.restore();
+
+        // 4. Magnetic Stripe across the top
+        ctx.fillStyle = '#0a0d0c';
+        ctx.fillRect(0, 50, 1200, 100);
+
+        // 5. Signature Panel
+        ctx.fillStyle = '#f5f3ef';
         ctx.beginPath();
-        ctx.arc(1050, 150, r, 0, Math.PI * 2);
-        ctx.stroke();
-      }
-      ctx.restore();
+        ctx.roundRect(70, 185, 1060, 80, 12);
+        ctx.fill();
 
-      // 5. Card Header: Brand Title
-      ctx.font = 'bold 26px "Be Vietnam Pro", sans-serif';
-      ctx.fillStyle = '#f3f4f6';
-      ctx.fillText('ĐỒNG THÁP SMART TRAVEL', 70, 85);
+        ctx.font = '600 15px "Courier New", monospace';
+        ctx.fillStyle = '#4b5563';
+        ctx.fillText('CHỮ KÝ ĐIỆN TỬ:', 95, 233);
 
-      ctx.font = '600 16px "Be Vietnam Pro", sans-serif';
-      ctx.fillStyle = points >= 150 ? '#fcd34d' : '#6ee7b7';
-      ctx.fillText('HỘ CHIẾU TRẢI NGHIỆM SỐ · DIGITAL TRAVELER PASS', 70, 115);
+        ctx.font = 'italic bold 25px "Be Vietnam Pro", sans-serif';
+        ctx.fillStyle = '#166534';
+        ctx.fillText('Đồng Tháp Smart Travel', 290, 235);
 
-      // 6. Gold Smart EMV Chip (Left)
-      ctx.fillStyle = '#eab308';
-      ctx.beginPath();
-      ctx.roundRect(70, 160, 95, 75, 12);
-      ctx.fill();
-      ctx.strokeStyle = '#ca8a04';
-      ctx.lineWidth = 2;
-      ctx.stroke();
+        ctx.font = 'bold 20px "Courier New", monospace';
+        ctx.fillStyle = '#1f2937';
+        ctx.textAlign = 'right';
+        ctx.fillText('CVV: 868', 1100, 235);
+        ctx.textAlign = 'left';
 
-      // Chip internal circuit lines
-      ctx.strokeStyle = '#854d0e';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.moveTo(70, 197);
-      ctx.lineTo(165, 197);
-      ctx.moveTo(117, 160);
-      ctx.lineTo(117, 235);
-      ctx.stroke();
-
-      // 7. Contactless NFC Waves
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-      ctx.lineWidth = 2.5;
-      for (let i = 1; i <= 3; i++) {
+        // 6. QR Code Area (White Box)
+        ctx.fillStyle = '#ffffff';
         ctx.beginPath();
-        ctx.arc(200, 197, i * 10, -Math.PI / 3, Math.PI / 3);
+        ctx.roundRect(70, 300, 170, 170, 20);
+        ctx.fill();
+
+        // Stylized QR pattern markers
+        ctx.fillStyle = '#0f1715';
+        ctx.fillRect(95, 325, 45, 45);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(103, 333, 29, 29);
+        ctx.fillStyle = '#0f1715';
+        ctx.fillRect(111, 341, 13, 13);
+
+        ctx.fillStyle = '#0f1715';
+        ctx.fillRect(170, 325, 45, 45);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(178, 333, 29, 29);
+        ctx.fillStyle = '#0f1715';
+        ctx.fillRect(186, 341, 13, 13);
+
+        ctx.fillStyle = '#0f1715';
+        ctx.fillRect(95, 400, 45, 45);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(103, 408, 29, 29);
+        ctx.fillStyle = '#0f1715';
+        ctx.fillRect(111, 416, 13, 13);
+
+        // Verification text next to QR
+        ctx.font = 'bold 24px "Be Vietnam Pro", sans-serif';
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText('XÁC THỰC ĐIỆN TỬ', 270, 345);
+
+        ctx.font = '600 16px "Be Vietnam Pro", sans-serif';
+        ctx.fillStyle = tier.accentColor;
+        ctx.fillText('Quét để đối chiếu dữ liệu Hộ chiếu du lịch số', 270, 380);
+
+        ctx.font = '400 14px "Be Vietnam Pro", sans-serif';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+        ctx.fillText('Cấp bởi Sở Văn hóa, Thể thao và Du lịch tỉnh Đồng Tháp', 270, 415);
+        ctx.fillText('Mã định danh thẻ: ' + passId, 270, 445);
+
+        // 7. Badges summary section on right
+        ctx.font = '600 15px "Be Vietnam Pro", sans-serif';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+        ctx.textAlign = 'right';
+        ctx.fillText('HUY HIỆU DANH GIÁ ĐÃ MỞ KHÓA', 1130, 345);
+
+        ctx.font = 'bold 30px "Be Vietnam Pro", sans-serif';
+        ctx.fillStyle = tier.accentColor;
+        ctx.fillText(`${badgesCount} / ${passport.badges.length || 7} Huy hiệu`, 1130, 390);
+        ctx.textAlign = 'left';
+
+        // 8. Bottom Culture Motto (Synchronized in tier accent color)
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+        ctx.beginPath();
+        ctx.moveTo(70, 560);
+        ctx.lineTo(1130, 560);
         ctx.stroke();
+
+        ctx.font = 'italic 500 22px "Be Vietnam Pro", sans-serif';
+        ctx.fillStyle = tier.accentColor;
+        ctx.textAlign = 'center';
+        ctx.fillText('“Về Đồng Tháp – Thuần khiết như hồn sen, Đậm đà tình đất phương Nam”', 600, 620);
+
+        ctx.font = '400 14px "Be Vietnam Pro", sans-serif';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.fillText('Bản quyền thuộc Cổng thông tin Du lịch Thông minh Đồng Tháp · www.dongthaptravel.vn', 600, 670);
+        ctx.restore();
+      } else {
+        // ==================== FRONT SIDE CANVAS ====================
+        // 4. Stylized Lotus Graphic / Circuits (Top Right)
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.07)';
+        ctx.lineWidth = 2;
+        for (let r = 80; r <= 320; r += 60) {
+          ctx.beginPath();
+          ctx.arc(1050, 150, r, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        ctx.restore();
+
+        // 5. Card Header: Brand Title
+        ctx.font = 'bold 26px "Be Vietnam Pro", sans-serif';
+        ctx.fillStyle = '#f3f4f6';
+        ctx.fillText('ĐỒNG THÁP SMART TRAVEL', 70, 85);
+
+        ctx.font = '600 16px "Be Vietnam Pro", sans-serif';
+        ctx.fillStyle = tier.accentColor;
+        ctx.fillText('HỘ CHIẾU TRẢI NGHIỆM SỐ · DIGITAL TRAVELER PASS', 70, 115);
+
+        // 6. Gold Smart EMV Chip (Left)
+        ctx.fillStyle = '#eab308';
+        ctx.beginPath();
+        ctx.roundRect(70, 160, 95, 75, 12);
+        ctx.fill();
+        ctx.strokeStyle = '#ca8a04';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Chip internal circuit lines
+        ctx.strokeStyle = '#854d0e';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(70, 197);
+        ctx.lineTo(165, 197);
+        ctx.moveTo(117, 160);
+        ctx.lineTo(117, 235);
+        ctx.stroke();
+
+        // 7. Contactless NFC Waves
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+        ctx.lineWidth = 2.5;
+        for (let i = 1; i <= 3; i++) {
+          ctx.beginPath();
+          ctx.arc(200, 197, i * 10, -Math.PI / 3, Math.PI / 3);
+          ctx.stroke();
+        }
+
+        // 8. Membership Tier Badge (Right)
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';
+        ctx.strokeStyle = tier.accentColor;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.roundRect(830, 60, 300, 52, 26);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.font = 'bold 18px "Be Vietnam Pro", sans-serif';
+        ctx.fillStyle = tier.accentColor;
+        ctx.textAlign = 'center';
+        ctx.fillText(`★ ${tier.name.toUpperCase()} ★`, 980, 93);
+        ctx.textAlign = 'left';
+
+        // 9. Card Pass ID Number (Embossed look)
+        ctx.font = 'bold 36px "Courier New", monospace';
+        ctx.fillStyle = '#ffffff';
+        ctx.letterSpacing = '4px';
+        ctx.fillText(passId, 70, 310);
+        ctx.letterSpacing = '0px';
+
+        // 10. Traveler Name
+        ctx.font = '500 15px "Be Vietnam Pro", sans-serif';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+        ctx.fillText('CHỦ SỞ HỮU THẺ / TRAVELER NAME', 70, 380);
+
+        ctx.font = 'bold 38px "Be Vietnam Pro", sans-serif';
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(displayName.toUpperCase(), 70, 430);
+
+        // 11. Stats Row: Explored & Points & Badges
+        const statY = 560;
+        // Box 1: Explored
+        ctx.font = '500 15px "Be Vietnam Pro", sans-serif';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+        ctx.fillText('ĐIỂM ĐẾN ĐÃ KHÁM PHÁ', 70, statY);
+        ctx.font = 'bold 32px "Be Vietnam Pro", sans-serif';
+        ctx.fillStyle = '#6ee7b7';
+        ctx.fillText(`${exploredCount} / ${totalDestinations} Điểm`, 70, statY + 40);
+
+        // Box 2: Points
+        ctx.font = '500 15px "Be Vietnam Pro", sans-serif';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+        ctx.fillText('ĐIỂM THƯỞNG TÍCH LŨY', 450, statY);
+        ctx.font = 'bold 32px "Be Vietnam Pro", sans-serif';
+        ctx.fillStyle = '#fde047';
+        ctx.fillText(`+${formatNumber(points)} ĐIỂM`, 450, statY + 40);
+
+        // Box 3: Badges
+        ctx.font = '500 15px "Be Vietnam Pro", sans-serif';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+        ctx.fillText('HUY HIỆU ĐÃ ĐẠT', 820, statY);
+        ctx.font = 'bold 32px "Be Vietnam Pro", sans-serif';
+        ctx.fillStyle = '#f472b6';
+        ctx.fillText(`${badgesCount} Huy hiệu`, 820, statY + 40);
+
+        // 12. Verification Official Seal (Bottom Right Stamp)
+        ctx.save();
+        ctx.translate(1080, 420);
+        ctx.strokeStyle = 'rgba(239, 68, 68, 0.7)';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(0, 0, 52, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(0, 0, 46, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.font = 'bold 10px "Be Vietnam Pro", sans-serif';
+        ctx.fillStyle = 'rgba(239, 68, 68, 0.85)';
+        ctx.textAlign = 'center';
+        ctx.fillText('ĐỒNG THÁP SMART', 0, -10);
+        ctx.fillText('TRAVEL', 0, 5);
+        ctx.font = '8px "Be Vietnam Pro", sans-serif';
+        ctx.fillText('VERIFIED 2026', 0, 22);
+        ctx.restore();
+
+        // 13. Footer Notice
+        ctx.font = 'italic 14px "Be Vietnam Pro", sans-serif';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+        ctx.fillText('Xác thực điện tử trên Hệ sinh thái Du lịch Thông minh Đồng Tháp · www.dongthaptravel.vn', 70, 700);
       }
 
-      // 8. Membership Tier Badge (Right)
-      ctx.fillStyle = points >= 150 ? 'rgba(245, 158, 11, 0.15)' : 'rgba(52, 211, 153, 0.15)';
-      ctx.strokeStyle = points >= 150 ? '#f59e0b' : '#34d399';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.roundRect(830, 60, 300, 52, 26);
-      ctx.fill();
-      ctx.stroke();
-
-      ctx.font = 'bold 18px "Be Vietnam Pro", sans-serif';
-      ctx.fillStyle = points >= 150 ? '#fef08a' : '#a7f3d0';
-      ctx.textAlign = 'center';
-      ctx.fillText(`★ ${tier.name.toUpperCase()} ★`, 980, 93);
-      ctx.textAlign = 'left';
-
-      // 9. Card Pass ID Number (Embossed look)
-      ctx.font = 'bold 36px "Courier New", monospace';
-      ctx.fillStyle = '#ffffff';
-      ctx.letterSpacing = '4px';
-      ctx.fillText(passId, 70, 310);
-      ctx.letterSpacing = '0px';
-
-      // 10. Traveler Name
-      ctx.font = '500 15px "Be Vietnam Pro", sans-serif';
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-      ctx.fillText('CHỦ SỞ HỮU THẺ / TRAVELER NAME', 70, 380);
-
-      ctx.font = 'bold 38px "Be Vietnam Pro", sans-serif';
-      ctx.fillStyle = '#ffffff';
-      ctx.fillText(displayName.toUpperCase(), 70, 430);
-
-      // 11. Stats Row: Explored & Points & Badges
-      const statY = 560;
-      // Box 1: Explored
-      ctx.font = '500 15px "Be Vietnam Pro", sans-serif';
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-      ctx.fillText('ĐIỂM ĐẾN ĐÃ KHÁM PHÁ', 70, statY);
-      ctx.font = 'bold 32px "Be Vietnam Pro", sans-serif';
-      ctx.fillStyle = '#6ee7b7';
-      ctx.fillText(`${exploredCount} / ${totalDestinations} Điểm`, 70, statY + 40);
-
-      // Box 2: Points
-      ctx.font = '500 15px "Be Vietnam Pro", sans-serif';
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-      ctx.fillText('ĐIỂM THƯỞNG TÍCH LŨY', 450, statY);
-      ctx.font = 'bold 32px "Be Vietnam Pro", sans-serif';
-      ctx.fillStyle = '#fde047';
-      ctx.fillText(`+${formatNumber(points)} ĐIỂM`, 450, statY + 40);
-
-      // Box 3: Badges
-      ctx.font = '500 15px "Be Vietnam Pro", sans-serif';
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-      ctx.fillText('HUY HIỆU ĐÃ ĐẠT', 820, statY);
-      ctx.font = 'bold 32px "Be Vietnam Pro", sans-serif';
-      ctx.fillStyle = '#f472b6';
-      ctx.fillText(`${badgesCount} Huy hiệu`, 820, statY + 40);
-
-      // 12. Verification Official Seal (Bottom Right Stamp)
-      ctx.save();
-      ctx.translate(1080, 420);
-      ctx.strokeStyle = 'rgba(239, 68, 68, 0.7)';
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.arc(0, 0, 52, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(0, 0, 46, 0, Math.PI * 2);
-      ctx.stroke();
-
-      ctx.font = 'bold 10px "Be Vietnam Pro", sans-serif';
-      ctx.fillStyle = 'rgba(239, 68, 68, 0.85)';
-      ctx.textAlign = 'center';
-      ctx.fillText('ĐỒNG THÁP SMART', 0, -10);
-      ctx.fillText('TRAVEL', 0, 5);
-      ctx.font = '8px "Be Vietnam Pro", sans-serif';
-      ctx.fillText('VERIFIED 2026', 0, 22);
-      ctx.restore();
-
-      // 13. Footer Notice
-      ctx.font = 'italic 14px "Be Vietnam Pro", sans-serif';
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-      ctx.fillText('Xác thực điện tử trên Hệ sinh thái Du lịch Thông minh Đồng Tháp · www.dongthaptravel.vn', 70, 700);
-
-      // 14. Export to Download
+      // Export to Download
       const dataUrl = canvas.toDataURL('image/png');
       const a = document.createElement('a');
       a.href = dataUrl;
       const cleanName = displayName.replace(/[^a-zA-Z0-9]/g, '_');
-      a.download = `The_Du_Hanh_Dong_Thap_${cleanName}.png`;
+      const sideSuffix = flipped ? 'Mat_Sau' : 'Mat_Truoc';
+      a.download = `The_Du_Hanh_Dong_Thap_${sideSuffix}_${cleanName}.png`;
       a.click();
-      toast.success('Đã tải thành công Thẻ Du Hành Số (HD)', 'Bạn có thể dùng ảnh này để khoe lên Facebook, Zalo, Story!');
+      toast.success(
+        `Đã tải thành công Thẻ Du Hành (${flipped ? 'Mặt sau' : 'Mặt trước'} HD)`,
+        'Bạn có thể dùng ảnh độ phân giải cao này để chia sẻ lên mạng xã hội!',
+      );
     } catch (err: unknown) {
       toast.error('Không thể xuất ảnh thẻ', (err as Error)?.message || 'Vui lòng thử lại.');
     } finally {
       setDownloading(false);
     }
-  }, [displayName, points, tier, passId, exploredCount, totalDestinations, badgesCount]);
+  }, [displayName, points, tier, passId, exploredCount, totalDestinations, badgesCount, flipped, passport.badges.length]);
 
   const copyShareLink = () => {
     const url = window.location.href;
@@ -333,7 +451,7 @@ export function DigitalTravelerPass({ user, passport }: TravelerPassProps) {
             loading={downloading}
             icon={<Download className="size-3.5" />}
           >
-            Tải thẻ HD
+            {flipped ? 'Tải mặt sau (HD)' : 'Tải thẻ HD'}
           </Button>
         </div>
       </div>
@@ -387,7 +505,10 @@ export function DigitalTravelerPass({ user, passport }: TravelerPassProps) {
                 <p className="text-[11px] font-extrabold tracking-normal uppercase text-white/90">
                   ĐỒNG THÁP SMART TRAVEL
                 </p>
-                <p className="text-[9px] font-semibold tracking-normal text-teal-300/90 uppercase">
+                <p
+                  className="text-[9px] font-semibold tracking-normal uppercase"
+                  style={{ color: tier.accentColor }}
+                >
                   OFFICIAL TRAVELER PASS · HỘ CHIẾU SỐ
                 </p>
               </div>
@@ -461,11 +582,13 @@ export function DigitalTravelerPass({ user, passport }: TravelerPassProps) {
             </div>
           </div>
 
-          {/* ==================== BACK OF CARD ==================== */}
+          {/* ==================== BACK OF CARD (Synchronized Color Theme & Glow) ==================== */}
           <div
             className={clsx(
-              'absolute inset-0 flex flex-col justify-between overflow-hidden rounded-[24px] p-5 sm:p-6 text-white shadow-2xl',
-              'ring-1 ring-white/20 bg-gradient-to-br from-[#0a1813] via-[#102b21] to-[#07130e]',
+              'absolute inset-0 flex flex-col justify-between overflow-hidden rounded-[24px] p-5 sm:p-6 text-white shadow-2xl transition-all duration-300',
+              'ring-1 ring-white/20 group-hover:shadow-[0_20px_50px_rgba(23,107,80,0.35)]',
+              'bg-gradient-to-br',
+              tier.gradient,
               tier.borderGlow,
             )}
             style={{
@@ -474,37 +597,52 @@ export function DigitalTravelerPass({ user, passport }: TravelerPassProps) {
               transform: 'rotateY(180deg)',
             }}
           >
+            {/* Holographic Sheen & Radial Glow (Symmetrically matched to Front) */}
+            <div
+              className="pointer-events-none absolute -left-20 -top-20 size-60 rounded-full opacity-40 blur-3xl transition-opacity group-hover:opacity-70"
+              style={{ background: tier.accentColor }}
+            />
+            <div className="pointer-events-none absolute -bottom-16 -right-16 size-48 rounded-full bg-leaf-500/20 blur-2xl" />
+
+            {/* Subtle concentric circles (Mirroring front watermark) */}
+            <div className="pointer-events-none absolute -left-10 -bottom-10 size-48 rounded-full border border-white/5" />
+            <div className="pointer-events-none absolute -left-16 -bottom-16 size-64 rounded-full border border-white/5" />
+
             {/* Magnetic Stripe */}
-            <div className="-mx-6 -mt-1 h-9 bg-gradient-to-r from-neutral-900 via-neutral-800 to-neutral-900 shadow-inner" />
+            <div className="relative z-10 -mx-6 -mt-1 h-9 bg-gradient-to-r from-neutral-950 via-neutral-900 to-neutral-950 shadow-inner opacity-95" />
 
             {/* Signature Panel */}
-            <div className="mt-2 flex items-center justify-between rounded-lg bg-sand-100/90 px-3 py-1.5 text-river-900 shadow-sm">
-              <span className="font-mono text-[9px] text-river-500">CHỮ KÝ ĐIỆN TỬ:</span>
-              <span className="font-sans font-extrabold italic text-xs tracking-normal text-leaf-800">
+            <div className="relative z-10 mt-2 flex items-center justify-between rounded-lg bg-sand-100/90 px-3 py-1.5 text-river-900 shadow-sm backdrop-blur-xs">
+              <span className="font-mono text-[9px] font-semibold text-river-600">CHỮ KÝ ĐIỆN TỬ:</span>
+              <span className="font-sans font-extrabold italic text-xs tracking-normal text-leaf-900">
                 Đồng Tháp Smart Travel
               </span>
               <span className="font-mono text-[9px] font-bold text-river-700">CVV: 868</span>
             </div>
 
             {/* QR Code and Badges Summary */}
-            <div className="mt-2 flex items-center justify-between gap-3">
+            <div className="relative z-10 mt-2 flex items-center justify-between gap-3">
               <div className="flex items-center gap-2.5">
-                <div className="flex size-14 shrink-0 items-center justify-center rounded-xl bg-white p-1 shadow-md">
+                <div className="flex size-14 shrink-0 items-center justify-center rounded-xl bg-white/95 p-1.5 shadow-md">
                   {/* Decorative stylized QR icon */}
-                  <div className="grid size-full place-items-center bg-sand-50 rounded text-leaf-800">
-                    <QrCode className="size-10 text-leaf-800" />
+                  <div className="grid size-full place-items-center rounded bg-sand-50 text-river-900">
+                    <QrCode className="size-10 text-river-900" />
                   </div>
                 </div>
-                <div className="text-[10px] text-white/70 leading-tight">
+                <div className="text-[10px] text-white/80 leading-tight">
                   <p className="font-bold text-white">Xác thực điện tử</p>
-                  <p className="text-[9px] text-teal-300">Quét để đối chiếu Hộ chiếu</p>
-                  <p className="text-[8px] text-white/40 mt-1">Cấp bởi Sở VHTTDL Đồng Tháp</p>
+                  <p className="text-[9px] font-medium" style={{ color: tier.accentColor }}>
+                    Quét để đối chiếu Hộ chiếu
+                  </p>
+                  <p className="text-[8px] text-white/50 mt-1">Cấp bởi Sở VHTTDL Đồng Tháp</p>
                 </div>
               </div>
 
               {/* Mini Badges Unlocked */}
               <div className="text-right">
-                <p className="text-[9px] text-white/50 uppercase">HUY HIỆU DANH GIÁ</p>
+                <p className="text-[9px] font-semibold uppercase tracking-wider text-white/60">
+                  HUY HIỆU DANH GIÁ
+                </p>
                 <div className="mt-1 flex items-center justify-end gap-1">
                   {passport.badges
                     .filter((b) => b.earned)
@@ -512,7 +650,12 @@ export function DigitalTravelerPass({ user, passport }: TravelerPassProps) {
                     .map((b) => (
                       <span
                         key={b.key}
-                        className="flex size-6 items-center justify-center rounded-full bg-teal-400/20 text-teal-300 ring-1 ring-teal-400/40"
+                        className="flex size-6 items-center justify-center rounded-full ring-1 shadow-sm"
+                        style={{
+                          backgroundColor: 'rgba(255, 255, 255, 0.12)',
+                          borderColor: tier.accentColor,
+                          color: tier.accentColor,
+                        }}
                         title={b.name}
                       >
                         <Award className="size-3.5" />
@@ -526,8 +669,11 @@ export function DigitalTravelerPass({ user, passport }: TravelerPassProps) {
             </div>
 
             {/* Culture Motto Footer */}
-            <div className="mt-auto pt-2 border-t border-white/10 text-center">
-              <p className="font-sans font-medium italic text-xs tracking-normal text-teal-200">
+            <div className="relative z-10 mt-auto pt-2 border-t border-white/10 text-center">
+              <p
+                className="font-sans font-medium italic text-xs tracking-normal"
+                style={{ color: tier.accentColor }}
+              >
                 &ldquo;Về Đồng Tháp – Thuần khiết như hồn sen, Đậm đà tình đất phương Nam&rdquo;
               </p>
             </div>
