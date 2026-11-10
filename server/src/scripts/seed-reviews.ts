@@ -114,7 +114,7 @@ const sampleReviewsBySlug: Record<string, SeedReview[]> = {
       createdAt: new Date(Date.now() - 10 * 86400000),
     },
   ],
-  'lang-hoa-kieng-sa-dec': [
+  'lang-hoa-sa-dec': [
     {
       authorName: 'Hoàng Yến Nhi',
       authorTier: '👑 Huyền Thoại Sen Hồng',
