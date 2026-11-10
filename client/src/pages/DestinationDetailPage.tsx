@@ -6,6 +6,7 @@ import { IllustrativeBadge, VerificationStatusBadge } from '../components/destin
 import { DestinationCard } from '../components/destination/DestinationCard';
 import { DestinationFacts, DestinationMap, DestinationSources } from '../components/destination/DestinationInfo';
 import { DestinationImage } from '../components/destination/DestinationImage';
+import { DestinationReviews } from '../components/destination/DestinationReviews';
 import { PageContainer } from '../components/layout/PublicLayout';
 import { Badge } from '../components/ui/Badge';
 import { Button, ButtonLink } from '../components/ui/Button';
@@ -184,6 +185,12 @@ export function DestinationDetailPage() {
               </>
             )}
           </Card>
+
+          <DestinationReviews
+            destinationId={d.id}
+            destinationSlug={d.slug}
+            destinationName={d.name}
+          />
         </div>
         <div className="space-y-6">
           <DestinationFacts destination={d} />

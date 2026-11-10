@@ -15,6 +15,7 @@ import * as destinations from '../controllers/destination.controller.js';
 import * as itineraries from '../controllers/itinerary.controller.js';
 import * as passport from '../controllers/passport.controller.js';
 import * as qr from '../controllers/qr.controller.js';
+import * as reviews from '../controllers/review.controller.js';
 import { requireAdmin, requireAuth, requireStaff } from '../middleware/auth.js';
 import { issueCsrfToken } from '../middleware/csrf.js';
 import { challengeLimiter, eventLimiter, loginLimiter, registerLimiter } from '../middleware/rateLimit.js';
@@ -51,6 +52,11 @@ export function buildApiRouter(): Router {
   api.get('/destinations/:slug', destinations.getDestination);
   api.get('/destinations/:slug/related', destinations.getRelatedDestinations);
   api.post('/events/destination-view', eventLimiter, destinations.recordDestinationView);
+
+  // Destination Reviews & Ratings (Google Maps style)
+  api.get('/destinations/:idOrSlug/reviews', reviews.listReviews);
+  api.post('/destinations/:idOrSlug/reviews', eventLimiter, reviews.createReview);
+  api.post('/reviews/:reviewId/like', eventLimiter, reviews.likeReview);
 
   // Trip Planner V9 (AI & Manual + Valhalla routing + Replan)
   api.get('/trip-planner/health', itineraries.getTripPlannerHealth);

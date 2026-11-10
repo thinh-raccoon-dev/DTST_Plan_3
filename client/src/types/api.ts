@@ -871,3 +871,34 @@ export interface SystemSettings {
   };
 }
 
+export interface DestinationReviewItem {
+  id: string;
+  authorName: string;
+  authorAvatar?: string;
+  authorTier?: string;
+  rating: number;
+  content: string;
+  tags: string[];
+  isVerifiedVisitor: boolean;
+  likesCount: number;
+  response?: {
+    author: string;
+    content: string;
+    respondedAt: string;
+  };
+  createdAt: string;
+}
+
+export interface DestinationReviewsStats {
+  averageRating: number;
+  totalReviews: number;
+  distribution: Record<number, number>;
+  popularTags: string[];
+}
+
+export interface DestinationReviewsResponse {
+  stats: DestinationReviewsStats;
+  items: DestinationReviewItem[];
+}
+
+
