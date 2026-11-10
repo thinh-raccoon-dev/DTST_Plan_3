@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express';
+import { Types } from 'mongoose';
 import { ChallengeModel } from '../../models/Challenge.js';
 import { DestinationModel, type DestinationDocument } from '../../models/Destination.js';
 import { FavoriteModel } from '../../models/Favorite.js';
@@ -31,7 +32,7 @@ function isPartner(req: Request) {
 }
 
 function partnerScope(req: Request): Record<string, unknown> {
-  return isPartner(req) ? { managedBy: req.user!.id } : {};
+  return isPartner(req) ? { managedBy: { $in: [req.user!.id, new Types.ObjectId(req.user!.id)] } } : {};
 }
 
 async function resolveManagedBy(email: string | undefined) {

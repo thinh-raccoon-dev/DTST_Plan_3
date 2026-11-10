@@ -24,7 +24,9 @@ export async function listAdminReviews(req: Request, res: Response) {
   let managedDestinations: Array<{ id: string; name: string; slug: string }> = [];
 
   if (partnerUser) {
-    const managed = await DestinationModel.find({ managedBy: user.id })
+    const managed = await DestinationModel.find({
+      $or: [{ managedBy: new Types.ObjectId(user.id) }, { managedBy: user.id }],
+    })
       .select('_id name slug')
       .lean();
     managedDestinations = managed.map((d) => ({
@@ -176,7 +178,7 @@ export async function respondReview(req: Request, res: Response) {
   if (isPartner(req)) {
     const isOwner = await DestinationModel.exists({
       _id: review.destinationId,
-      managedBy: user.id,
+      $or: [{ managedBy: new Types.ObjectId(user.id) }, { managedBy: user.id }],
     });
     if (!isOwner) {
       throw forbidden('Bạn không có quyền quản lý phản hồi cho điểm đến này.');
@@ -222,7 +224,7 @@ export async function deleteReviewResponse(req: Request, res: Response) {
   if (isPartner(req)) {
     const isOwner = await DestinationModel.exists({
       _id: review.destinationId,
-      managedBy: user.id,
+      $or: [{ managedBy: new Types.ObjectId(user.id) }, { managedBy: user.id }],
     });
     if (!isOwner) {
       throw forbidden('Bạn không có quyền quản lý điểm đến này.');
@@ -253,7 +255,7 @@ export async function updateReviewStatus(req: Request, res: Response) {
   if (isPartner(req)) {
     const isOwner = await DestinationModel.exists({
       _id: review.destinationId,
-      managedBy: user.id,
+      $or: [{ managedBy: new Types.ObjectId(user.id) }, { managedBy: user.id }],
     });
     if (!isOwner) {
       throw forbidden('Bạn không có quyền quản lý điểm đến này.');

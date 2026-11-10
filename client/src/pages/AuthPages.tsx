@@ -84,7 +84,8 @@ function LoginForm({ admin }: { admin: boolean }) {
       }
       toast.success(`Xin chào, ${user.displayName}`);
       if (!admin) void offerDeviceSync();
-      navigate(safeRedirect(from, admin ? '/admin' : '/passport'), { replace: true });
+      const redirectPath = admin ? (user.role === 'partner' ? '/admin/destinations' : '/admin') : '/passport';
+      navigate(safeRedirect(from, redirectPath), { replace: true });
     } catch (error) {
       const apiError = toApiError(error);
       const unplaced = applyFieldErrors(apiError, form.setError, ['email', 'password']);
@@ -201,6 +202,7 @@ export function AdminLoginPage() {
   useDocumentTitle('Đăng nhập quản trị');
   const user = useAuthStore((s) => s.user);
   if (user?.role === 'admin') return <Navigate to="/admin" replace />;
+  if (user?.role === 'partner') return <Navigate to="/admin/destinations" replace />;
   return (
     <div className="flex min-h-dvh items-center justify-center bg-river-950 px-4">
       <Card className="tp-fade-up w-full max-w-md p-6 sm:p-8">

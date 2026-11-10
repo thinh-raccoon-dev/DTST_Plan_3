@@ -407,7 +407,7 @@ export function AdminReviewsPage() {
               <div className="mt-4 flex flex-wrap items-start justify-between gap-3">
                 <div className="flex items-center gap-3">
                   <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-tr from-leaf-600 to-teal-500 font-bold text-white shadow-xs text-xs">
-                    {review.authorName.slice(0, 2).toUpperCase()}
+                    {(review.authorName || 'DK').slice(0, 2).toUpperCase()}
                   </div>
                   <div>
                     <div className="flex flex-wrap items-center gap-1.5">
