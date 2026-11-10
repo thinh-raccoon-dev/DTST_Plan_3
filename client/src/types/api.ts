@@ -945,5 +945,77 @@ export interface AdminReviewsResponse {
   managedDestinations: Array<{ id: string; name: string; slug: string }>;
 }
 
+export interface PartnerOverviewResponse {
+  hasDestination: boolean;
+  message?: string;
+  destination?: {
+    id: string;
+    name: string;
+    slug: string;
+    summary?: string;
+    description?: string;
+    address?: string;
+    area: string;
+    category: string;
+    coordinates?: { lat: number; lng: number };
+    openingHours?: string;
+    referencePrice?: string;
+    contactInfo?: Record<string, string>;
+    images?: Array<{ url: string; alt?: string; caption?: string }>;
+    operationalStatus: 'active' | 'temporarily_closed' | 'closed';
+    publicationStatus: string;
+    reviewNote?: string;
+    managedBy?: { displayName: string; email: string };
+  };
+  metrics?: {
+    totalViews: number;
+    totalCheckIns: number;
+    averageRating: number;
+    totalReviews: number;
+    respondedReviews: number;
+    totalChallenges: number;
+    totalCompletedChallenges: number;
+    totalQrs: number;
+  };
+  recentCheckIns?: Array<{
+    id: string;
+    visitorName: string;
+    source: string;
+    scoreAwarded: number;
+    completedAt: string;
+  }>;
+  recentReviews?: Array<{
+    id: string;
+    authorName: string;
+    authorTier?: string;
+    rating: number;
+    content: string;
+    tags?: string[];
+    hasResponse: boolean;
+    response?: { content: string; responderName?: string; respondedAt: string };
+    createdAt: string;
+  }>;
+  challenges?: Array<{
+    id: string;
+    title: string;
+    description?: string;
+    status: string;
+    questionCount: number;
+    rewardPoints: number;
+    completions: number;
+    createdAt: string;
+  }>;
+  qrs?: Array<{
+    id: string;
+    code: string;
+    label: string;
+    targetType: string;
+    targetId: string;
+    status: string;
+    createdAt: string;
+  }>;
+}
+
+
 
 

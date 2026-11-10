@@ -5,6 +5,7 @@ import * as adminBanners from '../controllers/admin/banners.controller.js';
 import * as adminChallenges from '../controllers/admin/challenges.controller.js';
 import * as adminDestinations from '../controllers/admin/destinations.controller.js';
 import * as adminItineraries from '../controllers/admin/itineraries.controller.js';
+import * as adminPartner from '../controllers/admin/partner.controller.js';
 import * as adminPassportLogs from '../controllers/admin/passportLogs.controller.js';
 import * as adminQr from '../controllers/admin/qr.controller.js';
 import * as adminReviews from '../controllers/admin/reviews.controller.js';
@@ -109,6 +110,12 @@ export function buildApiRouter(): Router {
   admin.delete('/reviews/:id/respond', adminReviews.deleteReviewResponse);
   admin.patch('/reviews/:id/status', adminReviews.updateReviewStatus);
   admin.delete('/reviews/:id', adminReviews.deleteReview);
+
+  // Partner Dedicated Hub (Operational control, QR & Challenges)
+  admin.get('/partner/overview', adminPartner.getPartnerOverview);
+  admin.patch('/partner/destination/status', adminPartner.toggleOperationalStatus);
+  admin.post('/partner/challenges', adminPartner.createPartnerChallenge);
+  admin.post('/partner/qr', adminPartner.createPartnerQr);
 
   // Badges & Achievements management (Admin only)
   admin.get('/badges', requireAdmin, adminBadges.listBadges);

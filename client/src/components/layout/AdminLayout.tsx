@@ -5,6 +5,7 @@ import {
   ExternalLink,
   FileText,
   Image,
+  LayoutDashboard,
   LogOut,
   MapPinned,
   Menu,
@@ -23,27 +24,28 @@ import { toast } from '../../stores/toastStore';
 import { Logo } from './Logo';
 
 const allItems = [
-  { to: '/admin', label: 'Tổng quan', icon: BarChart3, end: true, adminOnly: true },
-  { to: '/admin/destinations', label: 'Địa điểm', icon: MapPinned, adminOnly: false },
-  { to: '/admin/reviews', label: 'Đánh giá & Phản hồi', icon: MessageSquare, adminOnly: false },
-  { to: '/admin/itineraries', label: 'Lịch trình du khách', icon: Route, adminOnly: true },
-  { to: '/admin/passport-logs', label: 'Nhật ký Check-in', icon: FileText, adminOnly: true },
-  { to: '/admin/badges', label: 'Huy hiệu & Thành tựu', icon: Award, adminOnly: true },
-  { to: '/admin/qr', label: 'Mã QR', icon: QrCode, adminOnly: true },
-  { to: '/admin/challenges', label: 'Thử thách', icon: Trophy, adminOnly: true },
-  { to: '/admin/banners', label: 'Banner', icon: Image, adminOnly: true },
-  { to: '/admin/users', label: 'Tài khoản & Phân quyền', icon: Users, adminOnly: true },
-  { to: '/admin/system', label: 'Hệ thống & Dịch vụ', icon: Settings, adminOnly: true },
+  { to: '/admin', label: 'Tổng quan', icon: BarChart3, end: true, adminOnly: true, partnerOnly: false },
+  { to: '/admin/partner', label: 'Bảng điều khiển KDL', icon: LayoutDashboard, end: true, adminOnly: false, partnerOnly: true },
+  { to: '/admin/destinations', label: 'Hồ sơ điểm đến', icon: MapPinned, adminOnly: false, partnerOnly: false },
+  { to: '/admin/reviews', label: 'Đánh giá & Phản hồi', icon: MessageSquare, adminOnly: false, partnerOnly: false },
+  { to: '/admin/itineraries', label: 'Lịch trình du khách', icon: Route, adminOnly: true, partnerOnly: false },
+  { to: '/admin/passport-logs', label: 'Nhật ký Check-in', icon: FileText, adminOnly: true, partnerOnly: false },
+  { to: '/admin/badges', label: 'Huy hiệu & Thành tựu', icon: Award, adminOnly: true, partnerOnly: false },
+  { to: '/admin/qr', label: 'Mã QR', icon: QrCode, adminOnly: true, partnerOnly: false },
+  { to: '/admin/challenges', label: 'Thử thách', icon: Trophy, adminOnly: true, partnerOnly: false },
+  { to: '/admin/banners', label: 'Banner', icon: Image, adminOnly: true, partnerOnly: false },
+  { to: '/admin/users', label: 'Tài khoản & Phân quyền', icon: Users, adminOnly: true, partnerOnly: false },
+  { to: '/admin/system', label: 'Hệ thống & Dịch vụ', icon: Settings, adminOnly: true, partnerOnly: false },
 ];
 
 function SideNav({ onNavigate }: { onNavigate?: () => void }) {
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
-  const items = allItems.filter((item) => user?.role === 'admin' || !item.adminOnly);
+  const items = allItems.filter((item) => (user?.role === 'partner' ? !item.adminOnly : !item.partnerOnly));
   return (
     <div className="flex h-full flex-col gap-6 p-4">
       <div className="px-2 pt-2">
-        <Logo to={user?.role === 'partner' ? '/admin/destinations' : '/admin'} subtitle={user?.role === 'partner' ? 'ĐỐI TÁC' : 'QUẢN TRỊ'} stacked={false} />
+        <Logo to={user?.role === 'partner' ? '/admin/partner' : '/admin'} subtitle={user?.role === 'partner' ? 'ĐỐI TÁC' : 'QUẢN TRỊ'} stacked={false} />
       </div>
       <nav aria-label="Điều hướng quản trị" className="flex-1">
         <ul className="space-y-1">
@@ -96,9 +98,11 @@ export function AdminLayout() {
   const user = useAuthStore((s) => s.user);
   useEffect(() => setOpen(false), [location.pathname]);
   const isPartnerAllowed =
-    location.pathname.startsWith('/admin/destinations') || location.pathname.startsWith('/admin/reviews');
+    location.pathname.startsWith('/admin/partner') ||
+    location.pathname.startsWith('/admin/destinations') ||
+    location.pathname.startsWith('/admin/reviews');
   if (user?.role === 'partner' && !isPartnerAllowed) {
-    return <Navigate to="/admin/destinations" replace />;
+    return <Navigate to="/admin/partner" replace />;
   }
   return (
     <div className="min-h-dvh bg-sand-50 lg:grid lg:grid-cols-[260px_1fr]">
@@ -106,7 +110,7 @@ export function AdminLayout() {
         <SideNav />
       </aside>
       <div className="flex items-center justify-between border-b border-sand-200 bg-white px-4 py-3 lg:hidden">
-        <Logo to={user?.role === 'partner' ? '/admin/destinations' : '/admin'} subtitle={user?.role === 'partner' ? 'ĐỐI TÁC' : 'QUẢN TRỊ'} stacked={false} />
+        <Logo to={user?.role === 'partner' ? '/admin/partner' : '/admin'} subtitle={user?.role === 'partner' ? 'ĐỐI TÁC' : 'QUẢN TRỊ'} stacked={false} />
         <button type="button" onClick={() => setOpen(true)} className="inline-flex size-11 items-center justify-center rounded-control hover:bg-sand-100" aria-label="Mở menu quản trị">
           <Menu className="size-6" aria-hidden />
         </button>
