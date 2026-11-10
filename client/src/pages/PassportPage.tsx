@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { announceBadges } from '../components/challenge/ChallengeQuiz';
 import { PageContainer } from '../components/layout/PublicLayout';
+import { DigitalTravelerPass } from '../components/passport/DigitalTravelerPass';
 import { Button, ButtonLink } from '../components/ui/Button';
 import { Card, StatCard } from '../components/ui/Card';
 import { EmptyState, ErrorState, Notice, PageLoader } from '../components/ui/States';
@@ -130,7 +131,12 @@ export function PassportPage() {
         )}
       </div>
 
-      <div className="mt-6 grid grid-cols-2 gap-3.5 lg:grid-cols-4">
+      {/* Digital Traveler Pass (Thẻ Du Hành Số 3D Sen Hồng) */}
+      <section className="tp-fade-up mt-8 rounded-panel border border-sand-200 bg-white/95 p-5 shadow-raised backdrop-blur-sm sm:p-8">
+        <DigitalTravelerPass user={user} passport={p} />
+      </section>
+
+      <div className="mt-8 grid grid-cols-2 gap-3.5 lg:grid-cols-4">
         <StatCard label="Tổng điểm" value={formatNumber(p.totals.points)} icon={<Trophy className="size-5 text-teal-600" aria-hidden />} />
         <StatCard label="Điểm đã khám phá" value={p.totals.exploredDestinations} icon={<Compass className="size-5" aria-hidden />} />
         <StatCard label="Thử thách hoàn thành" value={p.totals.completedChallenges} icon={<Lightbulb className="size-5" aria-hidden />} />
