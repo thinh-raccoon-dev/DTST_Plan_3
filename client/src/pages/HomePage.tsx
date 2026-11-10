@@ -1,4 +1,4 @@
-import { ArrowRight, Award, Compass, QrCode, Route, ScanLine, Sparkles, Stamp } from 'lucide-react';
+import { ArrowRight, Award, Compass, MapPinCheck, Navigation, Route, Sparkles } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { CategoryIcon } from '../components/destination/CategoryIcon';
 import { DestinationCard } from '../components/destination/DestinationCard';
@@ -51,8 +51,8 @@ function Hero() {
               <span className="tp-shimmer pointer-events-none absolute inset-0" aria-hidden />
               AI Lập lịch trình ngay
             </ButtonLink>
-            <ButtonLink to="/scan" variant="secondary" size="lg" icon={<ScanLine className="size-5" aria-hidden />}>
-              Quét mã QR
+            <ButtonLink to="/check-in" variant="secondary" size="lg" icon={<MapPinCheck className="size-5" aria-hidden />}>
+              Điểm danh GPS
             </ButtonLink>
             <ButtonLink to="/destinations" variant="ghost" size="lg" icon={<Compass className="size-5" aria-hidden />}>
               Khám phá điểm đến
@@ -159,14 +159,13 @@ export function HomePage() {
               <p className="text-[0.7rem] font-semibold uppercase tracking-[0.22em] text-leaf-300">Hộ chiếu trải nghiệm số</p>
               <h2 className="mt-3 text-white">Mỗi dấu chân, một huy hiệu</h2>
               <p className="mt-3 leading-relaxed text-leaf-100">
-                Mỗi điểm thí điểm có một mã QR. Quét mã để mở câu chuyện, check-in và trả lời thử thách. Điểm thưởng do máy chủ chấm,
-                mỗi thử thách chỉ nhận thưởng một lần.
+                Tự động nhận diện qua GPS vệ tinh khi bạn đến gần điểm đến trong phạm vi 1.000m. Điểm danh 1 chạm để tích lũy điểm EXP và thăng hạng Hộ chiếu số.
               </p>
               <ol className="mt-6 grid gap-3 sm:grid-cols-3">
                 {[
-                  { icon: QrCode, title: 'Quét QR', text: 'Tại điểm đến thí điểm' },
-                  { icon: Stamp, title: 'Check-in & thử thách', text: 'Trả lời câu hỏi địa phương' },
-                  { icon: Award, title: 'Nhận huy hiệu', text: 'Tích lũy điểm và con dấu' },
+                  { icon: Navigation, title: 'Đến điểm thực tế', text: 'GPS nhận diện bán kính 1km' },
+                  { icon: MapPinCheck, title: 'Điểm danh 1 chạm', text: 'Nhận ngay +10 điểm EXP' },
+                  { icon: Award, title: 'Thăng hạng Sen Hồng', text: 'Mở khóa huy hiệu danh giá' },
                 ].map(({ icon: Icon, title, text }, i) => (
                   <li key={title} className="rounded-2xl bg-white/10 p-4 ring-1 ring-white/15 backdrop-blur-sm transition hover:bg-white/15">
                     <span className="inline-block rounded-full bg-lotus-300/25 px-2 py-0.5 text-[11px] font-semibold text-lotus-100">
@@ -182,8 +181,8 @@ export function HomePage() {
                 <ButtonLink to="/passport" variant="inverted">
                   Xem hộ chiếu của tôi
                 </ButtonLink>
-                <ButtonLink to="/scan" variant="outlineInverted">
-                  Mở máy quét QR
+                <ButtonLink to="/check-in" variant="outlineInverted" icon={<MapPinCheck className="size-4" />}>
+                  Điểm danh GPS ngay
                 </ButtonLink>
               </div>
             </div>

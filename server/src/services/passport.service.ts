@@ -197,21 +197,26 @@ export function toBadgeDto(badge: { key: string; name: string; description: stri
   return { key: badge.key, name: badge.name, description: badge.description, icon: badge.icon, rewardPoints: badge.rewardPoints ?? 0 };
 }
 
-export async function checkIn(identity: Identity, destinationId: Types.ObjectId, qrCodeId: Types.ObjectId) {
+export async function checkIn(
+  identity: Identity,
+  destinationId: Types.ObjectId,
+  qrCodeId?: Types.ObjectId,
+  source: 'qr' | 'system' | 'gps' = 'qr',
+) {
   try {
     await PassportEntryModel.create({
       ...ownerFields(identity),
       entryType: 'check_in',
       destinationId,
-      qrCodeId,
+      ...(qrCodeId ? { qrCodeId } : {}),
       scoreAwarded: CHECKIN_POINTS,
-      source: 'qr',
+      source,
     });
   } catch (error) {
     if (isDuplicateKey(error)) return { created: false, pointsAwarded: 0, newBadges: [] };
     throw error;
   }
-  await recordEvent({ eventType: 'destination_check_in', destinationId, qrCodeId }, identity);
+  await recordEvent({ eventType: 'destination_check_in', destinationId, ...(qrCodeId ? { qrCodeId } : {}) }, identity);
   const newBadges = await evaluateBadges(identity);
   return { created: true, pointsAwarded: CHECKIN_POINTS, newBadges };
 }

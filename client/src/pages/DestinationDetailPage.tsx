@@ -1,4 +1,4 @@
-import { Heart, MapPin, QrCode, Route, Sparkles, Trophy } from 'lucide-react';
+import { Heart, MapPin, MapPinCheck, QrCode, Route, Sparkles, Trophy } from 'lucide-react';
 import { useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { CategoryIcon } from '../components/destination/CategoryIcon';
@@ -178,11 +178,9 @@ export function DestinationDetailPage() {
                     </li>
                   ))}
                 </ul>
-                {hasActiveQr && (
-                  <ButtonLink to="/scan" variant="accent" size="sm" className="mt-5" icon={<QrCode className="size-4" aria-hidden />}>
-                    Mở máy quét QR
-                  </ButtonLink>
-                )}
+                <ButtonLink to="/check-in" variant="accent" size="sm" className="mt-5" icon={<MapPinCheck className="size-4" aria-hidden />}>
+                  Điểm danh GPS tại điểm này
+                </ButtonLink>
               </>
             )}
           </Card>

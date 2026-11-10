@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express';
+import { Types } from 'mongoose';
 import { z } from 'zod';
 import { ChallengeModel } from '../models/Challenge.js';
 import { DestinationModel } from '../models/Destination.js';
@@ -6,7 +7,11 @@ import { FavoriteModel } from '../models/Favorite.js';
 import { PassportEntryModel } from '../models/PassportEntry.js';
 import { UserModel } from '../models/User.js';
 import { paginate } from '../schemas/common.js';
-import { publicDestinationQuerySchema } from '../schemas/destination.schemas.js';
+import {
+  checkInGpsBodySchema,
+  nearbyDestinationsQuerySchema,
+  publicDestinationQuerySchema,
+} from '../schemas/destination.schemas.js';
 import { PAGE_VIEW_DEDUPE_MS, recordEvent } from '../services/analytics.service.js';
 import { toChallengeSummary, type LeanChallenge } from '../services/challenge.service.js';
 import {
@@ -18,7 +23,8 @@ import {
   toDestinationSummary,
   type LeanDestination,
 } from '../services/destination.service.js';
-import { identityFromRequest } from '../services/identity.js';
+import { identityFromRequest, ownerFilter } from '../services/identity.js';
+import { checkIn } from '../services/passport.service.js';
 import {
   mergeProfiles,
   profileFromDestination,
@@ -26,8 +32,9 @@ import {
   type Recommendable,
   type RecommendProfile,
 } from '../services/recommend.service.js';
+import { AppError, notFound } from '../utils/errors.js';
+import { haversineMeters, MAX_CHECKIN_METERS } from '../utils/geo.js';
 import { escapeRegex, normalizeText } from '../utils/text.js';
-import { notFound } from '../utils/errors.js';
 import type { Area, Category } from '../config/catalog.js';
 
 const slugParamsSchema = z.object({ slug: z.string().trim().toLowerCase().regex(/^[a-z0-9-]{1,80}$/) });
@@ -177,4 +184,118 @@ export async function recordDestinationView(req: Request, res: Response) {
     { dedupeWindowMs: PAGE_VIEW_DEDUPE_MS },
   );
   res.status(202).json({ recorded });
+}
+
+const checkInParamSchema = z.object({
+  id: z.string().trim().min(1),
+});
+
+/**
+ * GPS Geofencing Check-in: Checks in a user when they are within MAX_CHECKIN_METERS (1000m)
+ * of a published destination without needing a physical QR code.
+ */
+export async function checkInDestinationGps(req: Request, res: Response) {
+  const { id } = checkInParamSchema.parse(req.params);
+  const body = checkInGpsBodySchema.parse(req.body);
+
+  const isObjectId = Types.ObjectId.isValid(id);
+  const destination = await DestinationModel.findOne({
+    $or: [{ ...(isObjectId ? { _id: id } : { _id: null }) }, { slug: id }],
+    ...PUBLIC_DESTINATION_FILTER,
+  });
+
+  if (!destination) {
+    throw notFound('Không tìm thấy địa điểm hoặc địa điểm chưa được xuất bản.', 'DESTINATION_NOT_FOUND');
+  }
+
+  const coords = destination.coordinates;
+  if (!coords || typeof coords.lat !== 'number' || typeof coords.lng !== 'number') {
+    throw new AppError(400, 'NO_COORDINATES', 'Địa điểm này chưa được cập nhật tọa độ GPS để điểm danh thực địa.');
+  }
+
+  const distanceMeters = haversineMeters({ lat: body.lat, lng: body.lng }, { lat: coords.lat, lng: coords.lng });
+
+  if (distanceMeters > MAX_CHECKIN_METERS) {
+    throw new AppError(
+      403,
+      'LOCATION_TOO_FAR',
+      `Bạn đang cách "${destination.name}" khoảng ${Math.round(distanceMeters)} m. Hãy có mặt trong phạm vi ${MAX_CHECKIN_METERS} m để điểm danh thực địa.`,
+    );
+  }
+
+  const identity = identityFromRequest(req);
+  const result = await checkIn(identity, destination._id, undefined, 'gps');
+
+  res.status(result.created ? 201 : 200).json({
+    ...result,
+    distanceMeters: Math.round(distanceMeters),
+    destination: {
+      id: String(destination._id),
+      name: destination.name,
+      slug: destination.slug,
+      category: destination.category,
+      area: destination.area,
+    },
+  });
+}
+
+/**
+ * Lists published destinations ordered by distance from the user's current GPS position.
+ * Also returns whether each destination is currently in check-in range (<= 1000m)
+ * and whether the visitor has already checked in.
+ */
+export async function listNearbyDestinations(req: Request, res: Response) {
+  const query = nearbyDestinationsQuerySchema.parse(req.query);
+  const identity = identityFromRequest(req);
+
+  const [destinations, checkedInEntries] = await Promise.all([
+    DestinationModel.find({
+      ...PUBLIC_DESTINATION_FILTER,
+      'coordinates.lat': { $exists: true, $ne: null },
+      'coordinates.lng': { $exists: true, $ne: null },
+    }).lean<LeanDestination[]>(),
+    (async () => {
+      try {
+        const filter = ownerFilter(identity);
+        return await PassportEntryModel.find({ ...filter, entryType: 'check_in' }).select('destinationId').lean();
+      } catch {
+        return [];
+      }
+    })(),
+  ]);
+
+  const checkedInIds = new Set(checkedInEntries.map((e) => String(e.destinationId)));
+
+  const items = destinations.map((d) => {
+    const lat = d.coordinates!.lat;
+    const lng = d.coordinates!.lng;
+    const distanceMeters = Math.round(haversineMeters({ lat: query.lat, lng: query.lng }, { lat, lng }));
+    return {
+      id: String(d._id),
+      name: d.name,
+      slug: d.slug,
+      summary: d.summary,
+      category: d.category,
+      area: d.area,
+      address: d.address,
+      images: d.images ?? [],
+      coordinates: { lat, lng },
+      distanceMeters,
+      distanceKm: Number((distanceMeters / 1000).toFixed(1)),
+      canCheckIn: distanceMeters <= MAX_CHECKIN_METERS,
+      isCheckedIn: checkedInIds.has(String(d._id)),
+    };
+  });
+
+  items.sort((a, b) => a.distanceMeters - b.distanceMeters);
+
+  res.set('Cache-Control', 'no-store');
+  res.json({
+    items: items.slice(0, query.limit),
+    totalCount: items.length,
+    inRangeCount: items.filter((i) => i.canCheckIn).length,
+    checkedInCount: items.filter((i) => i.isCheckedIn).length,
+    maxCheckInMeters: MAX_CHECKIN_METERS,
+    userLocation: { lat: query.lat, lng: query.lng },
+  });
 }

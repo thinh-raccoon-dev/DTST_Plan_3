@@ -8,8 +8,8 @@ import {
   LogIn,
   LogOut,
   Menu,
+  MapPinCheck,
   Route,
-  ScanLine,
   Stamp,
   UserRound,
   X,
@@ -25,7 +25,7 @@ import { Logo } from './Logo';
 const mainNav = [
   { to: '/destinations', label: 'Khám phá', icon: Compass },
   { to: '/itinerary/create', label: 'Lập lịch trình', icon: Route },
-  { to: '/scan', label: 'Quét QR', icon: ScanLine },
+  { to: '/check-in', label: 'Điểm danh GPS', icon: MapPinCheck },
   { to: '/passport', label: 'Hộ chiếu', icon: Stamp },
 ];
 

@@ -46,6 +46,8 @@ export function buildApiRouter(): Router {
   // Destinations (published only)
   api.get('/destinations', destinations.listDestinations);
   api.get('/destinations/recommended', destinations.listRecommendedDestinations);
+  api.get('/destinations/nearby', destinations.listNearbyDestinations);
+  api.post('/destinations/:id/check-in', challengeLimiter, destinations.checkInDestinationGps);
   api.get('/destinations/:slug', destinations.getDestination);
   api.get('/destinations/:slug/related', destinations.getRelatedDestinations);
   api.post('/events/destination-view', eventLimiter, destinations.recordDestinationView);
