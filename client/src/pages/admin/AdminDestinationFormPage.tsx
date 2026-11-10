@@ -18,6 +18,7 @@ import { useApiQuery } from '../../hooks/useApiQuery';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { api, toApiError, type ApiError } from '../../lib/api';
 import {
+  AREA_GROUPS,
   AREA_OPTIONS,
   CATEGORY_OPTIONS,
   OPERATIONAL_LABELS,
@@ -46,7 +47,7 @@ const formSchema = z
     summary: z.string().trim().max(300, 'Tối đa 300 ký tự'),
     description: z.string().trim().min(20, 'Mô tả cần ít nhất 20 ký tự').max(8000),
     category: z.enum(['nature', 'eco', 'culture', 'history', 'food', 'local_experience']),
-    area: z.enum(['cao-lanh', 'sa-dec', 'thap-muoi', 'tam-nong', 'lai-vung', 'hong-ngu', 'my-tho', 'cai-be', 'thoi-son']),
+    area: z.string().trim().min(1, 'Vui lòng chọn hoặc nhập khu vực').max(100),
     tagsText: z.string(),
     address: z.string().trim().max(300),
     lat: optionalNumber(8, 24, 'Vĩ độ phải nằm trong khoảng 8–24 (Việt Nam)'),
@@ -295,6 +296,16 @@ function DestinationForm({ initial, id }: { initial?: AdminDestination; id?: str
   const { errors, isSubmitting, isDirty } = form.formState;
   const reg = form.register;
 
+  const watchedArea = form.watch('area');
+  const [isCustomArea, setIsCustomArea] = useState(() => {
+    const initVal = initial?.area ?? 'cao-lanh';
+    return !AREA_OPTIONS.some((o) => o.value === initVal);
+  });
+  const [customAreaText, setCustomAreaText] = useState(() => {
+    const initVal = initial?.area ?? '';
+    return !AREA_OPTIONS.some((o) => o.value === initVal) ? initVal : '';
+  });
+
   const onSubmit = async (values: FormValues) => {
     setFormError(null);
     try {
@@ -340,10 +351,57 @@ function DestinationForm({ initial, id }: { initial?: AdminDestination; id?: str
             {CATEGORY_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
           </Select>
         </FormField>
-        <FormField label="Khu vực" required error={errors.area?.message}>
-          <Select {...reg('area')}>
-            {AREA_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </Select>
+        <FormField label="Khu vực / Tỉnh thành" required error={errors.area?.message}>
+          <div className="space-y-2">
+            <Select
+              value={isCustomArea ? '__custom__' : (AREA_OPTIONS.some((o) => o.value === watchedArea) ? watchedArea : '__custom__')}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val === '__custom__') {
+                  setIsCustomArea(true);
+                  if (customAreaText) {
+                    form.setValue('area', customAreaText, { shouldValidate: true, shouldDirty: true });
+                  }
+                } else {
+                  setIsCustomArea(false);
+                  form.setValue('area', val, { shouldValidate: true, shouldDirty: true });
+                }
+              }}
+            >
+              <optgroup label="✨ Toàn quốc & Tùy chọn mở rộng">
+                <option value="__custom__">✍️ Tự nhập Tỉnh thành / Khu vực mới (Toàn quốc)...</option>
+              </optgroup>
+              {AREA_GROUPS.map((g) => (
+                <optgroup key={g.group} label={g.group}>
+                  {g.options.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </Select>
+
+            {isCustomArea && (
+              <div className="rounded-lg border border-leaf-300 bg-leaf-50/70 p-3 shadow-xs">
+                <label className="mb-1 block text-xs font-semibold text-leaf-900">
+                  Nhập tên Tỉnh thành / Khu vực mới (vd: Cần Thơ, Ninh Kiều, TP.HCM, Hà Nội...):
+                </label>
+                <Input
+                  value={customAreaText}
+                  placeholder="Ví dụ: Cần Thơ hoặc Quận Ninh Kiều..."
+                  onChange={(e) => {
+                    const text = e.target.value;
+                    setCustomAreaText(text);
+                    form.setValue('area', text, { shouldValidate: true, shouldDirty: true });
+                  }}
+                />
+                <p className="mt-1 text-xs text-leaf-700">
+                  Khu vực này sẽ được lưu và liên kết với địa điểm, giúp hệ thống mở rộng không giới hạn ra toàn quốc.
+                </p>
+              </div>
+            )}
+          </div>
         </FormField>
         <FormField label="Tóm tắt" hint="Hiển thị trên thẻ địa điểm, tối đa 300 ký tự." error={errors.summary?.message} className="sm:col-span-2">
           <Textarea rows={2} {...reg('summary')} />

@@ -15,3 +15,5 @@ Thumbs.db
 .obsidian/
 __pycache__/
 *.py[cod]
+server/uploads/*
+!server/uploads/.gitkeep

@@ -36,7 +36,7 @@ const destinationSchema = new Schema(
     description: { type: String, required: true, trim: true, maxlength: 8000 },
     category: { type: String, enum: CATEGORIES, required: true },
     tags: { type: [String], default: [] },
-    area: { type: String, enum: AREAS, required: true },
+    area: { type: String, required: true, trim: true, maxlength: 100 },
     address: { type: String, trim: true, maxlength: 300 },
     coordinates: {
       type: new Schema(

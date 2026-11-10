@@ -18,7 +18,7 @@ export const loginSchema = z
 
 export const profilePreferencesSchema = z
   .object({
-    areas: z.array(z.enum(AREAS)).max(AREAS.length).default([]),
+    areas: z.array(z.string().trim().min(1).max(100)).max(100).default([]),
     interests: z.array(z.enum(INTERESTS)).max(INTERESTS.length).default([]),
     numberOfDays: z.number().int().min(1, 'Tối thiểu 1 ngày.').max(7, 'Tối đa 7 ngày.').default(2),
     hoursPerDay: z.number().min(2, 'Tối thiểu 2 giờ mỗi ngày.').max(12, 'Tối đa 12 giờ mỗi ngày.').default(8),

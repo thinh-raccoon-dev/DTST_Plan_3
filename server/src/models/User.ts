@@ -6,7 +6,7 @@ export type UserRole = (typeof USER_ROLES)[number];
 
 const preferencesSchema = new Schema(
   {
-    areas: { type: [{ type: String, enum: AREAS }], default: [] },
+    areas: { type: [{ type: String, trim: true, maxlength: 100 }], default: [] },
     interests: { type: [{ type: String, enum: INTERESTS }], default: [] },
     numberOfDays: { type: Number, min: 1, max: 7, default: 2 },
     hoursPerDay: { type: Number, min: 2, max: 12, default: 8 },

@@ -11,7 +11,7 @@ import { csvList, httpUrlSchema, nullableText, paginationSchema } from './common
 export const publicDestinationQuerySchema = paginationSchema.extend({
   q: z.string().trim().max(100).optional(),
   category: csvList(z.enum(CATEGORIES)),
-  area: csvList(z.enum(AREAS)),
+  area: csvList(z.string().trim().min(1).max(100)),
   hasActivity: z.enum(['true', 'false']).optional(),
   sort: z.enum(['name', 'recent']).default('name'),
 });
@@ -82,7 +82,7 @@ export const destinationFields = {
   description: z.string().trim().min(20, 'Mô tả cần ít nhất 20 ký tự.').max(8000),
   category: z.enum(CATEGORIES),
   tags: z.array(z.string().trim().min(1).max(40)).max(15).default([]),
-  area: z.enum(AREAS),
+  area: z.string().trim().min(1, 'Khu vực không được để trống').max(100),
   address: nullableText(300),
   coordinates: coordinatesSchema.nullable().optional(),
   images: z.array(imageSchema).max(10).default([]),

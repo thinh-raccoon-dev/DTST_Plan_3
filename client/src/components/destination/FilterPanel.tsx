@@ -1,4 +1,5 @@
-import { RotateCcw } from 'lucide-react';
+import { useState } from 'react';
+import { ChevronDown, ChevronUp, RotateCcw } from 'lucide-react';
 import { AREA_OPTIONS, CATEGORY_OPTIONS } from '../../lib/catalog';
 import type { Area, Category } from '../../types/api';
 import { ChipToggle } from '../ui/Field';
@@ -15,7 +16,13 @@ function toggle<T>(list: T[], value: T, on: boolean): T[] {
 }
 
 export function FilterPanel({ value, onChange }: { value: DestinationFilters; onChange: (next: DestinationFilters) => void }) {
+  const [showAllAreas, setShowAllAreas] = useState(false);
   const active = value.category.length + value.area.length + (value.hasActivity ? 1 : 0);
+
+  const visibleAreas = showAllAreas
+    ? AREA_OPTIONS
+    : AREA_OPTIONS.filter((o, idx) => idx < 12 || value.area.includes(o.value));
+
   return (
     <div className="space-y-5">
       <fieldset>
@@ -34,9 +41,28 @@ export function FilterPanel({ value, onChange }: { value: DestinationFilters; on
         </div>
       </fieldset>
       <fieldset>
-        <legend className="mb-2 text-sm font-semibold text-river-800">Khu vực</legend>
+        <div className="mb-2 flex items-center justify-between">
+          <legend className="text-sm font-semibold text-river-800">Khu vực / Tỉnh thành</legend>
+          {AREA_OPTIONS.length > 12 && (
+            <button
+              type="button"
+              onClick={() => setShowAllAreas(!showAllAreas)}
+              className="inline-flex items-center gap-1 text-xs font-medium text-leaf-700 hover:text-leaf-800"
+            >
+              {showAllAreas ? (
+                <>
+                  <ChevronUp className="size-3.5" /> Thu gọn
+                </>
+              ) : (
+                <>
+                  <ChevronDown className="size-3.5" /> Xem thêm {AREA_OPTIONS.length - 12} tỉnh thành
+                </>
+              )}
+            </button>
+          )}
+        </div>
         <div className="flex flex-wrap gap-2">
-          {AREA_OPTIONS.map((option) => (
+          {visibleAreas.map((option) => (
             <ChipToggle
               key={option.value}
               checked={value.area.includes(option.value)}

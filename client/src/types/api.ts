@@ -1,5 +1,21 @@
 export type Category = 'nature' | 'eco' | 'culture' | 'history' | 'food' | 'local_experience';
-export type Area = 'cao-lanh' | 'sa-dec' | 'thap-muoi' | 'tam-nong' | 'lai-vung' | 'hong-ngu' | 'my-tho' | 'cai-be' | 'thoi-son';
+export type StandardArea =
+  | 'cao-lanh'
+  | 'sa-dec'
+  | 'thap-muoi'
+  | 'tam-nong'
+  | 'lai-vung'
+  | 'hong-ngu'
+  | 'my-tho'
+  | 'cai-be'
+  | 'thoi-son'
+  | 'can-tho'
+  | 'an-giang'
+  | 'kien-giang'
+  | 'tp-ho-chi-minh'
+  | 'da-nang'
+  | 'ha-noi';
+export type Area = StandardArea | (string & {});
 export type VerificationLevel = 'verified' | 'unverified' | 'unknown';
 export type VerificationStatus = 'verified' | 'partially_verified' | 'unverified';
 export type PublicationStatus = 'draft' | 'pending_review' | 'published' | 'hidden';

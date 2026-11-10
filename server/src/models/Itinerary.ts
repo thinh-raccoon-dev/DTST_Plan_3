@@ -40,7 +40,7 @@ const itinerarySchema = new Schema(
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     title: { type: String, required: true, trim: true, maxlength: 120 },
     preferences: {
-      areas: { type: [{ type: String, enum: AREAS }], default: [] },
+      areas: { type: [{ type: String, trim: true, maxlength: 100 }], default: [] },
       interests: { type: [{ type: String, enum: INTERESTS }], default: [] },
       hoursPerDay: { type: Number, min: 1, max: 14 },
     },

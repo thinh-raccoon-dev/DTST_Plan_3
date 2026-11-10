@@ -6,7 +6,7 @@ export const preferencesSchema = z
   .object({
     numberOfDays: z.number().int().min(1, 'Tối thiểu 1 ngày.').max(7, 'Tối đa 7 ngày.'),
     hoursPerDay: z.number().min(2, 'Tối thiểu 2 giờ mỗi ngày.').max(12, 'Tối đa 12 giờ mỗi ngày.'),
-    areas: z.array(z.enum(AREAS)).max(AREAS.length).default([]),
+    areas: z.array(z.string().trim().min(1).max(100)).max(100).default([]),
     interests: z.array(z.enum(INTERESTS)).max(INTERESTS.length).default([]),
     priorityDestinationIds: z.array(objectIdSchema).max(10).default([]),
     excludeDestinationIds: z.array(objectIdSchema).max(30).default([]),

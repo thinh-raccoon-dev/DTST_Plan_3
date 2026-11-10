@@ -98,7 +98,7 @@ function scoreCandidate(destination: PlannerDestination, input: PlannerInput): C
       }
     }
   }
-  if (input.areas.length > 0) reasons.push(`Thuộc khu vực ${AREA_LABELS[destination.area]}`);
+  if (input.areas.length > 0) reasons.push(`Thuộc khu vực ${AREA_LABELS[destination.area] ?? destination.area}`);
 
   const hasDuration = destination.estimatedVisitMinutes !== null;
   if (hasDuration) score += 0.5;
