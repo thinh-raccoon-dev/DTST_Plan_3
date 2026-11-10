@@ -337,18 +337,18 @@ export function DigitalTravelerPass({ user, passport }: TravelerPassProps) {
         // Box 1: Explored
         ctx.font = '500 15px "Be Vietnam Pro", sans-serif';
         ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-        ctx.fillText('ĐIỂM ĐẾN ĐÃ KHÁM PHÁ', 70, statY);
+        ctx.fillText('ĐÃ KHÁM PHÁ', 70, statY);
         ctx.font = 'bold 32px "Be Vietnam Pro", sans-serif';
         ctx.fillStyle = '#6ee7b7';
-        ctx.fillText(`${exploredCount} / ${totalDestinations} Điểm`, 70, statY + 40);
+        ctx.fillText(`${exploredCount} Điểm`, 70, statY + 40);
 
-        // Box 2: Points
+        // Box 2: Points (Experience Points)
         ctx.font = '500 15px "Be Vietnam Pro", sans-serif';
         ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-        ctx.fillText('ĐIỂM THƯỞNG TÍCH LŨY', 450, statY);
+        ctx.fillText('ĐIỂM KINH NGHIỆM', 450, statY);
         ctx.font = 'bold 32px "Be Vietnam Pro", sans-serif';
         ctx.fillStyle = '#fde047';
-        ctx.fillText(`+${formatNumber(points)} ĐIỂM`, 450, statY + 40);
+        ctx.fillText(`+${formatNumber(points)} EXP`, 450, statY + 40);
 
         // Box 3: Badges
         ctx.font = '500 15px "Be Vietnam Pro", sans-serif';
@@ -560,15 +560,15 @@ export function DigitalTravelerPass({ user, passport }: TravelerPassProps) {
 
               <div className="flex items-center gap-4 text-right">
                 <div>
-                  <p className="text-[9px] font-medium text-white/50">ĐÃ KHÁM PHÁ</p>
+                  <p className="text-[9px] font-medium text-white/50 uppercase">ĐÃ KHÁM PHÁ</p>
                   <p className="text-xs sm:text-sm font-extrabold text-teal-300">
-                    {exploredCount}/{totalDestinations}
+                    {exploredCount} điểm
                   </p>
                 </div>
                 <div>
-                  <p className="text-[9px] font-medium text-white/50">ĐIỂM TÍCH LŨY</p>
+                  <p className="text-[9px] font-medium text-white/50 uppercase">ĐIỂM KINH NGHIỆM</p>
                   <p className="text-xs sm:text-sm font-extrabold text-amber-300">
-                    +{formatNumber(points)}
+                    +{formatNumber(points)} EXP
                   </p>
                 </div>
               </div>
