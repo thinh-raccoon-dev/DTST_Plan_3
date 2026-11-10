@@ -154,7 +154,6 @@ export function DigitalTravelerPass({ user, passport }: TravelerPassProps) {
       // 5. Card Header: Brand Title
       ctx.font = 'bold 26px "Be Vietnam Pro", sans-serif';
       ctx.fillStyle = '#f3f4f6';
-      ctx.letterSpacing = '3px';
       ctx.fillText('ĐỒNG THÁP SMART TRAVEL', 70, 85);
 
       ctx.font = '600 16px "Be Vietnam Pro", sans-serif';
@@ -209,6 +208,7 @@ export function DigitalTravelerPass({ user, passport }: TravelerPassProps) {
       ctx.fillStyle = '#ffffff';
       ctx.letterSpacing = '4px';
       ctx.fillText(passId, 70, 310);
+      ctx.letterSpacing = '0px';
 
       // 10. Traveler Name
       ctx.font = '500 15px "Be Vietnam Pro", sans-serif';
@@ -384,10 +384,10 @@ export function DigitalTravelerPass({ user, passport }: TravelerPassProps) {
             {/* Top row: Brand & Tier Badge */}
             <div className="relative z-10 flex items-start justify-between">
               <div>
-                <p className="text-[11px] font-extrabold tracking-widest uppercase text-white/90">
+                <p className="text-[11px] font-extrabold tracking-normal uppercase text-white/90">
                   ĐỒNG THÁP SMART TRAVEL
                 </p>
-                <p className="text-[9px] font-semibold tracking-wider text-teal-300/90 uppercase">
+                <p className="text-[9px] font-semibold tracking-normal text-teal-300/90 uppercase">
                   OFFICIAL TRAVELER PASS · HỘ CHIẾU SỐ
                 </p>
               </div>
@@ -480,7 +480,7 @@ export function DigitalTravelerPass({ user, passport }: TravelerPassProps) {
             {/* Signature Panel */}
             <div className="mt-2 flex items-center justify-between rounded-lg bg-sand-100/90 px-3 py-1.5 text-river-900 shadow-sm">
               <span className="font-mono text-[9px] text-river-500">CHỮ KÝ ĐIỆN TỬ:</span>
-              <span className="font-serif italic text-xs font-bold text-leaf-800">
+              <span className="font-sans font-extrabold italic text-xs tracking-normal text-leaf-800">
                 Đồng Tháp Smart Travel
               </span>
               <span className="font-mono text-[9px] font-bold text-river-700">CVV: 868</span>
@@ -527,8 +527,8 @@ export function DigitalTravelerPass({ user, passport }: TravelerPassProps) {
 
             {/* Culture Motto Footer */}
             <div className="mt-auto pt-2 border-t border-white/10 text-center">
-              <p className="font-serif italic text-[11px] text-teal-200">
-                "Về Đồng Tháp – Thuần khiết như hồn sen, Đậm đà tình đất phương Nam"
+              <p className="font-sans font-medium italic text-xs tracking-normal text-teal-200">
+                &ldquo;Về Đồng Tháp – Thuần khiết như hồn sen, Đậm đà tình đất phương Nam&rdquo;
               </p>
             </div>
           </div>
