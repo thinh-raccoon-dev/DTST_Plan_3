@@ -1,6 +1,7 @@
 import clsx from 'clsx';
 import {
   AlertCircle,
+  BarChart3,
   CheckCircle2,
   Clock,
   ExternalLink,
@@ -12,6 +13,7 @@ import {
   MessageSquare,
   PenLine,
   Phone,
+  PieChart as PieIcon,
   Plus,
   Printer,
   QrCode,
@@ -19,10 +21,26 @@ import {
   Sparkles,
   Star,
   Ticket,
+  TrendingUp,
   Trophy,
 } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Legend,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 import { AdminPageHeader } from '../../components/layout/AdminLayout';
 import { Badge } from '../../components/ui/Badge';
 import { Button, ButtonLink } from '../../components/ui/Button';
@@ -349,8 +367,8 @@ export function PartnerDashboardPage() {
               : 'text-river-600 hover:text-river-900',
           )}
         >
-          <FileSpreadsheet className="size-4" />
-          Bảng tổng hợp dữ liệu KDL
+          <BarChart3 className="size-4" />
+          Biểu đồ & Báo cáo tổng hợp KDL
         </button>
 
         <button
@@ -410,9 +428,245 @@ export function PartnerDashboardPage() {
         </button>
       </div>
 
-      {/* Tab 0: Bảng tổng hợp dữ liệu tổng quát của địa điểm đối tác */}
+      {/* Tab 0: Bảng tổng hợp dữ liệu tổng quát & Biểu đồ trực quan */}
       {activeTab === 'summary' && (
         <div className="mt-6 space-y-6">
+          {/* Chart 1: Xu Hướng Lưu Lượng & Check-in (Area Chart) */}
+          <Card className="p-5 sm:p-6 shadow-sm border border-sand-300">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-sand-200 pb-3">
+              <div>
+                <h3 className="font-bold text-base text-river-900 flex items-center gap-2">
+                  <TrendingUp className="size-5 text-leaf-700" />
+                  Xu hướng Lưu lượng Quan tâm & Du khách Check-in (7 ngày qua)
+                </h3>
+                <p className="text-xs text-river-600">
+                  Đối chiếu giữa lượng khách quan tâm tìm hiểu trên ứng dụng và du khách thực tế check-in tại KDL
+                </p>
+              </div>
+              <div className="flex items-center gap-3 text-xs">
+                <span className="flex items-center gap-1.5 font-medium text-river-700">
+                  <span className="size-3 rounded-full bg-leaf-600" /> Lượt xem trang KDL
+                </span>
+                <span className="flex items-center gap-1.5 font-medium text-river-700">
+                  <span className="size-3 rounded-full bg-teal-600" /> Check-in thực địa
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-4 h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={data?.chartAnalytics?.dailyTrend || []} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="viewsGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#15803d" stopOpacity={0.4} />
+                      <stop offset="95%" stopColor="#15803d" stopOpacity={0.0} />
+                    </linearGradient>
+                    <linearGradient id="checkInGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#0d9488" stopOpacity={0.5} />
+                      <stop offset="95%" stopColor="#0d9488" stopOpacity={0.0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1ece1" />
+                  <XAxis dataKey="label" fontSize={12} stroke="#64748b" />
+                  <YAxis allowDecimals={false} fontSize={12} stroke="#64748b" />
+                  <Tooltip
+                    contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}
+                    formatter={(val, name) => [
+                      `${val} lượt`,
+                      name === 'views' ? 'Lượt xem trang KDL' : 'Check-in thực địa',
+                    ]}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="views"
+                    name="views"
+                    stroke="#15803d"
+                    strokeWidth={2.5}
+                    fillOpacity={1}
+                    fill="url(#viewsGrad)"
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="checkIns"
+                    name="checkIns"
+                    stroke="#0d9488"
+                    strokeWidth={2.5}
+                    fillOpacity={1}
+                    fill="url(#checkInGrad)"
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </Card>
+
+          {/* Row 2: CSAT Histogram & Check-in Source Donut Chart */}
+          <div className="grid gap-6 lg:grid-cols-2">
+            {/* Chart 2: CSAT Rating Histogram */}
+            <Card className="p-5 sm:p-6 shadow-sm border border-sand-300 flex flex-col justify-between">
+              <div className="border-b border-sand-200 pb-3">
+                <h3 className="font-bold text-base text-river-900 flex items-center gap-2">
+                  <Star className="size-5 fill-amber-400 text-amber-500" />
+                  Chỉ Số Hài Lòng Du Khách (CSAT) & Phân Bổ Số Sao
+                </h3>
+                <p className="text-xs text-river-600">Thống kê xếp hạng thực tế từ các đánh giá du khách đã duyệt</p>
+              </div>
+
+              <div className="mt-4 flex items-center gap-6">
+                <div className="text-center shrink-0">
+                  <div className="text-4xl font-black text-amber-600">
+                    {metrics?.averageRating ?? 5.0}
+                  </div>
+                  <div className="mt-1 flex justify-center text-amber-400">
+                    {[1, 2, 3, 4, 5].map((s) => (
+                      <Star key={s} className="size-4 fill-amber-400 text-amber-500" />
+                    ))}
+                  </div>
+                  <p className="mt-1 text-xs text-river-500">
+                    {metrics?.totalReviews ?? 0} đánh giá
+                  </p>
+                </div>
+
+                <div className="flex-1 space-y-2">
+                  {(data?.chartAnalytics?.ratingDistribution || []).map((r) => (
+                    <div key={r.stars} className="flex items-center gap-2 text-xs">
+                      <span className="w-10 font-semibold text-river-700">{r.stars} ★</span>
+                      <div className="relative h-2.5 flex-1 overflow-hidden rounded-full bg-sand-200">
+                        <div
+                          className="h-full rounded-full bg-amber-500 transition-all duration-500"
+                          style={{ width: `${r.percentage}%` }}
+                        />
+                      </div>
+                      <span className="w-8 text-right font-mono text-river-500">{r.count}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-4 rounded-lg bg-sand-50 p-3 text-xs text-river-600 flex items-center justify-between">
+                <span>Tỷ lệ đánh giá tích cực (4–5★):</span>
+                <strong className="text-leaf-800 text-sm">
+                  {Math.round(
+                    (((data?.chartAnalytics?.ratingDistribution || [])
+                      .filter((r) => r.stars >= 4)
+                      .reduce((sum, r) => sum + r.count, 0)) /
+                      (metrics?.totalReviews || 1)) *
+                      100,
+                  )}%
+                </strong>
+              </div>
+            </Card>
+
+            {/* Chart 3: Check-in Sources Donut Chart */}
+            <Card className="p-5 sm:p-6 shadow-sm border border-sand-300">
+              <div className="border-b border-sand-200 pb-3">
+                <h3 className="font-bold text-base text-river-900 flex items-center gap-2">
+                  <PieIcon className="size-5 text-teal-600" />
+                  Cơ Cấu Phương Thức Du Khách Check-in
+                </h3>
+                <p className="text-xs text-river-600">Tỷ lệ tương tác thực địa qua GPS vệ tinh và trạm quét mã QR</p>
+              </div>
+
+              <div className="mt-4 h-56 flex items-center justify-center">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={data?.chartAnalytics?.checkInSources || []}
+                      innerRadius={55}
+                      outerRadius={80}
+                      paddingAngle={4}
+                      dataKey="value"
+                    >
+                      {(data?.chartAnalytics?.checkInSources || []).map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      formatter={(val) => [`${val} lượt`, '']}
+                      contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0' }}
+                    />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            </Card>
+          </div>
+
+          {/* Row 3: Hourly Traffic & Challenges Performance */}
+          <div className="grid gap-6 lg:grid-cols-2">
+            {/* Chart 4: Hourly Peak Times */}
+            <Card className="p-5 sm:p-6 shadow-sm border border-sand-300">
+              <div className="border-b border-sand-200 pb-3">
+                <h3 className="font-bold text-base text-river-900 flex items-center gap-2">
+                  <Clock className="size-5 text-indigo-600" />
+                  Khung Giờ Du Khách Ghé Thăm Đông Nhất (Peak Hours)
+                </h3>
+                <p className="text-xs text-river-600">
+                  Phân bổ lưu lượng khách theo khung giờ giúp KDL chủ động nhân lực đón tiếp
+                </p>
+              </div>
+
+              <div className="mt-4 h-56">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={data?.chartAnalytics?.hourlyTraffic || []} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1ece1" vertical={false} />
+                    <XAxis dataKey="period" fontSize={11} stroke="#64748b" />
+                    <YAxis allowDecimals={false} fontSize={11} stroke="#64748b" />
+                    <Tooltip
+                      formatter={(val) => [`${val} lượt khách`, 'Lưu lượng']}
+                      contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0' }}
+                    />
+                    <Bar dataKey="count" fill="#4f46e5" radius={[4, 4, 0, 0]} maxBarSize={36} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </Card>
+
+            {/* Chart 5: Challenges Completions */}
+            <Card className="p-5 sm:p-6 shadow-sm border border-sand-300">
+              <div className="border-b border-sand-200 pb-3">
+                <h3 className="font-bold text-base text-river-900 flex items-center gap-2">
+                  <Trophy className="size-5 text-lotus-600" />
+                  Hiệu Suất Hoàn Thành Thử Thách Văn Hóa Tại KDL
+                </h3>
+                <p className="text-xs text-river-600">Đo lường mức độ tương tác và giải đúng câu đố của du khách</p>
+              </div>
+
+              <div className="mt-4 h-56">
+                {data?.chartAnalytics?.challengesPerformance && data.chartAnalytics.challengesPerformance.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={data.chartAnalytics.challengesPerformance}
+                      layout="vertical"
+                      margin={{ top: 10, right: 20, left: 10, bottom: 0 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f1ece1" horizontal={false} />
+                      <XAxis type="number" allowDecimals={false} fontSize={11} stroke="#64748b" />
+                      <YAxis
+                        type="category"
+                        dataKey="title"
+                        width={120}
+                        fontSize={11}
+                        stroke="#64748b"
+                        tickFormatter={(v: string) => (v.length > 15 ? `${v.slice(0, 14)}…` : v)}
+                      />
+                      <Tooltip
+                        formatter={(val) => [`${val} lượt giải đúng`, 'Kết quả']}
+                        contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0' }}
+                      />
+                      <Bar dataKey="completions" fill="#db2777" radius={[0, 4, 4, 0]} maxBarSize={24} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex h-full flex-col items-center justify-center text-center text-river-400">
+                    <Trophy className="size-8 mb-1 opacity-50" />
+                    <p className="text-xs">Chưa có thử thách nào được tạo</p>
+                  </div>
+                )}
+              </div>
+            </Card>
+          </div>
+
+          {/* Detailed Specifications Table */}
           <Card className="overflow-hidden border border-sand-300 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-4 border-b border-sand-200 bg-gradient-to-r from-leaf-900 via-leaf-800 to-river-900 px-6 py-4 text-white">
               <div className="flex items-center gap-3">

@@ -978,6 +978,13 @@ export interface PartnerOverviewResponse {
     totalCompletedChallenges: number;
     totalQrs: number;
   };
+  chartAnalytics?: {
+    dailyTrend: Array<{ date: string; label: string; views: number; checkIns: number }>;
+    ratingDistribution: Array<{ stars: number; label: string; count: number; percentage: number }>;
+    checkInSources: Array<{ name: string; value: number; color: string }>;
+    hourlyTraffic: Array<{ period: string; count: number }>;
+    challengesPerformance: Array<{ id: string; title: string; rewardPoints: number; completions: number }>;
+  };
   recentCheckIns?: Array<{
     id: string;
     visitorName: string;
