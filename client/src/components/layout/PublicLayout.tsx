@@ -8,7 +8,7 @@ import { PetalBackdrop } from './PetalBackdrop';
 const CONTACT = {
   phone: '0942067646',
   phoneDisplay: '0942 067 646',
-  email: 'minhuyenn1101@gmail.com',
+  email: 'support@dongthapgo.com',
   fanpage: 'https://www.facebook.com/share/1CCKSRvhPa/?mibextid=wwXIfr',
 };
 

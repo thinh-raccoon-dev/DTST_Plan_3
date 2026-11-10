@@ -58,7 +58,7 @@ export function PrivacyPage() {
       <ul>
         <li><strong>Tên nền tảng:</strong> Đồng Tháp Smart Travel (Nền tảng Du lịch Thông minh & Hộ chiếu Trải nghiệm số)</li>
         <li><strong>Đơn vị quản lý & phát triển:</strong> Đội ngũ Kỹ thuật & Bản quyền Công nghệ DTST Solution</li>
-        <li><strong>Email tiếp nhận hỗ trợ bảo vệ dữ liệu:</strong> <span className="font-semibold text-leaf-700">minhuyenn1101@gmail.com</span> / <span className="font-semibold text-leaf-700">hotro@dongthaptravel.vn</span></li>
+        <li><strong>Email tiếp nhận hỗ trợ bảo vệ dữ liệu:</strong> <a href="mailto:support@dongthapgo.com" className="font-semibold text-leaf-700 underline">support@dongthapgo.com</a></li>
         <li><strong>Đường dây nóng (Hotline):</strong> 0942 067 646</li>
       </ul>
 
@@ -224,7 +224,7 @@ export function TermsPage() {
       <ul>
         <li><strong>Đơn vị điều hành:</strong> Ban Quản trị Nền tảng Đồng Tháp Smart Travel</li>
         <li><strong>Đường dây nóng:</strong> 0942 067 646 (Hỗ trợ 24/7)</li>
-        <li><strong>Email:</strong> minhuyenn1101@gmail.com / hotro@dongthaptravel.vn</li>
+        <li><strong>Email:</strong> <a href="mailto:support@dongthapgo.com" className="font-semibold text-leaf-700 underline">support@dongthapgo.com</a></li>
         <li><strong>Kênh thông tin chính thức:</strong> <a href="https://www.facebook.com/share/1CCKSRvhPa/?mibextid=wwXIfr" target="_blank" rel="noopener noreferrer" className="font-semibold text-leaf-700 underline">Fanpage Đồng Tháp Smart Travel</a></li>
       </ul>
     </Prose>
