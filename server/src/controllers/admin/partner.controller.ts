@@ -60,7 +60,7 @@ export async function getPartnerOverview(req: Request, res: Response) {
     // Page views
     AnalyticsEventModel.countDocuments({
       destinationId: destId,
-      eventType: 'destination_view',
+      eventType: { $in: ['destination_page_view', 'qr_landing_view'] },
     }),
 
     // Check-in entries (GPS or QR)
@@ -139,7 +139,7 @@ export async function getPartnerOverview(req: Request, res: Response) {
       {
         $match: {
           destinationId: destId,
-          eventType: 'destination_view',
+          eventType: { $in: ['destination_page_view', 'qr_landing_view'] },
           timestamp: { $gte: sevenDaysAgo },
         },
       },
