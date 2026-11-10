@@ -7,6 +7,7 @@ import * as adminDestinations from '../controllers/admin/destinations.controller
 import * as adminItineraries from '../controllers/admin/itineraries.controller.js';
 import * as adminPassportLogs from '../controllers/admin/passportLogs.controller.js';
 import * as adminQr from '../controllers/admin/qr.controller.js';
+import * as adminReviews from '../controllers/admin/reviews.controller.js';
 import * as adminSystem from '../controllers/admin/system.controller.js';
 import * as adminUsers from '../controllers/admin/users.controller.js';
 import * as auth from '../controllers/auth.controller.js';
@@ -57,6 +58,7 @@ export function buildApiRouter(): Router {
   api.get('/destinations/:idOrSlug/reviews', reviews.listReviews);
   api.post('/destinations/:idOrSlug/reviews', eventLimiter, reviews.createReview);
   api.post('/reviews/:reviewId/like', eventLimiter, reviews.likeReview);
+  api.post('/reviews/:reviewId/report', eventLimiter, reviews.reportReview);
 
   // Trip Planner V9 (AI & Manual + Valhalla routing + Replan)
   api.get('/trip-planner/health', itineraries.getTripPlannerHealth);
@@ -100,6 +102,13 @@ export function buildApiRouter(): Router {
   admin.get('/destinations/:id', adminDestinations.getAdminDestination);
   admin.patch('/destinations/:id', adminDestinations.updateDestination);
   admin.delete('/destinations/:id', adminDestinations.deleteDestination);
+
+  // Reviews management (Staff: Admin & Partner)
+  admin.get('/reviews', adminReviews.listAdminReviews);
+  admin.post('/reviews/:id/respond', adminReviews.respondReview);
+  admin.delete('/reviews/:id/respond', adminReviews.deleteReviewResponse);
+  admin.patch('/reviews/:id/status', adminReviews.updateReviewStatus);
+  admin.delete('/reviews/:id', adminReviews.deleteReview);
 
   // Badges & Achievements management (Admin only)
   admin.get('/badges', requireAdmin, adminBadges.listBadges);

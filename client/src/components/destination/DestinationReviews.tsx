@@ -3,6 +3,7 @@ import {
   Award,
   CheckCircle2,
   Filter,
+  Flag,
   MessageSquare,
   PenLine,
   Send,
@@ -21,6 +22,7 @@ import { toast } from '../../stores/toastStore';
 import type { DestinationReviewItem, DestinationReviewsResponse } from '../../types/api';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
+import { Modal } from '../ui/Modal';
 
 interface DestinationReviewsProps {
   destinationId: string;
@@ -85,6 +87,12 @@ export function DestinationReviews({ destinationSlug, destinationName }: Destina
 
   // Local likes tracker for instantaneous feedback
   const [likedReviews, setLikedReviews] = useState<Record<string, number>>({});
+
+  // Report modal state
+  const [reportingReview, setReportingReview] = useState<DestinationReviewItem | null>(null);
+  const [reportReason, setReportReason] = useState('Nội dung xúc phạm, sai sự thật hoặc dùng từ ngữ thô tục');
+  const [customReportReason, setCustomReportReason] = useState('');
+  const [isSubmittingReport, setIsSubmittingReport] = useState(false);
 
   // Query reviews from API
   const { data, loading, reload } = useApiQuery<DestinationReviewsResponse>(
@@ -173,6 +181,27 @@ export function DestinationReviews({ destinationSlug, destinationName }: Destina
       toast.error('Lỗi gửi đánh giá', msg);
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleSubmitReport = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reportingReview) return;
+    const finalReason = reportReason === 'Khác' ? customReportReason.trim() : reportReason;
+    if (!finalReason) {
+      toast.error('Vui lòng nhập lý do báo cáo.');
+      return;
+    }
+    setIsSubmittingReport(true);
+    try {
+      await api.post(`/reviews/${reportingReview.id}/report`, { reason: finalReason });
+      toast.success('Đã gửi báo cáo vi phạm!', 'Ban Quản trị hệ thống sẽ sớm duyệt lại đánh giá này.');
+      setReportingReview(null);
+      setCustomReportReason('');
+    } catch {
+      toast.error('Không thể gửi báo cáo vào lúc này.');
+    } finally {
+      setIsSubmittingReport(false);
     }
   };
 
@@ -572,10 +601,67 @@ export function DestinationReviews({ destinationSlug, destinationName }: Destina
               destinationName={destinationName}
               likedLikesCount={likedReviews[review.id]}
               onLike={() => handleLike(review.id, likedReviews[review.id] ?? review.likesCount)}
+              onReport={() => setReportingReview(review)}
             />
           ))
         )}
       </div>
+
+      {/* Report Modal */}
+      <Modal
+        open={Boolean(reportingReview)}
+        title="Báo cáo đánh giá vi phạm"
+        onClose={() => setReportingReview(null)}
+      >
+        {reportingReview && (
+          <form onSubmit={handleSubmitReport} className="p-5 space-y-4">
+            <p className="text-xs text-river-600">
+              Hãy giúp chúng tôi xây dựng cộng đồng du lịch Đồng Tháp văn minh. Vui lòng cho biết lý do bạn báo cáo nhận xét của <strong>{reportingReview.authorName}</strong>:
+            </p>
+
+            <div className="space-y-2">
+              {[
+                'Nội dung xúc phạm, sai sự thật hoặc dùng từ ngữ thô tục',
+                'Thông tin sai sự thật về điểm đến / dịch vụ',
+                'Quảng cáo thương mại hoặc spam không liên quan',
+                'Trải nghiệm giả mạo, chưa từng đến thực tế',
+                'Khác',
+              ].map((reason) => (
+                <label key={reason} className="flex items-center gap-2.5 text-xs text-river-800 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="report-reason"
+                    checked={reportReason === reason}
+                    onChange={() => setReportReason(reason)}
+                    className="text-leaf-600 focus:ring-leaf-500"
+                  />
+                  <span>{reason}</span>
+                </label>
+              ))}
+            </div>
+
+            {reportReason === 'Khác' && (
+              <textarea
+                rows={3}
+                value={customReportReason}
+                onChange={(e) => setCustomReportReason(e.target.value)}
+                placeholder="Nhập chi tiết lý do báo cáo..."
+                className="w-full rounded-control border border-sand-200 bg-white p-2.5 text-xs text-river-800 focus:border-leaf-600 focus:outline-none"
+                required
+              />
+            )}
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-sand-200">
+              <Button type="button" variant="secondary" size="sm" onClick={() => setReportingReview(null)}>
+                Hủy
+              </Button>
+              <Button type="submit" variant="primary" size="sm" loading={isSubmittingReport} icon={<Flag className="size-3.5" />}>
+                Gửi báo cáo
+              </Button>
+            </div>
+          </form>
+        )}
+      </Modal>
     </Card>
   );
 }
@@ -585,9 +671,10 @@ interface ReviewCardProps {
   destinationName: string;
   likedLikesCount?: number;
   onLike: () => void;
+  onReport: () => void;
 }
 
-function ReviewCard({ review, destinationName, likedLikesCount, onLike }: ReviewCardProps) {
+function ReviewCard({ review, destinationName, likedLikesCount, onLike, onReport }: ReviewCardProps) {
   const displayLikes = likedLikesCount !== undefined ? likedLikesCount : review.likesCount;
   const isLiked = likedLikesCount !== undefined;
 
@@ -653,22 +740,35 @@ function ReviewCard({ review, destinationName, likedLikesCount, onLike }: Review
           </div>
         </div>
 
-        {/* Action: Like / Helpful Button */}
-        <button
-          type="button"
-          onClick={onLike}
-          className={clsx(
-            'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-all',
-            isLiked
-              ? 'border-leaf-300 bg-leaf-50 text-leaf-700 font-semibold'
-              : 'border-sand-200 bg-white text-river-600 hover:bg-sand-50 hover:text-river-900',
-          )}
-          title="Bình chọn nhận xét hữu ích"
-        >
-          <ThumbsUp className={clsx('size-3.5', isLiked && 'fill-leaf-600 text-leaf-700')} />
-          <span>Hữu ích</span>
-          {displayLikes > 0 && <span className="font-semibold">({displayLikes})</span>}
-        </button>
+        <div className="flex items-center gap-1.5">
+          {/* Action: Like / Helpful Button */}
+          <button
+            type="button"
+            onClick={onLike}
+            className={clsx(
+              'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-all',
+              isLiked
+                ? 'border-leaf-300 bg-leaf-50 text-leaf-700 font-semibold'
+                : 'border-sand-200 bg-white text-river-600 hover:bg-sand-50 hover:text-river-900',
+            )}
+            title="Bình chọn nhận xét hữu ích"
+          >
+            <ThumbsUp className={clsx('size-3.5', isLiked && 'fill-leaf-600 text-leaf-700')} />
+            <span>Hữu ích</span>
+            {displayLikes > 0 && <span className="font-semibold">({displayLikes})</span>}
+          </button>
+
+          {/* Action: Report button */}
+          <button
+            type="button"
+            onClick={onReport}
+            className="rounded-full p-1.5 text-river-400 transition-colors hover:bg-red-50 hover:text-red-600"
+            title="Báo cáo đánh giá vi phạm / sai sự thật"
+            aria-label="Báo cáo đánh giá vi phạm"
+          >
+            <Flag className="size-3.5" />
+          </button>
+        </div>
       </div>
 
       {/* Tags Chips */}
@@ -708,7 +808,7 @@ function ReviewCard({ review, destinationName, likedLikesCount, onLike }: Review
             "{review.response.content}"
           </p>
           <p className="mt-1.5 text-[11px] font-medium text-river-500">
-            — {review.response.author}
+            — {review.response.responderName || review.response.author || 'Ban Quản lý'}
           </p>
         </div>
       )}

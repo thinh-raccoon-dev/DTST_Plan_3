@@ -79,6 +79,7 @@ const router = createBrowserRouter([
               { index: true, lazy: lazyPage(() => import('./pages/admin/AdminDashboardPage'), (m) => m.AdminDashboardPage) },
               { path: 'analytics', lazy: lazyPage(() => import('./pages/admin/AdminDashboardPage'), (m) => m.AdminDashboardPage) },
               { path: 'destinations', lazy: lazyPage(() => import('./pages/admin/AdminDestinationsPage'), (m) => m.AdminDestinationsPage) },
+              { path: 'reviews', lazy: lazyPage(() => import('./pages/admin/AdminReviewsPage'), (m) => m.AdminReviewsPage) },
               { path: 'destinations/new', lazy: lazyPage(() => import('./pages/admin/AdminDestinationFormPage'), (m) => m.AdminDestinationFormPage) },
               { path: 'destinations/:id/edit', lazy: lazyPage(() => import('./pages/admin/AdminDestinationFormPage'), (m) => m.AdminDestinationFormPage) },
               { path: 'badges', lazy: lazyPage(() => import('./pages/admin/AdminBadgesPage'), (m) => m.AdminBadgesPage) },

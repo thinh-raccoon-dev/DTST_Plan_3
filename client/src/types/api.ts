@@ -882,7 +882,8 @@ export interface DestinationReviewItem {
   isVerifiedVisitor: boolean;
   likesCount: number;
   response?: {
-    author: string;
+    author?: string;
+    responderName?: string;
     content: string;
     respondedAt: string;
   };
@@ -900,5 +901,49 @@ export interface DestinationReviewsResponse {
   stats: DestinationReviewsStats;
   items: DestinationReviewItem[];
 }
+
+export interface AdminReviewItem {
+  id: string;
+  destination: { id: string; name: string; slug: string; area?: string } | null;
+  authorName: string;
+  authorAvatar?: string;
+  authorTier?: string;
+  rating: number;
+  content: string;
+  tags: string[];
+  isVerifiedVisitor: boolean;
+  likesCount: number;
+  status: 'published' | 'hidden' | 'flagged';
+  isFlagged: boolean;
+  reportReason?: string;
+  reportCount: number;
+  reportedAt?: string;
+  response?: {
+    content: string;
+    respondedAt: string;
+    responderName?: string;
+    responderId?: string;
+  };
+  createdAt: string;
+}
+
+export interface AdminReviewsStats {
+  total: number;
+  pendingReports: number;
+  hidden: number;
+  responded: number;
+  averageRating: number;
+}
+
+export interface AdminReviewsResponse {
+  stats: AdminReviewsStats;
+  items: AdminReviewItem[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+  managedDestinations: Array<{ id: string; name: string; slug: string }>;
+}
+
 
 

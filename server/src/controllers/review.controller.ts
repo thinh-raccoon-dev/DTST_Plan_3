@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { DestinationModel } from '../models/Destination.js';
 import { PassportEntryModel } from '../models/PassportEntry.js';
 import { ReviewModel } from '../models/Review.js';
-import { createReviewSchema, reviewQuerySchema } from '../schemas/review.schemas.js';
+import { createReviewSchema, reportReviewSchema, reviewQuerySchema } from '../schemas/review.schemas.js';
 import { PUBLIC_DESTINATION_FILTER } from '../services/destination.service.js';
 import { identityFromRequest } from '../services/identity.js';
 import { notFound } from '../utils/errors.js';
@@ -197,3 +197,29 @@ export async function likeReview(req: Request, res: Response) {
 
   res.json({ success: true, likesCount: updated.likesCount });
 }
+
+export async function reportReview(req: Request, res: Response) {
+  const { reviewId } = reviewIdParamSchema.parse(req.params);
+  const body = reportReviewSchema.parse(req.body);
+
+  if (!Types.ObjectId.isValid(reviewId)) {
+    throw notFound('Đánh giá không tồn tại.', 'REVIEW_NOT_FOUND');
+  }
+
+  const review = await ReviewModel.findById(reviewId);
+  if (!review) {
+    throw notFound('Đánh giá không tồn tại.', 'REVIEW_NOT_FOUND');
+  }
+
+  review.isFlagged = true;
+  review.reportCount = (review.reportCount || 0) + 1;
+  review.reportReason = body.reason;
+  review.reportedAt = new Date();
+  await review.save();
+
+  res.json({
+    success: true,
+    message: 'Cảm ơn bạn đã gửi báo cáo. Ban quản trị hệ thống sẽ sớm duyệt lại đánh giá này.',
+  });
+}
+

@@ -8,6 +8,7 @@ import {
   LogOut,
   MapPinned,
   Menu,
+  MessageSquare,
   QrCode,
   Route,
   Settings,
@@ -24,6 +25,7 @@ import { Logo } from './Logo';
 const allItems = [
   { to: '/admin', label: 'Tổng quan', icon: BarChart3, end: true, adminOnly: false },
   { to: '/admin/destinations', label: 'Địa điểm', icon: MapPinned, adminOnly: false },
+  { to: '/admin/reviews', label: 'Đánh giá & Phản hồi', icon: MessageSquare, adminOnly: false },
   { to: '/admin/itineraries', label: 'Lịch trình du khách', icon: Route, adminOnly: true },
   { to: '/admin/passport-logs', label: 'Nhật ký Check-in', icon: FileText, adminOnly: true },
   { to: '/admin/badges', label: 'Huy hiệu & Thành tựu', icon: Award, adminOnly: true },
