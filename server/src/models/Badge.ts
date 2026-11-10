@@ -55,11 +55,14 @@ const badgeSchema = new Schema(
       default: 'active',
       required: true,
     },
+    destinationId: { type: Schema.Types.ObjectId, ref: 'Destination' },
+    createdBy: { type: Schema.Types.ObjectId, ref: 'User' },
   },
   { timestamps: true },
 );
 
 badgeSchema.index({ status: 1 });
+badgeSchema.index({ destinationId: 1 });
 
 export type Badge = InferSchemaType<typeof badgeSchema>;
 export const BadgeModel = model('Badge', badgeSchema, 'badges');

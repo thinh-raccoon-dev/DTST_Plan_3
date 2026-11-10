@@ -1029,7 +1029,7 @@ export interface PartnerOverviewResponse {
     completions: number;
     createdAt: string;
   }>;
-  qrs?: Array<{
+    qrs?: Array<{
     id: string;
     code: string;
     label: string;
@@ -1038,6 +1038,43 @@ export interface PartnerOverviewResponse {
     status: string;
     createdAt: string;
   }>;
+  badges?: Array<{
+    id: string;
+    key: string;
+    name: string;
+    description: string;
+    icon: string;
+    criteriaType: string;
+    targetCount: number;
+    rewardPoints: number;
+    status: 'active' | 'inactive';
+    createdAt: string;
+  }>;
+}
+
+export interface AuditLog {
+  id: string;
+  actorId: string | null;
+  actorEmail: string;
+  actorName: string;
+  actorRole: 'admin' | 'partner' | 'tourist' | 'system';
+  action: string;
+  targetType: string;
+  targetId: string;
+  targetName: string;
+  destinationId: string | null;
+  details: Record<string, unknown>;
+  ipAddress?: string;
+  status: 'success' | 'failed';
+  createdAt: string;
+}
+
+export interface AuditLogStats {
+  totalLogs: number;
+  todayLogs: number;
+  partnerToday: number;
+  adminToday: number;
+  topActions: Array<{ action: string; count: number }>;
 }
 
 

@@ -4,6 +4,7 @@ import { isValidObjectId } from 'mongoose';
 import { ItineraryModel } from '../../models/Itinerary.js';
 import { PassportEntryModel } from '../../models/PassportEntry.js';
 import { UserModel } from '../../models/User.js';
+import { logAuditEvent } from '../../services/audit.service.js';
 import {
   createAdminUserSchema,
   resetUserPasswordSchema,
@@ -128,6 +129,15 @@ export async function createUser(req: Request, res: Response) {
     status: 'active',
   });
 
+  await logAuditEvent({
+    req,
+    action: 'user.create',
+    targetType: 'user',
+    targetId: user._id,
+    targetName: user.displayName || user.email,
+    details: { email: user.email, role: user.role },
+  });
+
   res.status(201).json({
     user: {
       id: String(user._id),
@@ -153,6 +163,15 @@ export async function updateUserRole(req: Request, res: Response) {
   const user = await UserModel.findByIdAndUpdate(id, { $set: { role: input.role } }, { new: true }).lean();
   if (!user) throw notFound('Không tìm thấy người dùng.');
 
+  await logAuditEvent({
+    req,
+    action: 'user.role.update',
+    targetType: 'user',
+    targetId: user._id,
+    targetName: user.displayName || user.email,
+    details: { email: user.email, newRole: user.role },
+  });
+
   res.json({
     user: {
       id: String(user._id),
@@ -176,6 +195,15 @@ export async function updateUserStatus(req: Request, res: Response) {
 
   const user = await UserModel.findByIdAndUpdate(id, { $set: { status: input.status } }, { new: true }).lean();
   if (!user) throw notFound('Không tìm thấy người dùng.');
+
+  await logAuditEvent({
+    req,
+    action: 'user.status.update',
+    targetType: 'user',
+    targetId: user._id,
+    targetName: user.displayName || user.email,
+    details: { email: user.email, newStatus: user.status },
+  });
 
   res.json({
     user: {

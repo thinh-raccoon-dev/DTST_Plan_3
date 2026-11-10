@@ -96,6 +96,7 @@ const router = createBrowserRouter([
               { path: 'users', lazy: lazyPage(() => import('./pages/admin/AdminUsersPage'), (m) => m.AdminUsersPage) },
               { path: 'itineraries', lazy: lazyPage(() => import('./pages/admin/AdminItinerariesPage'), (m) => m.AdminItinerariesPage) },
               { path: 'passport-logs', lazy: lazyPage(() => import('./pages/admin/AdminPassportLogsPage'), (m) => m.AdminPassportLogsPage) },
+              { path: 'audit-logs', lazy: lazyPage(() => import('./pages/admin/AdminAuditLogsPage'), (m) => m.AdminAuditLogsPage) },
               { path: 'system', lazy: lazyPage(() => import('./pages/admin/AdminSystemPage'), (m) => m.AdminSystemPage) },
               { path: '*', element: <NotFoundPage /> },
             ],

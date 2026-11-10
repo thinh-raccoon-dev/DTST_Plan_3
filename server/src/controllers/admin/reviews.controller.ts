@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import { Types } from 'mongoose';
 import { DestinationModel } from '../../models/Destination.js';
 import { ReviewModel } from '../../models/Review.js';
+import { logAuditEvent } from '../../services/audit.service.js';
 import {
   adminReviewQuerySchema,
   respondReviewSchema,
@@ -201,6 +202,19 @@ export async function respondReview(req: Request, res: Response) {
 
   await review.save();
 
+  await logAuditEvent({
+    req,
+    action: 'review.respond',
+    targetType: 'review',
+    targetId: review._id,
+    targetName: `Đánh giá của ${review.authorName}`,
+    destinationId: review.destinationId,
+    details: {
+      responderName,
+      contentPreview: body.content.slice(0, 80),
+    },
+  });
+
   res.json({
     success: true,
     response: review.response,
@@ -278,6 +292,19 @@ export async function updateReviewStatus(req: Request, res: Response) {
   }
 
   await review.save();
+
+  await logAuditEvent({
+    req,
+    action: isPartner(req) ? 'review.flag' : 'review.moderate',
+    targetType: 'review',
+    targetId: review._id,
+    targetName: `Đánh giá của ${review.authorName}`,
+    destinationId: review.destinationId,
+    details: {
+      status: review.status,
+      isFlagged: review.isFlagged,
+    },
+  });
 
   res.json({
     success: true,

@@ -2,12 +2,14 @@ import type { Request, Response } from 'express';
 import { Types } from 'mongoose';
 import { z } from 'zod';
 import { AnalyticsEventModel } from '../../models/AnalyticsEvent.js';
+import { BADGE_ICONS, BadgeModel } from '../../models/Badge.js';
 import { ChallengeModel } from '../../models/Challenge.js';
 import { DestinationModel } from '../../models/Destination.js';
 import { PassportEntryModel } from '../../models/PassportEntry.js';
 import { QrCodeModel } from '../../models/QrCode.js';
 import { ReviewModel } from '../../models/Review.js';
 import { UserModel } from '../../models/User.js';
+import { logAuditEvent } from '../../services/audit.service.js';
 import { badRequest, forbidden, notFound } from '../../utils/errors.js';
 
 function partnerUserId(req: Request): Types.ObjectId {
@@ -54,6 +56,7 @@ export async function getPartnerOverview(req: Request, res: Response) {
     reviewStats,
     challenges,
     qrCodes,
+    badges,
     recentCheckIns,
     recentReviews,
   ] = await Promise.all([
@@ -96,6 +99,9 @@ export async function getPartnerOverview(req: Request, res: Response) {
         { targetType: 'challenge' }, // will filter by destination's challenges
       ],
     }).lean(),
+
+    // Badges of this destination
+    BadgeModel.find({ destinationId: destId }).sort({ createdAt: -1 }).lean(),
 
     // Recent 10 visitors check-ins
     PassportEntryModel.find({ destinationId: destId, entryType: 'check_in' })
@@ -333,6 +339,18 @@ export async function getPartnerOverview(req: Request, res: Response) {
       status: q.status,
       createdAt: q.createdAt,
     })),
+    badges: badges.map((b) => ({
+      id: String(b._id),
+      key: b.key,
+      name: b.name,
+      description: b.description,
+      icon: b.icon,
+      criteriaType: b.criteriaType,
+      targetCount: b.targetCount,
+      rewardPoints: b.rewardPoints,
+      status: b.status,
+      createdAt: b.createdAt,
+    })),
   });
 }
 
@@ -361,11 +379,26 @@ export async function toggleOperationalStatus(req: Request, res: Response) {
     throw notFound('Không tìm thấy địa điểm du lịch của bạn.');
   }
 
+  const previousStatus = destination.operationalStatus;
   destination.operationalStatus = body.operationalStatus;
   if (body.specialNotice !== undefined) {
     destination.reviewNote = body.specialNotice;
   }
   await destination.save();
+
+  await logAuditEvent({
+    req,
+    action: 'destination.operational_status.toggle',
+    targetType: 'destination',
+    targetId: destination._id,
+    targetName: destination.name,
+    destinationId: destination._id,
+    details: {
+      previousStatus,
+      newStatus: destination.operationalStatus,
+      specialNotice: destination.reviewNote,
+    },
+  });
 
   res.json({
     success: true,
@@ -379,7 +412,7 @@ const createPartnerChallengeSchema = z.object({
   title: z.string().trim().min(3).max(160),
   description: z.string().trim().max(500).optional(),
   story: z.string().trim().max(2000).optional(),
-  rewardPoints: z.number().int().min(10).max(200).default(50),
+  rewardPoints: z.number().int().min(10).max(150).default(50),
   questions: z
     .array(
       z.object({
@@ -430,6 +463,20 @@ export async function createPartnerChallenge(req: Request, res: Response) {
       correctOptionIndex: q.correctOptionIndex,
       explanation: q.explanation || '',
     })),
+  });
+
+  await logAuditEvent({
+    req,
+    action: 'challenge.create',
+    targetType: 'challenge',
+    targetId: challenge._id,
+    targetName: challenge.title,
+    destinationId: destination._id,
+    details: {
+      rewardPoints: body.rewardPoints,
+      questionsCount: body.questions.length,
+      destinationName: destination.name,
+    },
   });
 
   res.status(201).json({
@@ -513,6 +560,20 @@ export async function createPartnerQr(req: Request, res: Response) {
     notes: `Tạo bởi Đối tác KDL ${destination.name}`,
   });
 
+  await logAuditEvent({
+    req,
+    action: 'qr.create',
+    targetType: 'qr',
+    targetId: doc._id,
+    targetName: doc.label,
+    destinationId: destination._id,
+    details: {
+      code: doc.code,
+      targetType: doc.targetType,
+      destinationName: destination.name,
+    },
+  });
+
   res.status(201).json({
     success: true,
     qr: {
@@ -523,5 +584,99 @@ export async function createPartnerQr(req: Request, res: Response) {
       status: doc.status,
     },
     message: 'Đã tạo mã QR mới thành công!',
+  });
+}
+
+const createPartnerBadgeSchema = z.object({
+  name: z.string().trim().min(2, 'Tên huy hiệu cần ít nhất 2 ký tự').max(100),
+  description: z.string().trim().min(5, 'Mô tả cần ít nhất 5 ký tự').max(300),
+  icon: z.enum(BADGE_ICONS),
+  criteriaType: z.enum(['checkin_count', 'challenge_count']),
+  targetCount: z.coerce.number().int().min(1, 'Chỉ tiêu cần ít nhất là 1').max(50),
+  rewardPoints: z.coerce.number().int().min(10, 'Điểm thưởng tối thiểu là 10').max(150, 'Điểm thưởng tối đa là 150').default(50),
+});
+
+export async function createPartnerBadge(req: Request, res: Response) {
+  const user = req.user!;
+  const body = createPartnerBadgeSchema.parse(req.body);
+  const isPartner = user.role === 'partner';
+
+  let destinationFilter: Record<string, unknown> = {};
+  if (isPartner) {
+    destinationFilter = { managedBy: { $in: [user.id, new Types.ObjectId(user.id)] } };
+  } else {
+    const destId = req.query.destinationId as string;
+    if (destId && Types.ObjectId.isValid(destId)) {
+      destinationFilter = { _id: new Types.ObjectId(destId) };
+    }
+  }
+
+  const destination = await DestinationModel.findOne(destinationFilter);
+  if (!destination) {
+    throw notFound('Không tìm thấy điểm đến để tạo huy hiệu.');
+  }
+
+  const currentCount = await BadgeModel.countDocuments({ destinationId: destination._id });
+  if (currentCount >= 5) {
+    throw badRequest('Điểm đến của bạn đã đạt giới hạn tối đa 5 Huy hiệu & Thành tựu đặc quyền.');
+  }
+
+  // Generate a unique clean slug/key for this destination badge
+  const safeName = body.name
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 30);
+  const baseKey = `${destination.slug.slice(0, 20)}-${safeName || 'badge'}`;
+  let key = baseKey;
+  if (await BadgeModel.exists({ key })) {
+    key = `${baseKey}-${Date.now().toString(36).slice(-4)}`;
+  }
+
+  const badge = await BadgeModel.create({
+    key,
+    name: body.name,
+    description: body.description,
+    icon: body.icon,
+    criteriaType: body.criteriaType,
+    targetCount: body.targetCount,
+    rewardPoints: body.rewardPoints,
+    status: 'active',
+    destinationId: destination._id,
+    createdBy: new Types.ObjectId(user.id),
+  });
+
+  await logAuditEvent({
+    req,
+    action: 'badge.create',
+    targetType: 'badge',
+    targetId: badge._id,
+    targetName: badge.name,
+    destinationId: destination._id,
+    details: {
+      criteriaType: body.criteriaType,
+      targetCount: body.targetCount,
+      rewardPoints: body.rewardPoints,
+      destinationName: destination.name,
+    },
+  });
+
+  res.status(201).json({
+    success: true,
+    badge: {
+      id: String(badge._id),
+      key: badge.key,
+      name: badge.name,
+      description: badge.description,
+      icon: badge.icon,
+      criteriaType: badge.criteriaType,
+      targetCount: badge.targetCount,
+      rewardPoints: badge.rewardPoints,
+      status: badge.status,
+    },
+    message: 'Đã tạo Huy hiệu & Thành tựu đặc quyền cho KDL thành công!',
   });
 }

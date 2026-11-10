@@ -167,7 +167,28 @@ export async function evaluateBadges(identity: Identity): Promise<AwardedBadgeDt
 
   for (const badge of badges) {
     if (existingKeys.has(badge.key)) continue;
-    if (!checkBadgeEarned(badge, stats)) continue;
+
+    if (badge.destinationId) {
+      if (badge.criteriaType === 'checkin_count') {
+        const destCheckIns = await PassportEntryModel.countDocuments({
+          ...owner,
+          entryType: 'check_in',
+          destinationId: badge.destinationId,
+        });
+        if (destCheckIns < badge.targetCount) continue;
+      } else if (badge.criteriaType === 'challenge_count') {
+        const destChallenges = await PassportEntryModel.countDocuments({
+          ...owner,
+          entryType: 'challenge_completed',
+          destinationId: badge.destinationId,
+        });
+        if (destChallenges < badge.targetCount) continue;
+      } else {
+        if (!checkBadgeEarned(badge, stats)) continue;
+      }
+    } else {
+      if (!checkBadgeEarned(badge, stats)) continue;
+    }
 
     try {
       await PassportEntryModel.create({

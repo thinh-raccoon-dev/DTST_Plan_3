@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import * as adminAnalytics from '../controllers/admin/analytics.controller.js';
+import * as adminAuditLogs from '../controllers/admin/auditLogs.controller.js';
 import * as adminBadges from '../controllers/admin/badges.controller.js';
 import * as adminBanners from '../controllers/admin/banners.controller.js';
 import * as adminChallenges from '../controllers/admin/challenges.controller.js';
@@ -116,11 +117,16 @@ export function buildApiRouter(): Router {
   admin.patch('/reviews/:id/status', adminReviews.updateReviewStatus);
   admin.delete('/reviews/:id', adminReviews.deleteReview);
 
-  // Partner Dedicated Hub (Operational control, QR & Challenges)
+  // Partner Dedicated Hub (Operational control, QR, Challenges & Badges)
   admin.get('/partner/overview', adminPartner.getPartnerOverview);
   admin.patch('/partner/destination/status', adminPartner.toggleOperationalStatus);
   admin.post('/partner/challenges', adminPartner.createPartnerChallenge);
   admin.post('/partner/qr', adminPartner.createPartnerQr);
+  admin.post('/partner/badges', adminPartner.createPartnerBadge);
+
+  // Audit Logs (Admin only)
+  admin.get('/audit-logs', requireAdmin, adminAuditLogs.listAuditLogs);
+  admin.get('/audit-logs/stats', requireAdmin, adminAuditLogs.getAuditLogStats);
 
   // Badges & Achievements management (Admin only)
   admin.get('/badges', requireAdmin, adminBadges.listBadges);

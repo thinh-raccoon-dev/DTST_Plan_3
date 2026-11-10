@@ -5,6 +5,7 @@ import { DestinationModel, type DestinationDocument } from '../../models/Destina
 import { FavoriteModel } from '../../models/Favorite.js';
 import { QrCodeModel } from '../../models/QrCode.js';
 import { UserModel } from '../../models/User.js';
+import { logAuditEvent } from '../../services/audit.service.js';
 import { idParamsSchema, paginate } from '../../schemas/common.js';
 import {
   adminDestinationQuerySchema,
@@ -143,6 +144,17 @@ export async function createDestination(req: Request, res: Response) {
   if (managedBy !== undefined) values.managedBy = managedBy;
   await applyAndSave(doc, values);
   await doc.populate(MANAGER_POPULATE);
+
+  await logAuditEvent({
+    req,
+    action: 'destination.create',
+    targetType: 'destination',
+    targetId: doc._id,
+    targetName: doc.name,
+    destinationId: doc._id,
+    details: { slug: doc.slug, publicationStatus: doc.publicationStatus },
+  });
+
   res.status(201).json({ destination: toAdminDestination(doc.toObject() as LeanDestination) });
 }
 
@@ -162,6 +174,17 @@ export async function updateDestination(req: Request, res: Response) {
   }
   await applyAndSave(doc, values);
   await doc.populate(MANAGER_POPULATE);
+
+  await logAuditEvent({
+    req,
+    action: 'destination.update',
+    targetType: 'destination',
+    targetId: doc._id,
+    targetName: doc.name,
+    destinationId: doc._id,
+    details: { changedKeys: Object.keys(patch) },
+  });
+
   res.json({ destination: toAdminDestination(doc.toObject() as LeanDestination) });
 }
 
@@ -182,7 +205,18 @@ export async function deleteDestination(req: Request, res: Response) {
       'DESTINATION_IN_USE',
     );
   }
+  const deletedInfo = { id: String(doc._id), name: doc.name, slug: doc.slug };
   await doc.deleteOne();
   await FavoriteModel.deleteMany({ destinationId: doc._id });
+
+  await logAuditEvent({
+    req,
+    action: 'destination.delete',
+    targetType: 'destination',
+    targetId: deletedInfo.id,
+    targetName: deletedInfo.name,
+    details: deletedInfo,
+  });
+
   res.status(204).end();
 }

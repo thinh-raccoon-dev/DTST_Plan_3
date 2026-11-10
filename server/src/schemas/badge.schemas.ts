@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { BADGE_CRITERIA_TYPES, BADGE_ICONS } from '../models/Badge.js';
+import { objectIdSchema } from './common.js';
 
 export const createBadgeSchema = z.object({
   key: z
@@ -12,8 +13,9 @@ export const createBadgeSchema = z.object({
   icon: z.enum(BADGE_ICONS, { errorMap: () => ({ message: 'Biểu tượng không hợp lệ' }) }),
   criteriaType: z.enum(BADGE_CRITERIA_TYPES, { errorMap: () => ({ message: 'Loại điều kiện không hợp lệ' }) }),
   targetCount: z.coerce.number().int().min(1, 'Chỉ tiêu cần ít nhất là 1'),
-  rewardPoints: z.coerce.number().int().min(0, 'Điểm thưởng không được âm').default(0),
+  rewardPoints: z.coerce.number().int().min(0, 'Điểm thưởng không được âm').max(200, 'Điểm thưởng tối đa là 200').default(0),
   status: z.enum(['active', 'inactive']).default('active'),
+  destinationId: objectIdSchema.optional(),
 });
 
 export const updateBadgeSchema = createBadgeSchema

@@ -1,15 +1,21 @@
 import clsx from 'clsx';
 import {
   AlertCircle,
+  Award,
   BarChart3,
   CheckCircle2,
   Clock,
+  Compass,
   ExternalLink,
   Eye,
   FileSpreadsheet,
+  Footprints,
   Globe,
+  Heart,
   Layers,
+  Lightbulb,
   MapPin,
+  Medal,
   MessageSquare,
   PenLine,
   Phone,
@@ -57,12 +63,38 @@ import { useAuthStore } from '../../stores/authStore';
 import { toast } from '../../stores/toastStore';
 import type { PartnerOverviewResponse } from '../../types/api';
 
+const badgeIconsList = [
+  { value: 'trophy', label: '🏆 Cúp vàng vinh danh' },
+  { value: 'medal', label: '🥇 Huy chương danh dự' },
+  { value: 'star', label: '⭐ Ngôi sao tinh hoa' },
+  { value: 'award', label: '🎖️ Bằng khen trải nghiệm' },
+  { value: 'footprints', label: '👣 Dấu chân khám phá' },
+  { value: 'compass', label: '🧭 La bàn người mở đường' },
+  { value: 'lightbulb', label: '💡 Nhà thông thái văn hóa' },
+  { value: 'heart', label: '❤️ Trái tim yêu mến KDL' },
+  { value: 'sparkles', label: '✨ Trải nghiệm lấp lánh' },
+];
+
+function renderPartnerBadgeIcon(icon: string) {
+  switch (icon) {
+    case 'medal': return <Medal className="size-5 text-amber-500" />;
+    case 'star': return <Star className="size-5 text-amber-400 fill-amber-400" />;
+    case 'award': return <Award className="size-5 text-lotus-600" />;
+    case 'footprints': return <Footprints className="size-5 text-emerald-600" />;
+    case 'compass': return <Compass className="size-5 text-teal-600" />;
+    case 'lightbulb': return <Lightbulb className="size-5 text-amber-500" />;
+    case 'heart': return <Heart className="size-5 text-rose-500 fill-rose-500" />;
+    case 'sparkles': return <Sparkles className="size-5 text-indigo-500" />;
+    default: return <Trophy className="size-5 text-amber-500" />;
+  }
+}
+
 export function PartnerDashboardPage() {
   useDocumentTitle('Bảng Điều Hành Khu Du Lịch (Partner Hub)');
   const currentUser = useAuthStore((s) => s.user);
 
   // Active Tab
-  const [activeTab, setActiveTab] = useState<'summary' | 'overview' | 'challenges' | 'qr' | 'operations'>('summary');
+  const [activeTab, setActiveTab] = useState<'summary' | 'overview' | 'challenges' | 'qr' | 'badges' | 'operations'>('summary');
 
   // Operational toggle modal / state
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
@@ -87,6 +119,16 @@ export function PartnerDashboardPage() {
   const [qrTargetType, setQrTargetType] = useState<'destination' | 'challenge'>('destination');
   const [qrChallengeId, setQrChallengeId] = useState('');
   const [isSubmittingQr, setIsSubmittingQr] = useState(false);
+
+  // Create Badge modal
+  const [isBadgeModalOpen, setIsBadgeModalOpen] = useState(false);
+  const [badgeName, setBadgeName] = useState('');
+  const [badgeDescription, setBadgeDescription] = useState('');
+  const [badgeIcon, setBadgeIcon] = useState('trophy');
+  const [badgeCriteriaType, setBadgeCriteriaType] = useState<'checkin_count' | 'challenge_count'>('checkin_count');
+  const [badgeTargetCount, setBadgeTargetCount] = useState(1);
+  const [badgeRewardPoints, setBadgeRewardPoints] = useState(50);
+  const [isSubmittingBadge, setIsSubmittingBadge] = useState(false);
 
   // Standee Print preview modal
   const [standeeQr, setStandeeQr] = useState<{ code: string; label: string; targetType: string } | null>(null);
@@ -189,6 +231,40 @@ export function PartnerDashboardPage() {
       toast.error(err instanceof Error ? err.message : 'Không thể tạo mã QR.');
     } finally {
       setIsSubmittingQr(false);
+    }
+  };
+
+  const handleCreateBadge = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!badgeName.trim()) {
+      toast.error('Vui lòng nhập tên huy hiệu.');
+      return;
+    }
+    if (!badgeDescription.trim()) {
+      toast.error('Vui lòng nhập mô tả huy hiệu.');
+      return;
+    }
+
+    setIsSubmittingBadge(true);
+    try {
+      await api.post('/admin/partner/badges', {
+        name: badgeName.trim(),
+        description: badgeDescription.trim(),
+        icon: badgeIcon,
+        criteriaType: badgeCriteriaType,
+        targetCount: badgeTargetCount,
+        rewardPoints: badgeRewardPoints,
+      });
+      toast.success('Đã tạo Huy hiệu & Thành tựu đặc quyền KDL thành công!');
+      setIsBadgeModalOpen(false);
+      setBadgeName('');
+      setBadgeDescription('');
+      setBadgeRewardPoints(50);
+      reload();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Không thể tạo huy hiệu.');
+    } finally {
+      setIsSubmittingBadge(false);
     }
   };
 
@@ -411,6 +487,20 @@ export function PartnerDashboardPage() {
         >
           <QrCode className="size-4" />
           Mã QR & Bộ In Standee ({data?.qrs?.length || 0})
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('badges')}
+          className={clsx(
+            'flex items-center gap-2 rounded-t-lg px-4 py-2.5 text-sm font-semibold transition-colors',
+            activeTab === 'badges'
+              ? 'border-b-2 border-leaf-600 bg-white text-leaf-800 shadow-xs'
+              : 'text-river-600 hover:text-river-900',
+          )}
+        >
+          <Award className="size-4" />
+          Huy hiệu & Thành tựu ({data?.badges?.length || 0})
         </button>
 
         <button
@@ -1243,6 +1333,85 @@ export function PartnerDashboardPage() {
         </Card>
       )}
 
+      {/* Tab: Badges & Achievements */}
+      {activeTab === 'badges' && (
+        <Card className="mt-6 p-5 sm:p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-sand-200 pb-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-bold text-lg text-river-900">Huy Hiệu & Thành Tựu Đặc Quyền KDL</h3>
+                <span className="rounded-full bg-leaf-100 px-2.5 py-0.5 text-xs font-semibold text-leaf-800">
+                  {data?.badges?.length || 0}/5 huy hiệu
+                </span>
+              </div>
+              <p className="text-xs text-river-600">
+                Tạo huy hiệu độc quyền gắn với {destination.name} để khích lệ du khách check-in và hoàn thành thử thách.
+              </p>
+            </div>
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={(data?.badges?.length || 0) >= 5}
+              onClick={() => setIsBadgeModalOpen(true)}
+              icon={<Plus className="size-4" />}
+            >
+              Tạo Huy hiệu mới
+            </Button>
+          </div>
+
+          <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {data?.badges && data.badges.length > 0 ? (
+              data.badges.map((b) => (
+                <div
+                  key={b.id || b.key}
+                  className="rounded-2xl border border-sand-200 bg-white p-5 shadow-xs transition hover:shadow-md flex flex-col justify-between"
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex size-11 items-center justify-center rounded-xl bg-amber-50 border border-amber-200">
+                        {renderPartnerBadgeIcon(b.icon)}
+                      </div>
+                      <Badge tone="leaf">+{b.rewardPoints} EXP</Badge>
+                    </div>
+
+                    <div>
+                      <h4 className="font-bold text-river-900 text-base">{b.name}</h4>
+                      <p className="text-xs text-river-600 mt-1 leading-relaxed">{b.description}</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 pt-3 border-t border-sand-200/80 flex items-center justify-between text-xs text-river-500">
+                    <span>
+                      {b.criteriaType === 'checkin_count'
+                        ? `Check-in ${b.targetCount} lần tại KDL`
+                        : `Giải ${b.targetCount || 1} câu đố tại KDL`}
+                    </span>
+                    <span className="font-mono text-[10px] text-river-400">Đặc quyền KDL</span>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="col-span-full py-10 text-center border border-dashed rounded-2xl border-sand-300 bg-sand-50/50">
+                <Award className="size-10 mx-auto text-amber-500/60 mb-2" />
+                <p className="text-sm font-semibold text-river-800">Chưa có Huy hiệu đặc quyền nào</p>
+                <p className="text-xs text-river-500 mt-1 max-w-md mx-auto">
+                  Hãy tạo huy hiệu đầu tiên cho {destination.name} để tặng điểm EXP danh giá và giữ chân du khách quay lại!
+                </p>
+                <Button
+                  className="mt-4"
+                  variant="primary"
+                  size="sm"
+                  onClick={() => setIsBadgeModalOpen(true)}
+                  icon={<Plus className="size-4" />}
+                >
+                  Tạo Huy hiệu mới ngay
+                </Button>
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
+
       {/* Tab 4: Operational Settings */}
       {activeTab === 'operations' && (
         <Card className="mt-6 p-5 sm:p-6 space-y-6">
@@ -1672,6 +1841,111 @@ export function PartnerDashboardPage() {
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* Modal 5: Create Partner Badge */}
+      <Modal open={isBadgeModalOpen} title="Tạo Huy Hiệu & Thành Tựu Đặc Quyền KDL" onClose={() => setIsBadgeModalOpen(false)}>
+        <form onSubmit={handleCreateBadge} className="space-y-4">
+          <p className="text-xs text-river-600 bg-sand-50 p-3 rounded-lg border border-sand-200">
+            Huy hiệu do bạn tạo sẽ tự động gắn kết với <strong>{destination.name}</strong>. Du khách sẽ nhận được huy hiệu cùng điểm thưởng tương ứng khi thỏa mãn điều kiện thực địa. (Tối đa 5 huy hiệu/KDL).
+          </p>
+
+          <div>
+            <label className="block text-xs font-bold text-river-800 uppercase tracking-wider mb-1">
+              Tên Huy Hiệu <span className="text-red-500">*</span>
+            </label>
+            <Input
+              value={badgeName}
+              onChange={(e) => setBadgeName(e.target.value)}
+              placeholder="VD: Nhà Khám Phá Hoa Sa Đéc, Bậc Thầy Tràm Chim..."
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-river-800 uppercase tracking-wider mb-1">
+              Mô Tả Huy Hiệu <span className="text-red-500">*</span>
+            </label>
+            <textarea
+              className="w-full rounded-xl border border-sand-300 p-3 text-sm focus:border-leaf-600 focus:outline-none"
+              rows={2}
+              value={badgeDescription}
+              onChange={(e) => setBadgeDescription(e.target.value)}
+              placeholder="VD: Dành cho du khách check-in 3 lần tại Làng Hoa Sa Đéc để chiêm ngưỡng muôn hoa khoe sắc."
+              required
+            />
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="block text-xs font-bold text-river-800 uppercase tracking-wider mb-1">
+                Biểu Tượng (Icon)
+              </label>
+              <Select
+                value={badgeIcon}
+                onChange={(e) => setBadgeIcon(e.target.value)}
+              >
+                {badgeIconsList.map((i) => (
+                  <option key={i.value} value={i.value}>
+                    {i.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-river-800 uppercase tracking-wider mb-1">
+                Điểm Thưởng (EXP: 10 - 150)
+              </label>
+              <Input
+                type="number"
+                min={10}
+                max={150}
+                value={badgeRewardPoints}
+                onChange={(e) => setBadgeRewardPoints(Number(e.target.value))}
+                required
+              />
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="block text-xs font-bold text-river-800 uppercase tracking-wider mb-1">
+                Điều Kiện Mở Khóa
+              </label>
+              <Select
+                value={badgeCriteriaType}
+                onChange={(e) => setBadgeCriteriaType(e.target.value as 'checkin_count' | 'challenge_count')}
+              >
+                <option value="checkin_count">Số lần Check-in tại KDL</option>
+                <option value="challenge_count">Số câu đố giải đúng tại KDL</option>
+              </Select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-river-800 uppercase tracking-wider mb-1">
+                Số Lượng Mục Tiêu
+              </label>
+              <Input
+                type="number"
+                min={1}
+                max={20}
+                value={badgeTargetCount}
+                onChange={(e) => setBadgeTargetCount(Number(e.target.value))}
+                required
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-3 border-t border-sand-200">
+            <Button type="button" variant="secondary" onClick={() => setIsBadgeModalOpen(false)}>
+              Hủy
+            </Button>
+            <Button type="submit" variant="primary" loading={isSubmittingBadge}>
+              Phát hành Huy hiệu
+            </Button>
+          </div>
+        </form>
       </Modal>
     </>
   );
