@@ -49,6 +49,8 @@ export interface DestinationSummary {
   verificationStatus: VerificationStatus;
   operationalStatus: OperationalStatus;
   estimatedVisitDuration: VisitDuration | null;
+  address?: string | null;
+  coordinates?: { lat: number; lng: number } | null;
   hasCoordinates: boolean;
   hasChallenge: boolean;
 }
@@ -694,3 +696,326 @@ export interface AdminBanner extends PublicBanner {
   createdAt: string | null;
   updatedAt: string | null;
 }
+
+// ----------------------------------------------------
+// Upgraded Admin Types (Users, Itineraries, Passport Logs, System)
+// ----------------------------------------------------
+
+export interface AdminUserItem {
+  id: string;
+  email: string;
+  displayName: string;
+  role: UserRole;
+  status: 'active' | 'disabled';
+  preferences?: UserPreferences;
+  createdAt: string;
+  updatedAt: string;
+  stats: {
+    itinerariesCount: number;
+    checkInsCount: number;
+    badgesCount: number;
+  };
+}
+
+export interface AdminUsersResponse {
+  items: AdminUserItem[];
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  stats: {
+    totalUsers: number;
+    tourists: number;
+    partners: number;
+    admins: number;
+    disabled: number;
+  };
+}
+
+export interface AdminItineraryItem {
+  id: string;
+  title: string;
+  numberOfDays: number;
+  totalStops: number;
+  estimatedDurationMinutes: number;
+  preferences?: {
+    areas?: Area[];
+    interests?: Category[];
+    hoursPerDay?: number;
+  };
+  plannerVersion?: string;
+  itineraryVersion?: number;
+  user: {
+    id: string;
+    email: string;
+    displayName: string;
+    role: UserRole;
+  } | null;
+  destinationNames: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminItinerariesResponse {
+  items: AdminItineraryItem[];
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  stats: {
+    totalItineraries: number;
+    oneDayCount: number;
+    twoDayCount: number;
+    multiDayCount: number;
+  };
+}
+
+export interface AdminPassportLogItem {
+  id: string;
+  entryType: 'check_in' | 'challenge_completed' | 'badge_awarded';
+  scoreAwarded: number;
+  completedAt: string;
+  source: 'qr' | 'system';
+  badgeKey?: string;
+  metadata?: {
+    correctCount?: number;
+    totalQuestions?: number;
+  };
+  user: {
+    id: string;
+    email: string;
+    displayName: string;
+    role: UserRole;
+  };
+  destination?: {
+    id: string;
+    name: string;
+    slug: string;
+    category: string;
+    area: string;
+    imageUrl?: string;
+  } | null;
+  challenge?: {
+    id: string;
+    title: string;
+    rewardPoints: number;
+  } | null;
+  qrCode?: {
+    id: string;
+    code: string;
+    label: string;
+  } | null;
+}
+
+export interface AdminPassportLogsResponse {
+  items: AdminPassportLogItem[];
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  stats: {
+    totalCheckIns: number;
+    totalChallenges: number;
+    totalBadges: number;
+    totalPoints: number;
+    todayActivities: number;
+  };
+}
+
+export interface SystemServiceInfo {
+  status: string;
+  uptimeSeconds?: number;
+  nodeVersion?: string;
+  platform?: string;
+  memoryUsageMB?: {
+    rss: number;
+    heapUsed: number;
+    heapTotal: number;
+  };
+  name?: string;
+  readyState?: number;
+  counts?: Record<string, number>;
+  online?: boolean;
+  routingStatus?: string;
+  targetUrl?: string;
+}
+
+export interface SystemStatusResponse {
+  status: 'healthy' | 'degraded';
+  services: {
+    backend: SystemServiceInfo;
+    database: SystemServiceInfo;
+    aiEngine: SystemServiceInfo;
+  };
+  systemTime: string;
+}
+
+export interface SystemSettings {
+  announcement: {
+    enabled: boolean;
+    message: string;
+    tone: 'info' | 'warning' | 'success' | 'lotus';
+    linkUrl?: string;
+  };
+  general: {
+    maintenanceMode: boolean;
+    defaultCheckInPoints: number;
+    defaultQuizPoints: number;
+    enablePublicRegistration: boolean;
+    enableAiPlanner: boolean;
+  };
+  contact: {
+    hotline: string;
+    supportEmail: string;
+    organizationName: string;
+  };
+}
+
+export interface DestinationReviewItem {
+  id: string;
+  authorName: string;
+  authorAvatar?: string;
+  authorTier?: string;
+  rating: number;
+  content: string;
+  tags: string[];
+  isVerifiedVisitor: boolean;
+  likesCount: number;
+  response?: {
+    author?: string;
+    responderName?: string;
+    content: string;
+    respondedAt: string;
+  };
+  createdAt: string;
+}
+
+export interface DestinationReviewsStats {
+  averageRating: number;
+  totalReviews: number;
+  distribution: Record<number, number>;
+  popularTags: string[];
+}
+
+export interface DestinationReviewsResponse {
+  stats: DestinationReviewsStats;
+  items: DestinationReviewItem[];
+}
+
+export interface AdminReviewItem {
+  id: string;
+  destination: { id: string; name: string; slug: string; area?: string } | null;
+  authorName: string;
+  authorAvatar?: string;
+  authorTier?: string;
+  rating: number;
+  content: string;
+  tags: string[];
+  isVerifiedVisitor: boolean;
+  likesCount: number;
+  status: 'published' | 'hidden' | 'flagged';
+  isFlagged: boolean;
+  reportReason?: string;
+  reportCount: number;
+  reportedAt?: string;
+  response?: {
+    content: string;
+    respondedAt: string;
+    responderName?: string;
+    responderId?: string;
+  };
+  createdAt: string;
+}
+
+export interface AdminReviewsStats {
+  total: number;
+  pendingReports: number;
+  hidden: number;
+  responded: number;
+  averageRating: number;
+}
+
+export interface AdminReviewsResponse {
+  stats: AdminReviewsStats;
+  items: AdminReviewItem[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+  managedDestinations: Array<{ id: string; name: string; slug: string }>;
+}
+
+export interface PartnerOverviewResponse {
+  hasDestination: boolean;
+  message?: string;
+  destination?: {
+    id: string;
+    name: string;
+    slug: string;
+    summary?: string;
+    description?: string;
+    address?: string;
+    area: string;
+    category: string;
+    coordinates?: { lat: number; lng: number };
+    openingHours?: string;
+    referencePrice?: string;
+    contactInfo?: Record<string, string>;
+    images?: Array<{ url: string; alt?: string; caption?: string }>;
+    operationalStatus: 'active' | 'temporarily_closed' | 'closed';
+    publicationStatus: string;
+    reviewNote?: string;
+    managedBy?: { displayName: string; email: string };
+  };
+  metrics?: {
+    totalViews: number;
+    totalCheckIns: number;
+    averageRating: number;
+    totalReviews: number;
+    respondedReviews: number;
+    totalChallenges: number;
+    totalCompletedChallenges: number;
+    totalQrs: number;
+  };
+  recentCheckIns?: Array<{
+    id: string;
+    visitorName: string;
+    source: string;
+    scoreAwarded: number;
+    completedAt: string;
+  }>;
+  recentReviews?: Array<{
+    id: string;
+    authorName: string;
+    authorTier?: string;
+    rating: number;
+    content: string;
+    tags?: string[];
+    hasResponse: boolean;
+    response?: { content: string; responderName?: string; respondedAt: string };
+    createdAt: string;
+  }>;
+  challenges?: Array<{
+    id: string;
+    title: string;
+    description?: string;
+    status: string;
+    questionCount: number;
+    rewardPoints: number;
+    completions: number;
+    createdAt: string;
+  }>;
+  qrs?: Array<{
+    id: string;
+    code: string;
+    label: string;
+    targetType: string;
+    targetId: string;
+    status: string;
+    createdAt: string;
+  }>;
+}
+
+
+
+

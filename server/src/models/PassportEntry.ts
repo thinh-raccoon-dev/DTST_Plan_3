@@ -17,7 +17,7 @@ const passportEntrySchema = new Schema({
   badgeKey: { type: String },
   scoreAwarded: { type: Number, required: true, min: 0, default: 0 },
   completedAt: { type: Date, required: true, default: () => new Date() },
-  source: { type: String, enum: ['qr', 'system'], required: true },
+  source: { type: String, enum: ['qr', 'system', 'gps'], required: true },
   metadata: {
     correctCount: Number,
     totalQuestions: Number,

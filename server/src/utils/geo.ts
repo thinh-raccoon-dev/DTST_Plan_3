@@ -11,5 +11,5 @@ export function haversineMeters(a: { lat: number; lng: number }, b: { lat: numbe
   return haversineKm(a, b) * 1000;
 }
 
-/** Rural sites can be large; 800 m is enough to stand at the gate, not across town. */
-export const MAX_CHECKIN_METERS = 800;
+/** Rural and eco-tourism sites can be large (e.g. Tram Chim, Gao Giong); 1000 m is comfortable for gates and parking lots. */
+export const MAX_CHECKIN_METERS = 1000;

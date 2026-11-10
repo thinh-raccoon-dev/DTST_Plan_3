@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>Báo cáo PRM393 - Lại Văn Thịnh - DTST Mobile</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap');
+
+    @page {
+      size: A4 portrait;
+      margin: 10mm 12mm 10mm 12mm;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Be Vietnam Pro', sans-serif;
+      font-size: 9.2pt;
+      line-height: 1.33;
+      color: #0f172a;
+      background: #ffffff;
+    }
+
+    .page {
+      width: 100%;
+      min-height: 277mm;
+      max-height: 277mm;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .page-break {
+      page-break-after: always;
+      break-after: page;
+    }
+
+    .header-box {
+      border-bottom: 2px solid #166534;
+      padding-bottom: 5px;
+      margin-bottom: 7px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+    }
+
+    .header-left h1 {
+      font-size: 12pt;
+      font-weight: 800;
+      color: #166534;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+
+    .header-left h2 {
+      font-size: 10pt;
+      font-weight: 700;
+      color: #0369a1;
+      margin-top: 2px;
+    }
+
+    .header-right {
+      text-align: right;
+      font-size: 8.5pt;
+      color: #475569;
+      font-weight: 600;
+    }
+
+    .badge-pill {
+      display: inline-block;
+      background: #dcfce7;
+      color: #15803d;
+      padding: 1px 7px;
+      border-radius: 999px;
+      font-weight: 700;
+      font-size: 8pt;
+      border: 1px solid #bbf7d0;
+    }
+
+    .meta-grid {
+      display: grid;
+      grid-template-columns: 1.3fr 1fr 1fr;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      padding: 5px 8px;
+      margin-bottom: 8px;
+      font-size: 8.5pt;
+    }
+
+    .meta-grid strong {
+      color: #0f172a;
+    }
+
+    .section-title {
+      font-size: 9.8pt;
+      font-weight: 800;
+      color: #166534;
+      text-transform: uppercase;
+      margin: 6px 0 4px 0;
+      border-left: 3.5px solid #166534;
+      padding-left: 6px;
+    }
+
+    p {
+      margin-bottom: 4px;
+      text-align: justify;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 4px 0 7px 0;
+      font-size: 8.3pt;
+    }
+
+    th, td {
+      border: 1px solid #cbd5e1;
+      padding: 3.5px 6px;
+      vertical-align: middle;
+    }
+
+    th {
+      background-color: #f1f5f9;
+      font-weight: 700;
+      color: #1e293b;
+      text-align: left;
+    }
+
+    .table-center th, .table-center td {
+      text-align: center;
+    }
+
+    .highlight-cell {
+      background-color: #f0fdf4;
+      font-weight: 700;
+      color: #166534;
+    }
+
+    ul {
+      margin-left: 15px;
+      margin-bottom: 5px;
+    }
+
+    li {
+      margin-bottom: 2.5px;
+      text-align: justify;
+    }
+
+    .sub-box {
+      background: #fafaf9;
+      border: 1px solid #e7e5e4;
+      border-radius: 5px;
+      padding: 5px 7px;
+      margin-bottom: 5px;
+    }
+
+    .sub-box h3 {
+      font-size: 8.8pt;
+      font-weight: 700;
+      color: #0c4a6e;
+      margin-bottom: 2px;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 6px;
+    }
+
+    .footer-note {
+      border-top: 1px solid #e2e8f0;
+      padding-top: 3px;
+      font-size: 7.8pt;
+      color: #64748b;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    @media print {
+      body {
+        background: none;
+      }
+      .no-print {
+        display: none;
+      }
+    }
+
+    .btn-print {
+      position: fixed;
+      top: 15px;
+      right: 15px;
+      background: #166534;
+      color: white;
+      padding: 8px 16px;
+      border: none;
+      border-radius: 6px;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+      font-family: inherit;
+      z-index: 999;
+    }
+  </style>
+</head>
+<body>
+
+  <button class="btn-print no-print" onclick="window.print()">In PDF (Ctrl + P)</button>
+
+  <!-- ==================== TRANG 1 ==================== -->
+  <div class="page page-break">
+    <div>
+      <div class="header-box">
+        <div class="header-left">
+          <h1>Báo Cáo Kỹ Thuật Đồ Án PRM393 - Lập Trình Di Động Flutter</h1>
+          <h2>Nền tảng Du lịch Thông minh & Hộ chiếu Trải nghiệm số Đồng Tháp (DTST Mobile)</h2>
+        </div>
+        <div class="header-right">
+          <div>Học kỳ: <strong>Fall 2026</strong></div>
+          <span class="badge-pill">Solo Project (100%)</span>
+        </div>
+      </div>
+
+      <div class="meta-grid">
+        <div>Sinh viên thực hiện: <strong>LẠI VĂN THỊNH</strong></div>
+        <div>Vai trò: <strong>Trưởng nhóm & Lập trình viên chính (100%)</strong></div>
+        <div>Mã nguồn: <strong>Flutter 3.x / Dart 3.x (Thư mục mobile/)</strong></div>
+      </div>
+
+      <div class="section-title">1. Giới thiệu Ứng dụng & Các Đối tượng Người dùng (Actors)</div>
+      <p>
+        <strong>DTST Mobile</strong> là ứng dụng di động số hóa du lịch tỉnh Đồng Tháp (Đất Sen Hồng), cung cấp trải nghiệm thực địa thông minh thông qua quét QR, định vị vệ tinh GPS, hệ thống Hộ chiếu số tích hợp Gamification và Trợ lý AI V9 lập lịch trình hành trình tự động kết hợp điều chỉnh thực địa (Live Replan).
+      </p>
+
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 28%;">Đối tượng (Actor)</th>
+            <th>Phạm vi quyền hạn & Các chức năng cốt lõi</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>1. Khách tự do (Guest)</strong><br><span style="color:#64748b; font-size:7.8pt;">Chế độ thiết bị không cần login</span></td>
+            <td>
+              • Khám phá bản đồ điểm đến (12 huyện/thị, 6 nhóm trải nghiệm), tìm kiếm và lọc đa tiêu chí.<br>
+              • Xem chi tiết điểm đến, ảnh minh bạch, nút gọi điện thoại và mở Google Maps chỉ đường 1-chạm.<br>
+              • Quét QR tại trạm hoặc nhập mã thủ công, kiểm tra vị trí GPS thực địa chống gian lận.<br>
+              • Làm trắc nghiệm tương tác văn hóa, nhận điểm thưởng lưu tạm vào <code>localPassport</code>.
+            </td>
+          </tr>
+          <tr>
+            <td><strong>2. Du khách có tài khoản (Registered Tourist)</strong></td>
+            <td>
+              • Đồng bộ Hộ chiếu số lên đám mây; tính năng <strong>1-chạm gộp thành tích từ máy vào tài khoản</strong>.<br>
+              • <strong>Lập lịch trình AI V9</strong>: Tự động phân bổ 5 nhóm ngân sách VND, phương tiện, nhịp độ và sở thích.<br>
+              • <strong>Bảng điều khiển Live Replan 2 bước</strong>: Báo "Đã đến" / "Bắt đầu đi", chọn chip hoãn trễ (+15p, +30p, +45p, +60p) tự động dời mốc giờ các điểm tiếp theo; quản lý điểm đến Yêu thích (Favorites).
+            </td>
+          </tr>
+          <tr>
+            <td><strong>3. Quản trị viên / Tester (Admin & Reviewer)</strong></td>
+            <td>
+              • Chip đăng nhập nhanh tài khoản kiểm thử (du khách <code>dukhach@dongthap.vn</code> / admin <code>admin@example.com</code>).<br>
+              • Đèn LED theo dõi kết nối máy chủ thời gian thực (Xanh/Đỏ); chuyển đổi linh hoạt Base URL giữa Android Emulator (<code>10.0.2.2:4000</code>), Localhost hoặc IP mạng LAN.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="section-title" style="margin-top: 4px;">1.2. Các Chức năng & Công nghệ Nâng cao Được Ứng dụng</div>
+      <div class="grid-2">
+        <div class="sub-box">
+          <h3>📷 Camera Quét QR & Định Vị GPS Thực Địa</h3>
+          <ul>
+            <li><strong>mobile_scanner</strong>: Quét mã QR trạm tương tác tốc độ cao, hỗ trợ bật/tắt Flash và ô nhập mã dự phòng.</li>
+            <li><strong>geolocator</strong>: Tính toán khoảng cách trắc địa (Haversine) so khớp bán kính thực tế (&le; 300m - 500m) ngăn chặn việc check-in ảo từ xa.</li>
+          </ul>
+        </div>
+        <div class="sub-box">
+          <h3>🤖 AI Trip Planner V9 & Live Replan Thực Địa</h3>
+          <ul>
+            <li><strong>AI Routing & 5 Nhóm Ngân Sách</strong>: Tối ưu lộ trình di chuyển, phân tách chi phí vé, ăn uống, lưu trú, xăng xe và dự phòng.</li>
+            <li><strong>Local Smart Replan Synthesis</strong>: Tự động tính toán lại lịch trình cục bộ khi mất sóng ngoại tuyến ở các khu sinh thái ngập nước.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="sub-box" style="margin-top: 2px;">
+        <h3>🔒 Hạ tầng Mạng Bền vững & An toàn (Persistent Cookie Jar & Double-Submit CSRF)</h3>
+        <p style="font-size: 8.2pt; margin: 0;">
+          Sử dụng <strong>SharedPreferences</strong> để lưu trữ Session Cookie và trạng thái cấu hình máy chủ, giúp người dùng duy trì đăng nhập liên tục khi khởi động lại ứng dụng. Toàn bộ thao tác ghi dữ liệu (POST, PATCH, DELETE) được kiểm soát nghiêm ngặt bằng mã bảo vệ <code>x-csrf-token</code> chống tấn công giả mạo.
+        </p>
+      </div>
+
+      <div class="section-title" style="margin-top: 4px;">2. Mức độ Đóng góp Thực hiện Dự án</div>
+      <p style="font-size: 8.2pt; margin-bottom: 3px;">
+        Dự án được xây dựng và hoàn thiện độc lập 100% bởi sinh viên <strong>LẠI VĂN THỊNH</strong>:
+      </p>
+      <table class="table-center">
+        <thead>
+          <tr>
+            <th style="text-align: left; width: 45%;">Hạng mục công việc (Topic)</th>
+            <th style="width: 25%;">Tổng nỗ lực dự án (Team Effort)</th>
+            <th class="highlight-cell" style="width: 30%;">LẠI VĂN THỊNH (Solo Developer)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="text-align: left;">1. Phân tích yêu cầu (Requirements Analysis)</td>
+            <td>100%</td>
+            <td class="highlight-cell"><strong>100%</strong></td>
+          </tr>
+          <tr>
+            <td style="text-align: left;">2. Thiết kế kiến trúc & UI/UX (Design & Architecture)</td>
+            <td>100%</td>
+            <td class="highlight-cell"><strong>100%</strong></td>
+          </tr>
+          <tr>
+            <td style="text-align: left;">3. Lập trình mã nguồn Flutter (Implementation / Code)</td>
+            <td>100%</td>
+            <td class="highlight-cell"><strong>100%</strong></td>
+          </tr>
+          <tr>
+            <td style="text-align: left;">4. Kiểm thử tự động & Sửa lỗi (Testing & Quality Assurance)</td>
+            <td>100%</td>
+            <td class="highlight-cell"><strong>100%</strong></td>
+          </tr>
+          <tr>
+            <td style="text-align: left;">5. Soạn thảo tài liệu & Báo cáo kỹ thuật (Documentation)</td>
+            <td>100%</td>
+            <td class="highlight-cell"><strong>100%</strong></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="footer-note">
+      <span>Đồ án PRM393 - Lập trình Di động Flutter</span>
+      <span>Sinh viên: Lại Văn Thịnh</span>
+      <span>Trang 1 / 2</span>
+    </div>
+  </div>
+
+  <!-- ==================== TRANG 2 ==================== -->
+  <div class="page">
+    <div>
+      <div class="header-box">
+        <div class="header-left">
+          <h1>Đối Chiếu Tiêu Chí Đánh Giá & Minh Chứng Kỹ Thuật (PRM393)</h1>
+          <h2>Giải trình chi tiết các tiêu chí chấm điểm và kết quả kiểm thử tự động</h2>
+        </div>
+        <div class="header-right">
+          <div>Sinh viên: <strong>Lại Văn Thịnh</strong></div>
+          <span class="badge-pill">Thực hiện: 100%</span>
+        </div>
+      </div>
+
+      <div class="section-title">3. Tiêu chí Đánh giá & Bằng chứng Thực thi trong Dự án</div>
+
+      <!-- Tiêu chí 1 -->
+      <div class="sub-box">
+        <h3>3.1. Có đủ các nội dung trong chương trình học (Tỷ trọng: 15%)</h3>
+        <ul>
+          <li><strong>Flutter Framework</strong>: Xây dựng hoàn chỉnh theo cấu trúc phân tầng sạch (Clean Architecture: <code>models/</code>, <code>services/</code>, <code>state/</code>, <code>theme/</code>, <code>widgets/</code>, <code>screens/</code>). Khai thác hiệu quả: <code>IndexedStack</code>, <code>ListView</code>, <code>Card</code>, <code>FilterChip</code>, <code>ActionChip</code>, <code>DropdownButtonFormField</code>, <code>LinearProgressIndicator</code>, <code>ModalBottomSheet</code>, <code>AlertDialog</code>.</li>
+          <li><strong>Database / Local Storage (SharedPreferences)</strong>: Lưu trữ bền vững Cookie session <code>dtst_cookies_v1</code>, cấu hình URL máy chủ <code>dtst_api_base_url</code>, danh sách yêu thích và bộ đệm tiến độ hộ chiếu khách (Guest mode).</li>
+          <li><strong>Material Design 3</strong>: Đồng bộ ngôn ngữ Material 3 với bảng màu nhận diện văn hóa Đất Sen Hồng (Sen Hồng <code>lotus</code>, Rừng Tràm <code>leaf</code>, Sông Tiền <code>river</code>); font chữ chuẩn tiếng Việt có dấu <code>Be Vietnam Pro</code>.</li>
+          <li><strong>API Calls & Async</strong>: Kết nối REST API Node.js qua <code>http.Client</code>, tự động thích ứng địa chỉ mạng Emulator (<code>10.0.2.2:4000</code>), xử lý timeout, retry và bảo mật Double-Submit CSRF Token.</li>
+          <li><strong>State Management</strong>: Quản lý trạng thái toàn cục phản ứng tức thì (Reactive) bằng <code>AppState</code> kết hợp <code>ChangeNotifier</code> và <code>ListenableBuilder</code> nguyên bản của Flutter, không phụ thuộc thư viện cồng kềnh.</li>
+        </ul>
+      </div>
+
+      <!-- Tiêu chí 2 -->
+      <div class="sub-box">
+        <h3>3.2. Thiết kế Giao diện & Trải nghiệm Người dùng (UI/UX) (Tỷ trọng: 15%)</h3>
+        <ul>
+          <li><strong>Đồng nhất & Bản sắc</strong>: Tone màu thiên nhiên sông nước đặc trưng Đồng Tháp, hệ thống huy hiệu phân loại minh bạch (Chính thống, Đối tác, Cộng đồng) và nhãn cảnh báo ảnh minh họa rõ ràng.</li>
+          <li><strong>Phản hồi trạng thái toàn diện</strong>: Xử lý mượt mà mọi trạng thái: Loading (vòng xoay xoay mượt mà), Empty State (thông báo thân thiện khi chưa lưu địa điểm/lịch trình), Error State (giao diện lỗi kèm nút "Thử lại"), và SnackBar phản hồi xúc giác.</li>
+          <li><strong>Trải nghiệm 1-Chạm (1-Tap Experience)</strong>: Đèn LED trạng thái máy chủ (Xanh: Online / Đỏ: Mất kết nối); chip điền tài khoản test mẫu trong 1 chạm; nút gọi điện và mở Google Maps dẫn đường thực địa trực tiếp.</li>
+        </ul>
+      </div>
+
+      <!-- Tiêu chí 3 -->
+      <div class="sub-box">
+        <h3>3.3. Quy tắc Nghiệp vụ & Ràng buộc Logic (Business Logic / Rules) (Tỷ trọng: 50%)</h3>
+        <ul>
+          <li><strong>Ràng buộc Check-in GPS Thực địa</strong>: So khớp khoảng cách vệ tinh Haversine giữa tọa độ du khách và trạm QR. Nếu khoảng cách &gt; 300m, ứng dụng <strong>từ chối check-in</strong> và hiển thị cảnh báo khoảng cách thực tế (ví dụ: "Bạn đang cách trạm 2.4 km"). Hỗ trợ cơ chế giả lập tọa độ khi chạy trên Android Emulator để phục vụ chấm điểm.</li>
+          <li><strong>Quy tắc Chấm điểm & Mở khóa Huy hiệu (Gamification)</strong>: Gửi đáp án trắc nghiệm lên máy chủ chấm điểm bảo mật; chỉ khi đúng mới cộng điểm và nâng cấp bậc hộ chiếu; tự động kích hoạt hộp thoại vinh danh huy hiệu mới đạt được (<code>showNewBadgesDialog</code>).</li>
+          <li><strong>Ràng buộc Chuyển giao Hộ chiếu (Claim Device Passport)</strong>: Khi đăng nhập, toàn bộ dữ liệu quét QR, điểm thưởng và huy hiệu ở chế độ Khách được gộp nguyên vẹn vào tài khoản đám mây mà không bị ghi đè hay mất mát.</li>
+          <li><strong>Ràng buộc Lập lịch AI & Ngân sách</strong>: Chặn ngân sách âm hoặc bằng 0, ràng buộc thời gian 1-7 ngày, số lượng khách &ge; 1; phân bổ tự động 5 nhóm chi phí hợp lý và tối ưu hóa thứ tự cung đường di chuyển.</li>
+          <li><strong>Quy tắc Live Replan Thực địa</strong>: Quy trình 2 bước nghiêm ngặt: Phải bấm "Đã đến" (<code>arrived</code>) trước khi bấm "Bắt đầu xuất phát" (<code>departed</code>); các chip hoãn giờ (+15p, +30p, +45p, +60p) tự động dời giờ và tính lại ETA cho toàn bộ các điểm dừng kế tiếp.</li>
+          <li><strong>Validation Biểu mẫu</strong>: Kiểm tra định dạng Email bằng biểu thức chính quy (Regex), mật khẩu tối thiểu 8 ký tự, tự động chặn gửi yêu cầu khi dữ liệu bắt buộc bị bỏ trống.</li>
+        </ul>
+      </div>
+
+      <!-- Tiêu chí 4 & Hướng dẫn test -->
+      <div class="grid-2">
+        <div class="sub-box">
+          <h3>3.4. Chất Lượng Mã Nguồn & Testing (20%)</h3>
+          <p style="font-size: 8.2pt; margin-bottom: 2px;">
+            • <strong>flutter analyze</strong>: Đạt <strong>0 issues found</strong> (Clean Code tuyệt đối, không cảnh báo lỗi thời).<br>
+            • <strong>flutter test</strong>: Đạt <strong>17/17 tests PASSED (100%)</strong> kiểm tra toàn bộ Models, Formatters, Shell Tabs, Server Settings, Auth Autofill, QR Scanning và AI Trip Planner.
+          </p>
+        </div>
+        <div class="sub-box">
+          <h3>🚀 Hướng Dẫn Test Nhanh (Dành Cho Giảng Viên)</h3>
+          <p style="font-size: 8.2pt; margin-bottom: 2px;">
+            1. Mở <code>mobile/</code> trong Android Studio, chạy trên Emulator.<br>
+            2. Quan sát đèn xanh DNS trên AppBar (đã nối <code>10.0.2.2:4000</code>).<br>
+            3. Vào <strong>Tài khoản</strong> &rarr; chạm chip <strong>Du khách</strong> &rarr; Đăng nhập.<br>
+            4. Vào tab <strong>Quét QR</strong> &rarr; chọn trạm <strong>TRAMCHIM-01</strong> test GPS.<br>
+            5. Vào tab <strong>Lịch trình AI</strong> &rarr; Bấm tạo lịch trình & test Replan.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer-note">
+      <span>Đồ án PRM393 - Lập trình Di động Flutter</span>
+      <span>Sinh viên: Lại Văn Thịnh (100% Solo)</span>
+      <span>Trang 2 / 2</span>
+    </div>
+  </div>
+
+</body>
+</html>

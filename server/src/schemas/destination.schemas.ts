@@ -122,3 +122,17 @@ export const destinationPatchSchema = z
   .strict()
   .refine((value) => Object.keys(value).length > 0, 'Không có dữ liệu cần cập nhật.');
 export type DestinationPatch = z.infer<typeof destinationPatchSchema>;
+
+export const checkInGpsBodySchema = z
+  .object({
+    lat: z.number().min(8).max(24),
+    lng: z.number().min(102).max(110),
+    isSimulated: z.boolean().optional(),
+  })
+  .strict();
+
+export const nearbyDestinationsQuerySchema = z.object({
+  lat: z.coerce.number().min(8).max(24),
+  lng: z.coerce.number().min(102).max(110),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+});

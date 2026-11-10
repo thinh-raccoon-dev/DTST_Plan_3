@@ -1,4 +1,4 @@
-import { Heart, MapPin, QrCode, Route, Sparkles, Trophy } from 'lucide-react';
+import { Heart, MapPin, MapPinCheck, QrCode, Route, Sparkles, Trophy } from 'lucide-react';
 import { useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { CategoryIcon } from '../components/destination/CategoryIcon';
@@ -6,6 +6,7 @@ import { IllustrativeBadge, VerificationStatusBadge } from '../components/destin
 import { DestinationCard } from '../components/destination/DestinationCard';
 import { DestinationFacts, DestinationMap, DestinationSources } from '../components/destination/DestinationInfo';
 import { DestinationImage } from '../components/destination/DestinationImage';
+import { DestinationReviews } from '../components/destination/DestinationReviews';
 import { PageContainer } from '../components/layout/PublicLayout';
 import { Badge } from '../components/ui/Badge';
 import { Button, ButtonLink } from '../components/ui/Button';
@@ -178,14 +179,18 @@ export function DestinationDetailPage() {
                     </li>
                   ))}
                 </ul>
-                {hasActiveQr && (
-                  <ButtonLink to="/scan" variant="accent" size="sm" className="mt-5" icon={<QrCode className="size-4" aria-hidden />}>
-                    Mở máy quét QR
-                  </ButtonLink>
-                )}
+                <ButtonLink to="/check-in" variant="accent" size="sm" className="mt-5" icon={<MapPinCheck className="size-4" aria-hidden />}>
+                  Điểm danh GPS tại điểm này
+                </ButtonLink>
               </>
             )}
           </Card>
+
+          <DestinationReviews
+            destinationId={d.id}
+            destinationSlug={d.slug}
+            destinationName={d.name}
+          />
         </div>
         <div className="space-y-6">
           <DestinationFacts destination={d} />

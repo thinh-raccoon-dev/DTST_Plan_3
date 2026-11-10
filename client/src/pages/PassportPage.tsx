@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { announceBadges } from '../components/challenge/ChallengeQuiz';
 import { PageContainer } from '../components/layout/PublicLayout';
+import { DigitalTravelerPass } from '../components/passport/DigitalTravelerPass';
 import { Button, ButtonLink } from '../components/ui/Button';
 import { Card, StatCard } from '../components/ui/Card';
 import { EmptyState, ErrorState, Notice, PageLoader } from '../components/ui/States';
@@ -71,11 +72,11 @@ export function PassportPage() {
             </span>
             <h1 className="mt-3 text-3xl text-white sm:text-4xl">Hộ chiếu trải nghiệm số</h1>
             <p className="mt-2 max-w-xl text-sm leading-relaxed text-leaf-100 sm:text-base">
-              Điểm đã khám phá = điểm bạn đã check-in hoặc hoàn thành thử thách. Quét mã QR tại điểm đến thí điểm để nhận điểm thưởng và mở khóa huy hiệu.
+              Điểm đã khám phá = điểm bạn đã điểm danh GPS hoặc hoàn thành thử thách. Có mặt trong phạm vi 1.000m tại điểm đến để nhận điểm EXP và mở khóa huy hiệu.
             </p>
             <div className="mt-5 flex flex-wrap gap-3">
-              <ButtonLink to="/scan" variant="inverted" icon={<QrCode className="size-4" aria-hidden />}>
-                Quét mã QR ngay
+              <ButtonLink to="/check-in" variant="inverted" icon={<MapPinCheck className="size-4" aria-hidden />}>
+                Điểm danh GPS ngay
               </ButtonLink>
               <ButtonLink to="/destinations?hasActivity=true" variant="outlineInverted" icon={<Compass className="size-4" aria-hidden />}>
                 Xem điểm có thử thách
@@ -89,7 +90,7 @@ export function PassportPage() {
               <span className="text-teal-200">{percent}%</span>
             </div>
             <p className="mt-1 text-2xl font-extrabold text-white">
-              {p.progress.explored} <span className="text-base font-medium text-leaf-100">/ {p.progress.total} điểm QR</span>
+              {p.progress.explored} <span className="text-base font-medium text-leaf-100">/ {p.progress.total} địa điểm</span>
             </p>
             <div
               className="mt-3 h-3 overflow-hidden rounded-full bg-white/15"
@@ -130,7 +131,12 @@ export function PassportPage() {
         )}
       </div>
 
-      <div className="mt-6 grid grid-cols-2 gap-3.5 lg:grid-cols-4">
+      {/* Digital Traveler Pass (Thẻ Du Hành Số 3D Sen Hồng) */}
+      <section className="tp-fade-up mt-8 rounded-panel border border-sand-200 bg-white/95 p-5 shadow-raised backdrop-blur-sm sm:p-8">
+        <DigitalTravelerPass user={user} passport={p} />
+      </section>
+
+      <div className="mt-8 grid grid-cols-2 gap-3.5 lg:grid-cols-4">
         <StatCard label="Tổng điểm" value={formatNumber(p.totals.points)} icon={<Trophy className="size-5 text-teal-600" aria-hidden />} />
         <StatCard label="Điểm đã khám phá" value={p.totals.exploredDestinations} icon={<Compass className="size-5" aria-hidden />} />
         <StatCard label="Thử thách hoàn thành" value={p.totals.completedChallenges} icon={<Lightbulb className="size-5" aria-hidden />} />
@@ -161,8 +167,8 @@ export function PassportPage() {
           <EmptyState
             icon={<Stamp className="size-6" aria-hidden />}
             title="Hộ chiếu của bạn còn trống"
-            description="Quét mã QR tại điểm đến thí điểm để check-in và tham gia thử thách đầu tiên."
-            action={<ButtonLink to="/scan">Quét mã QR</ButtonLink>}
+            description="Có mặt trong phạm vi 1.000m tại các điểm đến Đất Sen Hồng để điểm danh GPS và nhận điểm thưởng đầu tiên."
+            action={<ButtonLink to="/check-in">Điểm danh GPS ngay</ButtonLink>}
           />
         </div>
       )}

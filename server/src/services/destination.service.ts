@@ -31,6 +31,8 @@ export function toDestinationSummary(d: LeanDestination, extra: { hasChallenge?:
     estimatedVisitDuration: d.estimatedVisitDuration
       ? { minutes: d.estimatedVisitDuration.minutes, isEstimate: d.estimatedVisitDuration.isEstimate ?? true }
       : null,
+    address: d.address ?? null,
+    coordinates: d.coordinates ? { lat: d.coordinates.lat, lng: d.coordinates.lng } : null,
     hasCoordinates: Boolean(d.coordinates),
     hasChallenge: Boolean(extra.hasChallenge),
   };

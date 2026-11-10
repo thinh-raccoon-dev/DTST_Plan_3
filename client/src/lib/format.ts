@@ -40,10 +40,25 @@ export function directionsUrl(coords: { lat: number; lng: number }): string {
   return `https://www.google.com/maps/dir/?api=1&destination=${coords.lat},${coords.lng}`;
 }
 
+export function googleMapsEmbedUrl(
+  coords: { lat: number; lng: number },
+  options?: { label?: string; mapType?: 'm' | 'h'; zoom?: number },
+): string {
+  const zoom = options?.zoom ?? 15;
+  const mapType = options?.mapType ?? 'm';
+  const query = options?.label
+    ? `${coords.lat},${coords.lng} (${options.label})`
+    : `${coords.lat},${coords.lng}`;
+  return `https://maps.google.com/maps?q=${encodeURIComponent(query)}&t=${mapType}&z=${zoom}&hl=vi&output=embed`;
+}
+
+export function googleMapsPlaceUrl(coords: { lat: number; lng: number }, name?: string): string {
+  const query = name ? `${name} (${coords.lat},${coords.lng})` : `${coords.lat},${coords.lng}`;
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+}
+
 export function osmEmbedUrl(coords: { lat: number; lng: number }): string {
-  const d = 0.02;
-  const bbox = [coords.lng - d, coords.lat - d, coords.lng + d, coords.lat + d].join(',');
-  return `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${coords.lat},${coords.lng}`;
+  return googleMapsEmbedUrl(coords);
 }
 
 export function osmLinkUrl(coords: { lat: number; lng: number }): string {

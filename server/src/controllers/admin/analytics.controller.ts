@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import type { Types } from 'mongoose';
+import { Types } from 'mongoose';
 import { z } from 'zod';
 import { AnalyticsEventModel, type EventType } from '../../models/AnalyticsEvent.js';
 import { ChallengeModel } from '../../models/Challenge.js';
@@ -55,7 +55,9 @@ export async function getAnalytics(req: Request, res: Response) {
   const isPartner = req.user?.role === 'partner';
   let partnerDestIds: Types.ObjectId[] | null = null;
   if (isPartner && req.user?.id) {
-    partnerDestIds = (await DestinationModel.find({ managedBy: req.user.id }).distinct('_id')) as Types.ObjectId[];
+    partnerDestIds = (await DestinationModel.find({
+      managedBy: { $in: [req.user.id, new Types.ObjectId(req.user.id)] },
+    }).distinct('_id')) as Types.ObjectId[];
   }
 
   const match: Record<string, unknown> = { timestamp: { $gte: range.start, $lt: range.endExclusive } };
