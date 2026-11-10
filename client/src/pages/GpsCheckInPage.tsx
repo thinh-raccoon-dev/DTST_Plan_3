@@ -4,6 +4,7 @@ import {
   Award,
   CheckCircle2,
   ExternalLink,
+  Info,
   MapPinCheck,
   Navigation,
   Radio,
@@ -108,6 +109,7 @@ export function GpsCheckInPage() {
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        setGpsError(null);
         setGpsLoading(false);
         setIsDemoMode(false);
       },
@@ -118,13 +120,19 @@ export function GpsCheckInPage() {
         } else if (err.code === err.TIMEOUT) {
           msg = 'Hết thời gian chờ phản hồi GPS. Đang chuyển sang vị trí mặc định.';
         }
-        setGpsError(msg);
         setGpsLoading(false);
-        // Fallback to Cao Lanh center if real GPS fails
-        const defaultPreset = DEMO_PRESETS[0]!;
-        setCoords({ lat: defaultPreset.lat, lng: defaultPreset.lng });
+        // Only show error if we have no valid coordinates at all
+        setCoords((prev) => {
+          if (prev) {
+            setGpsError(null);
+            return prev;
+          }
+          setGpsError(msg);
+          const defaultPreset = DEMO_PRESETS[0]!;
+          return { lat: defaultPreset.lat, lng: defaultPreset.lng };
+        });
       },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
+      { enableHighAccuracy: false, timeout: 15000, maximumAge: 300000 },
     );
   }, []);
 
@@ -379,14 +387,29 @@ export function GpsCheckInPage() {
           </div>
         )}
 
-        {/* GPS Warning if denied */}
-        {gpsError && !isDemoMode && (
+        {/* GPS Warning if completely unable to get location */}
+        {gpsError && !coords && !isDemoMode && (
           <div className="mt-3 flex items-start gap-2 rounded-xl bg-amber-50 p-3 text-xs text-amber-800 ring-1 ring-amber-200">
             <AlertCircle className="size-4 shrink-0 mt-0.5 text-amber-600" />
             <div className="flex-1">
               <p className="font-semibold">{gpsError}</p>
               <p className="mt-0.5 text-amber-700">
                 Bạn có thể bấm <strong>"Bật Demo Dùng Thử"</strong> ở trên để thử nghiệm tính năng ngay lập tức.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Clear and friendly guidance when user is outside Dong Thap */}
+        {!isDemoMode && coords && data && data.inRangeCount === 0 && nearest && (
+          <div className="mt-3 flex items-start gap-2.5 rounded-xl bg-leaf-50/80 p-3.5 text-xs text-leaf-900 ring-1 ring-leaf-200/80">
+            <Info className="size-4 shrink-0 mt-0.5 text-leaf-700" />
+            <div className="flex-1">
+              <p className="font-bold text-leaf-900">
+                Bạn chưa ở trong bán kính điểm danh (1.000m) của điểm đến nào tại Đồng Tháp
+              </p>
+              <p className="mt-0.5 text-leaf-800 leading-relaxed">
+                Hệ thống đã nhận diện chính xác vị trí thực tế của bạn ({coords.lat.toFixed(4)}, {coords.lng.toFixed(4)}), cách điểm đến gần nhất là <strong>&ldquo;{nearest.name}&rdquo;</strong> khoảng <strong>{nearest.distanceKm} km</strong>. Khi đến thực địa trong phạm vi 1.000m, nút <strong>Điểm danh GPS</strong> sẽ tự động mở sáng. Nếu đang kiểm thử từ xa, hãy bấm <strong>&ldquo;Bật Demo Dùng Thử&rdquo;</strong> ở trên để trải nghiệm tính năng ngay lập tức!
               </p>
             </div>
           </div>
