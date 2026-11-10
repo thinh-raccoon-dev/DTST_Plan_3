@@ -10,6 +10,7 @@ import * as adminPassportLogs from '../controllers/admin/passportLogs.controller
 import * as adminQr from '../controllers/admin/qr.controller.js';
 import * as adminReviews from '../controllers/admin/reviews.controller.js';
 import * as adminSystem from '../controllers/admin/system.controller.js';
+import * as adminUpload from '../controllers/admin/upload.controller.js';
 import * as adminUsers from '../controllers/admin/users.controller.js';
 import * as auth from '../controllers/auth.controller.js';
 import * as banners from '../controllers/banner.controller.js';
@@ -96,6 +97,10 @@ export function buildApiRouter(): Router {
 
   // Analytics: Admin views overall system
   admin.get('/analytics', requireAdmin, adminAnalytics.getAnalytics);
+
+  // Media Upload (Staff: Admin & Partner)
+  admin.post('/upload', adminUpload.uploadMiddleware.single('file'), adminUpload.handleSingleUpload);
+  admin.post('/upload/multiple', adminUpload.uploadMiddleware.array('files', 10), adminUpload.handleMultipleUpload);
 
   // Destinations management (Staff)
   admin.get('/destinations', adminDestinations.listAdminDestinations);

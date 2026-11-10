@@ -147,6 +147,7 @@ export async function getPartnerOverview(req: Request, res: Response) {
       images: destination.images,
       operationalStatus: destination.operationalStatus,
       publicationStatus: destination.publicationStatus,
+      durationMinutes: destination.estimatedVisitDuration?.minutes,
       reviewNote: destination.reviewNote,
       managedBy: destination.managedBy,
     },

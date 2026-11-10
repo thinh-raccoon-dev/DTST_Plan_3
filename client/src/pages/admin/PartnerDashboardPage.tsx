@@ -5,6 +5,9 @@ import {
   Clock,
   ExternalLink,
   Eye,
+  FileSpreadsheet,
+  Globe,
+  Layers,
   MapPin,
   MessageSquare,
   PenLine,
@@ -12,6 +15,7 @@ import {
   Plus,
   Printer,
   QrCode,
+  ShieldCheck,
   Sparkles,
   Star,
   Ticket,
@@ -40,7 +44,7 @@ export function PartnerDashboardPage() {
   const currentUser = useAuthStore((s) => s.user);
 
   // Active Tab
-  const [activeTab, setActiveTab] = useState<'overview' | 'challenges' | 'qr' | 'operations'>('overview');
+  const [activeTab, setActiveTab] = useState<'summary' | 'overview' | 'challenges' | 'qr' | 'operations'>('summary');
 
   // Operational toggle modal / state
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
@@ -337,6 +341,20 @@ export function PartnerDashboardPage() {
       <div className="mt-8 flex flex-wrap items-center gap-2 border-b border-sand-300 pb-2">
         <button
           type="button"
+          onClick={() => setActiveTab('summary')}
+          className={clsx(
+            'flex items-center gap-2 rounded-t-lg px-4 py-2.5 text-sm font-semibold transition-colors',
+            activeTab === 'summary'
+              ? 'border-b-2 border-leaf-600 bg-white text-leaf-800 shadow-xs'
+              : 'text-river-600 hover:text-river-900',
+          )}
+        >
+          <FileSpreadsheet className="size-4" />
+          Bảng tổng hợp dữ liệu KDL
+        </button>
+
+        <button
+          type="button"
           onClick={() => setActiveTab('overview')}
           className={clsx(
             'flex items-center gap-2 rounded-t-lg px-4 py-2.5 text-sm font-semibold transition-colors',
@@ -391,6 +409,386 @@ export function PartnerDashboardPage() {
           Thông tin Vận hành & Dịch vụ
         </button>
       </div>
+
+      {/* Tab 0: Bảng tổng hợp dữ liệu tổng quát của địa điểm đối tác */}
+      {activeTab === 'summary' && (
+        <div className="mt-6 space-y-6">
+          <Card className="overflow-hidden border border-sand-300 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-sand-200 bg-gradient-to-r from-leaf-900 via-leaf-800 to-river-900 px-6 py-4 text-white">
+              <div className="flex items-center gap-3">
+                <span className="flex size-10 items-center justify-center rounded-xl bg-white/10 text-teal-300 shadow-inner">
+                  <FileSpreadsheet className="size-5" />
+                </span>
+                <div>
+                  <h3 className="text-base font-bold text-white">
+                    Bảng Tổng Hợp Dữ Liệu & Chỉ Số Tổng Quát Địa Điểm
+                  </h3>
+                  <p className="text-xs text-sand-200">
+                    Báo cáo toàn cảnh các thông số vận hành, tiếp đón và tương tác số của {destination.name}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <ButtonLink
+                  to={`/admin/destinations/${destination.id}/edit`}
+                  variant="accent"
+                  size="sm"
+                  icon={<PenLine className="size-4" />}
+                >
+                  Chỉnh sửa hồ sơ
+                </ButtonLink>
+                <ButtonLink
+                  to={`/destinations/${destination.slug}`}
+                  target="_blank"
+                  variant="secondary"
+                  size="sm"
+                  icon={<ExternalLink className="size-4" />}
+                >
+                  Xem trang du khách
+                </ButtonLink>
+              </div>
+            </div>
+
+            {/* Comprehensive Data Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm border-collapse">
+                <thead>
+                  <tr className="border-b border-sand-200 bg-sand-100/70 text-xs font-bold uppercase tracking-wider text-river-700">
+                    <th className="py-3 px-4 w-1/4">Danh mục thông số</th>
+                    <th className="py-3 px-4 w-2/5">Dữ liệu thực tế</th>
+                    <th className="py-3 px-4 w-1/5">Tình trạng / Đánh giá</th>
+                    <th className="py-3 px-4 text-right">Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-sand-200 text-river-900">
+                  {/* Nhóm 1: Thông tin định danh */}
+                  <tr className="bg-sand-50/50 font-bold text-xs uppercase text-river-500">
+                    <td colSpan={4} className="py-2.5 px-4 flex items-center gap-1.5">
+                      <Layers className="size-3.5 text-leaf-600" /> 1. Hồ sơ định danh & Vị trí thực địa
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="py-3 px-4 font-medium text-river-600">Tên điểm du lịch</td>
+                    <td className="py-3 px-4 font-bold text-river-900">{destination.name}</td>
+                    <td className="py-3 px-4">
+                      <Badge tone="leaf">{categoryLabel(destination.category as never)}</Badge>
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      <span className="text-xs text-river-500 font-mono">slug: {destination.slug}</span>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="py-3 px-4 font-medium text-river-600">Địa bàn hành chính</td>
+                    <td className="py-3 px-4">{areaLabel(destination.area as never)}, Tỉnh Đồng Tháp</td>
+                    <td className="py-3 px-4">
+                      <span className="inline-flex items-center gap-1 text-xs text-river-600">
+                        <CheckCircle2 className="size-3.5 text-leaf-600" /> Thuộc bản đồ số DTST
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      <ButtonLink to={`/admin/destinations/${destination.id}/edit`} variant="ghost" size="sm">
+                        Đổi khu vực
+                      </ButtonLink>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="py-3 px-4 font-medium text-river-600">Địa chỉ thực tế</td>
+                    <td className="py-3 px-4">{destination.address || <span className="italic text-river-400">Chưa cập nhật địa chỉ</span>}</td>
+                    <td className="py-3 px-4">
+                      {destination.address ? (
+                        <span className="inline-flex items-center gap-1 text-xs text-leaf-700 font-medium">
+                          <CheckCircle2 className="size-3.5" /> Có địa chỉ
+                        </span>
+                      ) : (
+                        <span className="text-xs text-amber-600">Cần bổ sung</span>
+                      )}
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      <ButtonLink to={`/admin/destinations/${destination.id}/edit`} variant="ghost" size="sm">
+                        Sửa
+                      </ButtonLink>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="py-3 px-4 font-medium text-river-600">Tọa độ vệ tinh GPS</td>
+                    <td className="py-3 px-4 font-mono text-xs">
+                      {destination.coordinates ? (
+                        <span className="font-semibold text-leaf-800">
+                          {destination.coordinates.lat}, {destination.coordinates.lng}
+                        </span>
+                      ) : (
+                        <span className="italic text-amber-600">Chưa chấm điểm trên bản đồ</span>
+                      )}
+                    </td>
+                    <td className="py-3 px-4">
+                      {destination.coordinates ? (
+                        <span className="inline-flex items-center gap-1 text-xs text-teal-700 font-medium">
+                          <CheckCircle2 className="size-3.5" /> Bán kính Geofence 500m
+                        </span>
+                      ) : (
+                        <span className="text-xs text-amber-700 font-medium">Không thể check-in GPS</span>
+                      )}
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      {destination.coordinates ? (
+                        <a
+                          href={`https://maps.google.com/?q=${destination.coordinates.lat},${destination.coordinates.lng}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs font-semibold text-leaf-700 hover:underline inline-flex items-center gap-1"
+                        >
+                          <ExternalLink className="size-3" /> Mở Map
+                        </a>
+                      ) : (
+                        <ButtonLink to={`/admin/destinations/${destination.id}/edit`} variant="ghost" size="sm">
+                          Chấm map
+                        </ButtonLink>
+                      )}
+                    </td>
+                  </tr>
+
+                  {/* Nhóm 2: Vận hành & Dịch vụ */}
+                  <tr className="bg-sand-50/50 font-bold text-xs uppercase text-river-500">
+                    <td colSpan={4} className="py-2.5 px-4 flex items-center gap-1.5">
+                      <Clock className="size-3.5 text-teal-600" /> 2. Tình trạng Vận hành & Dịch vụ đón khách
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="py-3 px-4 font-medium text-river-600">Trạng thái đón khách</td>
+                    <td className="py-3 px-4">
+                      <span
+                        className={clsx(
+                          'inline-flex items-center gap-1.5 rounded-pill px-2.5 py-0.5 text-xs font-bold',
+                          isOpen ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800',
+                        )}
+                      >
+                        <span className={clsx('size-2 rounded-full', isOpen ? 'bg-emerald-500' : 'bg-amber-500')} />
+                        {isOpen ? 'Đang mở cửa đón khách' : 'Tạm ngưng đón khách / Bảo trì'}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className="text-xs text-river-600">Thời gian thực (Realtime)</span>
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      <button
+                        type="button"
+                        onClick={handleOpenStatusModal}
+                        className="text-xs font-semibold text-leaf-700 hover:underline"
+                      >
+                        Đổi trạng thái
+                      </button>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="py-3 px-4 font-medium text-river-600">Giờ mở cửa đón khách</td>
+                    <td className="py-3 px-4">{destination.openingHours || <span className="italic text-river-400">Chưa thiết lập</span>}</td>
+                    <td className="py-3 px-4">
+                      <span className="text-xs text-river-600">Khung giờ tiếp khách</span>
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      <ButtonLink to={`/admin/destinations/${destination.id}/edit`} variant="ghost" size="sm">
+                        Cập nhật
+                      </ButtonLink>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="py-3 px-4 font-medium text-river-600">Giá vé tham khảo niêm yết</td>
+                    <td className="py-3 px-4">{destination.referencePrice || <span className="italic text-river-400">Miễn phí vé vào cổng</span>}</td>
+                    <td className="py-3 px-4">
+                      <span className="text-xs text-river-600">Đã công khai trên app</span>
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      <ButtonLink to={`/admin/destinations/${destination.id}/edit`} variant="ghost" size="sm">
+                        Sửa giá
+                      </ButtonLink>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="py-3 px-4 font-medium text-river-600">Thời lượng tham quan khuyến nghị</td>
+                    <td className="py-3 px-4">
+                      {destination.durationMinutes ? `${destination.durationMinutes} phút` : <span className="italic text-river-400">120 phút (Mặc định)</span>}
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className="text-xs text-river-600">AI Trip Planner V9 tối ưu</span>
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      <ButtonLink to={`/admin/destinations/${destination.id}/edit`} variant="ghost" size="sm">
+                        Chỉnh sửa
+                      </ButtonLink>
+                    </td>
+                  </tr>
+                  {destination.reviewNote && (
+                    <tr className="bg-amber-50/60">
+                      <td className="py-3 px-4 font-medium text-amber-800">Thông báo đặc biệt của BQL</td>
+                      <td className="py-3 px-4 text-amber-900 font-medium" colSpan={2}>
+                        {destination.reviewNote}
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <button
+                          type="button"
+                          onClick={handleOpenStatusModal}
+                          className="text-xs font-semibold text-amber-800 hover:underline"
+                        >
+                          Sửa thông báo
+                        </button>
+                      </td>
+                    </tr>
+                  )}
+
+                  {/* Nhóm 3: Kênh Liên Lạc & Tài Nguyên */}
+                  <tr className="bg-sand-50/50 font-bold text-xs uppercase text-river-500">
+                    <td colSpan={4} className="py-2.5 px-4 flex items-center gap-1.5">
+                      <Globe className="size-3.5 text-blue-600" /> 3. Kênh Liên Lạc & Tài Nguyên Số
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="py-3 px-4 font-medium text-river-600">Hotline hỗ trợ du khách</td>
+                    <td className="py-3 px-4 font-mono">{destination.contactInfo?.phone || <span className="italic text-river-400">Chưa có SĐT</span>}</td>
+                    <td className="py-3 px-4">
+                      {destination.contactInfo?.phone ? (
+                        <span className="inline-flex items-center gap-1 text-xs text-leaf-700">
+                          <CheckCircle2 className="size-3.5" /> Hoạt động
+                        </span>
+                      ) : (
+                        <span className="text-xs text-amber-600">Chưa điền</span>
+                      )}
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      <ButtonLink to={`/admin/destinations/${destination.id}/edit`} variant="ghost" size="sm">
+                        Sửa
+                      </ButtonLink>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="py-3 px-4 font-medium text-river-600">Hòm thư điện tử (Email)</td>
+                    <td className="py-3 px-4 font-mono text-xs">{destination.contactInfo?.email || <span className="italic text-river-400">Chưa có email</span>}</td>
+                    <td className="py-3 px-4">
+                      <span className="text-xs text-river-600">Tiếp nhận khiếu nại</span>
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      <ButtonLink to={`/admin/destinations/${destination.id}/edit`} variant="ghost" size="sm">
+                        Sửa
+                      </ButtonLink>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="py-3 px-4 font-medium text-river-600">Thư viện hình ảnh thực tế</td>
+                    <td className="py-3 px-4 font-bold text-river-900">
+                      {destination.images?.length || 0} ảnh chất lượng cao
+                    </td>
+                    <td className="py-3 px-4">
+                      {(destination.images?.length || 0) >= 3 ? (
+                        <span className="inline-flex items-center gap-1 text-xs text-leaf-700 font-medium">
+                          <CheckCircle2 className="size-3.5" /> Đạt chuẩn hiển thị
+                        </span>
+                      ) : (
+                        <span className="text-xs text-amber-700 font-medium">Nên tải thêm ảnh</span>
+                      )}
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      <ButtonLink to={`/admin/destinations/${destination.id}/edit`} variant="ghost" size="sm">
+                        Tải ảnh lên
+                      </ButtonLink>
+                    </td>
+                  </tr>
+
+                  {/* Nhóm 4: Hiệu Suất Tương Tác Số */}
+                  <tr className="bg-sand-50/50 font-bold text-xs uppercase text-river-500">
+                    <td colSpan={4} className="py-2.5 px-4 flex items-center gap-1.5">
+                      <ShieldCheck className="size-3.5 text-lotus-600" /> 4. Chỉ Số Hiệu Suất Tương Tác Số (KPIs & CSAT)
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="py-3 px-4 font-medium text-river-600">Lượt xem trang du khách</td>
+                    <td className="py-3 px-4 font-bold text-base text-leaf-700">
+                      {(metrics?.totalViews ?? 0).toLocaleString()} lượt
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className="text-xs text-river-600">Tương tác trực tuyến</span>
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      <ButtonLink to={`/destinations/${destination.slug}`} target="_blank" variant="ghost" size="sm">
+                        Xem trang
+                      </ButtonLink>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="py-3 px-4 font-medium text-river-600">Lượt khách Check-in thực tế</td>
+                    <td className="py-3 px-4 font-bold text-base text-teal-700">
+                      {(metrics?.totalCheckIns ?? 0).toLocaleString()} lượt check-in
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className="text-xs text-teal-700 font-semibold">Khách thực địa tại KDL</span>
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('overview')}
+                        className="text-xs font-semibold text-leaf-700 hover:underline"
+                      >
+                        Xem dòng khách
+                      </button>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="py-3 px-4 font-medium text-river-600">Mức độ hài lòng du khách (CSAT)</td>
+                    <td className="py-3 px-4 font-bold text-base text-amber-600">
+                      ★ {metrics?.averageRating ?? 5.0} / 5.0
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className="text-xs text-river-600">
+                        {metrics?.totalReviews ?? 0} đánh giá ({metrics?.respondedReviews ?? 0} đã phản hồi)
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      <ButtonLink to="/admin/reviews" variant="ghost" size="sm">
+                        Quản trị đánh giá
+                      </ButtonLink>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="py-3 px-4 font-medium text-river-600">Trạm mã QR & Standee</td>
+                    <td className="py-3 px-4 font-bold text-river-900">
+                      {data?.qrs?.length || 0} mã QR đang hoạt động
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className="text-xs text-river-600">Đặt tại quầy vé & tiểu cảnh</span>
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('qr')}
+                        className="text-xs font-semibold text-leaf-700 hover:underline"
+                      >
+                        Quản lý QR
+                      </button>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="py-3 px-4 font-medium text-river-600">Thử thách & Trò chơi văn hóa</td>
+                    <td className="py-3 px-4 font-bold text-river-900">
+                      {data?.challenges?.length || 0} thử thách ({metrics?.totalCompletedChallenges ?? 0} lượt giải đúng)
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className="text-xs text-teal-700 font-medium">Gamification tương tác</span>
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('challenges')}
+                        className="text-xs font-semibold text-leaf-700 hover:underline"
+                      >
+                        Quản lý thử thách
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        </div>
+      )}
 
       {/* Tab 1: Overview & Visitors */}
       {activeTab === 'overview' && (

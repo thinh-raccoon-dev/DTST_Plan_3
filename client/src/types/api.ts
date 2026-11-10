@@ -964,6 +964,7 @@ export interface PartnerOverviewResponse {
     images?: Array<{ url: string; alt?: string; caption?: string }>;
     operationalStatus: 'active' | 'temporarily_closed' | 'closed';
     publicationStatus: string;
+    durationMinutes?: number;
     reviewNote?: string;
     managedBy?: { displayName: string; email: string };
   };

@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
@@ -53,6 +53,12 @@ export function createApp(): Express {
   app.use(pinoHttp({ logger, autoLogging: { ignore: (req) => req.url === '/api/v1/health' } }));
   app.use(express.json({ limit: '200kb' }));
   app.use(cookieParser());
+
+  const uploadsDir = path.resolve(process.cwd(), 'uploads');
+  if (!existsSync(uploadsDir)) {
+    mkdirSync(uploadsDir, { recursive: true });
+  }
+  app.use('/uploads', express.static(uploadsDir, { maxAge: '7d' }));
 
   app.use('/api/v1', apiLimiter, anonymousSession, csrfProtection, attachUser, buildApiRouter());
   app.use('/api', notFoundHandler);

@@ -6,6 +6,8 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { z } from 'zod';
 import { DestinationFacts } from '../../components/destination/DestinationInfo';
 import { DestinationImage } from '../../components/destination/DestinationImage';
+import { ImageUploader } from '../../components/destination/ImageUploader';
+import { MapLocationPicker } from '../../components/destination/MapLocationPicker';
 import { AdminPageHeader } from '../../components/layout/AdminLayout';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
@@ -351,14 +353,25 @@ function DestinationForm({ initial, id }: { initial?: AdminDestination; id?: str
         </FormField>
       </Section>
 
-      <Section title="Vị trí & thông tin thực tế" description="Để trống nếu chưa có thông tin. Không nhập giá 0 hoặc giờ mở cửa phỏng đoán — trang du khách sẽ hiển thị “Chưa có thông tin xác minh”.">
+      <Section title="Vị trí & thông tin thực tế" description="Để trống nếu chưa có thông tin. Bạn có thể chấm điểm trực tiếp trên bản đồ vệ tinh/đường phố hoặc nhập tay vĩ độ/kinh độ chính xác.">
         <FormField label="Địa chỉ" error={errors.address?.message} className="sm:col-span-2">
-          <Input {...reg('address')} />
+          <Input {...reg('address')} placeholder="Số nhà, tên đường, xã/phường, huyện/thành phố, Tỉnh Đồng Tháp" />
         </FormField>
-        <FormField label="Vĩ độ (lat)" hint="Ví dụ 10.67" error={errors.lat?.message}>
+        <div className="sm:col-span-2">
+          <MapLocationPicker
+            lat={form.watch('lat')}
+            lng={form.watch('lng')}
+            onChange={({ lat, lng }) => {
+              form.setValue('lat', String(lat), { shouldValidate: true, shouldDirty: true });
+              form.setValue('lng', String(lng), { shouldValidate: true, shouldDirty: true });
+            }}
+            addressHint={form.watch('address')}
+          />
+        </div>
+        <FormField label="Vĩ độ (lat)" hint="Ví dụ 10.306 (tự động cập nhật khi chấm trên bản đồ)" error={errors.lat?.message}>
           <Input inputMode="decimal" {...reg('lat')} />
         </FormField>
-        <FormField label="Kinh độ (lng)" hint="Ví dụ 105.55" error={errors.lng?.message}>
+        <FormField label="Kinh độ (lng)" hint="Ví dụ 105.748 (tự động cập nhật khi chấm trên bản đồ)" error={errors.lng?.message}>
           <Input inputMode="decimal" {...reg('lng')} />
         </FormField>
         <FormField label="Giờ mở cửa" error={errors.openingHours?.message}>
@@ -409,8 +422,10 @@ function DestinationForm({ initial, id }: { initial?: AdminDestination; id?: str
       <Card className="p-5 sm:p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-lg">Hình ảnh</h2>
-            <p className="mt-1 text-sm text-river-600">Chỉ dùng ảnh có quyền sử dụng; ghi rõ tác giả và giấy phép. Ảnh đầu tiên là ảnh đại diện.</p>
+            <h2 className="text-lg">Hình ảnh thực tế & Tư liệu</h2>
+            <p className="mt-1 text-sm text-river-600">
+              Tải ảnh trực tiếp từ máy tính/điện thoại lên hệ thống bảo mật, hoặc dán URL ảnh nếu có. Tối đa 10 ảnh. Ảnh đầu tiên là ảnh đại diện.
+            </p>
           </div>
           <Button
             variant="secondary"
@@ -419,46 +434,80 @@ function DestinationForm({ initial, id }: { initial?: AdminDestination; id?: str
             disabled={images.fields.length >= 10}
             onClick={() => images.append({ url: '', alt: '', credit: '', license: '', sourceUrl: '' })}
           >
-            Thêm ảnh
+            Thêm ô nhập ảnh
           </Button>
         </div>
+
+        {/* Dedicated File Uploader Component */}
+        <div className="mt-4">
+          <ImageUploader
+            destinationName={form.watch('name')}
+            disabled={images.fields.length >= 10}
+            onImagesAdded={(newImages) => {
+              newImages.forEach((img) => {
+                if (images.fields.length < 10) {
+                  images.append(img);
+                }
+              });
+            }}
+          />
+        </div>
+
         {images.fields.length === 0 ? (
           <p className="mt-4 text-sm text-river-500">Chưa có ảnh — trang du khách sẽ hiển thị ảnh minh họa mặc định.</p>
         ) : (
           <ul className="mt-4 space-y-4">
-            {images.fields.map((field, index) => (
-              <li key={field.id} className="grid gap-3 rounded-control border border-sand-200 p-4 sm:grid-cols-[120px_1fr]">
-                <DestinationImage
-                  key={form.watch(`images.${index}.url`)}
-                  image={form.watch(`images.${index}.url`) ? { url: form.watch(`images.${index}.url`), alt: '' } : null}
-                  category={form.watch('category')}
-                  name="ảnh này"
-                  className="aspect-[4/3] w-full rounded-control"
-                />
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <FormField label="URL ảnh" required error={errors.images?.[index]?.url?.message} className="sm:col-span-2">
-                    <Input {...reg(`images.${index}.url`)} />
-                  </FormField>
-                  <FormField label="Mô tả ảnh (alt)" error={errors.images?.[index]?.alt?.message}>
-                    <Input {...reg(`images.${index}.alt`)} />
-                  </FormField>
-                  <FormField label="Tác giả / nguồn" error={errors.images?.[index]?.credit?.message}>
-                    <Input {...reg(`images.${index}.credit`)} />
-                  </FormField>
-                  <FormField label="Giấy phép" error={errors.images?.[index]?.license?.message}>
-                    <Input {...reg(`images.${index}.license`)} />
-                  </FormField>
-                  <FormField label="URL nguồn ảnh" error={errors.images?.[index]?.sourceUrl?.message}>
-                    <Input {...reg(`images.${index}.sourceUrl`)} />
-                  </FormField>
-                  <div className="sm:col-span-2">
-                    <Button size="sm" variant="ghost" className="text-red-700" icon={<Trash2 className="size-4" aria-hidden />} onClick={() => images.remove(index)}>
-                      Bỏ ảnh
-                    </Button>
+            {images.fields.map((field, index) => {
+              const currentUrl = form.watch(`images.${index}.url`);
+              const isLocalUpload = currentUrl?.startsWith('/uploads/');
+              return (
+                <li key={field.id} className="grid gap-3 rounded-control border border-sand-200 bg-white p-4 sm:grid-cols-[140px_1fr]">
+                  <div className="flex flex-col items-center gap-1.5">
+                    <DestinationImage
+                      key={currentUrl}
+                      image={currentUrl ? { url: currentUrl, alt: '' } : null}
+                      category={form.watch('category')}
+                      name="ảnh này"
+                      className="aspect-[4/3] w-full rounded-control object-cover shadow-sm"
+                    />
+                    {isLocalUpload && (
+                      <span className="inline-flex items-center rounded-pill bg-leaf-100 px-2 py-0.5 text-[10px] font-semibold text-leaf-800">
+                        🔒 Lưu trữ nội bộ
+                      </span>
+                    )}
                   </div>
-                </div>
-              </li>
-            ))}
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <FormField
+                      label="Đường dẫn ảnh hệ thống"
+                      required
+                      hint={isLocalUpload ? 'Tệp đã được lưu trữ an toàn trong máy chủ DTST' : 'Đường dẫn tĩnh hoặc liên kết ngoại bộ'}
+                      error={errors.images?.[index]?.url?.message}
+                      className="sm:col-span-2"
+                    >
+                      <Input {...reg(`images.${index}.url`)} />
+                    </FormField>
+                    <FormField label="Mô tả ảnh (alt)" error={errors.images?.[index]?.alt?.message}>
+                      <Input {...reg(`images.${index}.alt`)} placeholder="vd: Cổng chính, hoa cúc mâm xôi..." />
+                    </FormField>
+                    <FormField label="Tác giả / nguồn" error={errors.images?.[index]?.credit?.message}>
+                      <Input {...reg(`images.${index}.credit`)} placeholder="Ban Quản Lý KDL" />
+                    </FormField>
+                    <FormField label="Giấy phép" error={errors.images?.[index]?.license?.message}>
+                      <Input {...reg(`images.${index}.license`)} placeholder="Bản quyền đơn vị" />
+                    </FormField>
+                    <FormField label="URL nguồn ảnh (nếu có)" error={errors.images?.[index]?.sourceUrl?.message}>
+                      <Input {...reg(`images.${index}.sourceUrl`)} />
+                    </FormField>
+                    <div className="sm:col-span-2 flex items-center justify-between pt-1">
+                      <span className="text-xs text-river-500 font-medium">Vị trí ảnh: #{index + 1} {index === 0 ? '(Ảnh đại diện)' : ''}</span>
+                      <Button size="sm" variant="ghost" className="text-red-700 hover:bg-red-50" icon={<Trash2 className="size-4" aria-hidden />} onClick={() => images.remove(index)}>
+                        Xóa ảnh này
+                      </Button>
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         )}
       </Card>

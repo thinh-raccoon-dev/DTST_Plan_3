@@ -11,11 +11,17 @@ export default defineConfig({
   server: {
     port: 5173,
     // Same-origin proxy in development so HttpOnly cookies work without cross-site settings.
-    proxy: { '/api': { target: process.env.VITE_DEV_API_TARGET ?? 'http://localhost:4000', changeOrigin: false } },
+    proxy: {
+      '/api': { target: process.env.VITE_DEV_API_TARGET ?? 'http://localhost:4000', changeOrigin: false },
+      '/uploads': { target: process.env.VITE_DEV_API_TARGET ?? 'http://localhost:4000', changeOrigin: false },
+    },
   },
   preview: {
     port: 4173,
-    proxy: { '/api': { target: process.env.VITE_DEV_API_TARGET ?? 'http://localhost:4000', changeOrigin: false } },
+    proxy: {
+      '/api': { target: process.env.VITE_DEV_API_TARGET ?? 'http://localhost:4000', changeOrigin: false },
+      '/uploads': { target: process.env.VITE_DEV_API_TARGET ?? 'http://localhost:4000', changeOrigin: false },
+    },
   },
   build: {
     rollupOptions: {
