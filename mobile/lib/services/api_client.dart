@@ -30,6 +30,8 @@ class ApiClient {
   static const String _prefBaseUrlKey = 'dtst_api_base_url';
   static const String _prefCookiesKey = 'dtst_cookies_v1';
 
+  static void Function(bool online)? onConnectionStatusChanged;
+
   http.Client _http = http.Client();
 
   @visibleForTesting
@@ -94,36 +96,50 @@ class ApiClient {
   }
 
   void _updateCookiesFromResponse(http.Response response) {
-    final setCookieRaw = response.headers['set-cookie'];
-    if (setCookieRaw == null || setCookieRaw.isEmpty) return;
-
-    // Tách nhiều cookie trong header set-cookie (tránh tách dấu phẩy trong Expires=Wed, ...)
-    final cookieParts = setCookieRaw.split(RegExp(r',(?=\s*[A-Za-z0-9_-]+=)'));
     bool changed = false;
-    for (final part in cookieParts) {
-      final segments = part.split(';');
-      if (segments.isEmpty) continue;
-      final nameValue = segments.first.trim();
-      final eqIdx = nameValue.indexOf('=');
-      if (eqIdx <= 0) continue;
-      final name = nameValue.substring(0, eqIdx).trim();
-      final value = nameValue.substring(eqIdx + 1).trim();
 
-      final isExpired = segments.any((s) {
-        final lower = s.trim().toLowerCase();
-        return lower == 'max-age=0' || lower.startsWith(' max-age=0');
-      });
+    // Read custom headers directly for cross-origin/Flutter Web environments
+    final csrfHeader = response.headers['x-csrf-token'];
+    if (csrfHeader != null && csrfHeader.isNotEmpty) {
+      _csrfToken = csrfHeader;
+      _cookies['dtst_csrf'] = csrfHeader;
+      changed = true;
+    }
+    final anonHeader = response.headers['x-device-session-id'];
+    if (anonHeader != null && anonHeader.isNotEmpty) {
+      _cookies['dtst_anon'] = anonHeader;
+      changed = true;
+    }
 
-      if (value.isEmpty || isExpired) {
-        if (_cookies.remove(name) != null) changed = true;
-        if (name == 'dtst_csrf') _csrfToken = null;
-      } else {
-        if (_cookies[name] != value) {
-          _cookies[name] = value;
-          changed = true;
-        }
-        if (name == 'dtst_csrf') {
-          _csrfToken = value;
+    final setCookieRaw = response.headers['set-cookie'];
+    if (setCookieRaw != null && setCookieRaw.isNotEmpty) {
+      // Tách nhiều cookie trong header set-cookie (tránh tách dấu phẩy trong Expires=Wed, ...)
+      final cookieParts = setCookieRaw.split(RegExp(r',(?=\s*[A-Za-z0-9_-]+=)'));
+      for (final part in cookieParts) {
+        final segments = part.split(';');
+        if (segments.isEmpty) continue;
+        final nameValue = segments.first.trim();
+        final eqIdx = nameValue.indexOf('=');
+        if (eqIdx <= 0) continue;
+        final name = nameValue.substring(0, eqIdx).trim();
+        final value = nameValue.substring(eqIdx + 1).trim();
+
+        final isExpired = segments.any((s) {
+          final lower = s.trim().toLowerCase();
+          return lower == 'max-age=0' || lower.startsWith(' max-age=0');
+        });
+
+        if (value.isEmpty || isExpired) {
+          if (_cookies.remove(name) != null) changed = true;
+          if (name == 'dtst_csrf') _csrfToken = null;
+        } else {
+          if (_cookies[name] != value) {
+            _cookies[name] = value;
+            changed = true;
+          }
+          if (name == 'dtst_csrf') {
+            _csrfToken = value;
+          }
         }
       }
     }
@@ -192,7 +208,12 @@ class ApiClient {
       'Accept': 'application/json',
       if (body != null) 'Content-Type': 'application/json',
       if (_cookies.isNotEmpty) 'Cookie': _buildCookieHeader(),
-      'x-csrf-token': ?csrf,
+      if (_cookies['dtst_access'] != null)
+        'Authorization': 'Bearer ${_cookies['dtst_access']}',
+      if (_cookies['dtst_anon'] != null)
+        'x-device-session-id': _cookies['dtst_anon']!,
+      'x-client-platform': 'mobile',
+      if (csrf != null && csrf.isNotEmpty) 'x-csrf-token': csrf,
     };
 
     late http.Response response;
@@ -218,12 +239,14 @@ class ApiClient {
           throw ApiException('Phương thức HTTP không hỗ trợ: $upperMethod');
       }
     } on TimeoutException {
+      onConnectionStatusChanged?.call(false);
       throw const ApiException(
         'Máy chủ phản hồi quá thời gian chờ. Vui lòng kiểm tra kết nối.',
         code: 'TIMEOUT',
       );
     } catch (e) {
       if (e is ApiException) rethrow;
+      onConnectionStatusChanged?.call(false);
       throw ApiException(
         'Không kết nối được tới máy chủ ($baseUrl). Hãy kiểm tra server Node.js đã chạy chưa.',
         code: 'NETWORK_ERROR',
@@ -234,6 +257,7 @@ class ApiClient {
 
     if (response.statusCode == 204 || response.body.isEmpty) {
       if (response.statusCode >= 200 && response.statusCode < 300) {
+        onConnectionStatusChanged?.call(true);
         return const <String, dynamic>{};
       }
     }
@@ -249,6 +273,7 @@ class ApiClient {
     }
 
     if (response.statusCode >= 200 && response.statusCode < 300) {
+      onConnectionStatusChanged?.call(true);
       return decoded;
     }
 
@@ -301,6 +326,11 @@ class ApiClient {
       'email': email.trim(),
       'password': password,
     });
+    final token = res['token']?.toString();
+    if (token != null && token.isNotEmpty) {
+      _cookies['dtst_access'] = token;
+      unawaited(_saveCookies());
+    }
     return AuthUser.fromJson(res['user'] as Map<String, dynamic>);
   }
 
@@ -314,6 +344,11 @@ class ApiClient {
       'email': email.trim(),
       'password': password,
     });
+    final token = res['token']?.toString();
+    if (token != null && token.isNotEmpty) {
+      _cookies['dtst_access'] = token;
+      unawaited(_saveCookies());
+    }
     return AuthUser.fromJson(res['user'] as Map<String, dynamic>);
   }
 

@@ -23,6 +23,7 @@ import {
   Navigation,
   Phone,
   PlayCircle,
+  RefreshCw,
   Route,
   Sparkles,
   Star,
@@ -215,6 +216,7 @@ export interface V9ItineraryViewProps {
   }) => Promise<void>;
   replanningStopId?: string | null;
   onUpdateItinerary?: (updatedItinerary: V9ItineraryObject) => void | Promise<void>;
+  onRequestSwapStop?: (dayNumber: number, step: V9ActivityStep) => void;
   editable?: boolean;
 }
 
@@ -228,6 +230,7 @@ export function V9ItineraryView({
   onReplan,
   replanningStopId,
   onUpdateItinerary,
+  onRequestSwapStop,
   editable = true,
 }: V9ItineraryViewProps) {
   const [customTimeByStop, setCustomTimeByStop] = useState<Record<string, string>>({});
@@ -827,6 +830,7 @@ export function V9ItineraryView({
               editable={editable && Boolean(onUpdateItinerary)}
               onMoveStop={(stopId, dir) => handleMoveStop(day.day, stopId, dir)}
               onRemoveStop={(stopId) => handleRemoveStop(day.day, stopId)}
+              onRequestSwapStop={onRequestSwapStop ? (step) => onRequestSwapStop(day.day, step) : undefined}
               onQuickSituation={(step, situation) => handleQuickSituation(day, step, situation)}
               onOpenSituationModal={(step) => setSituationModalStop({ dayNumber: day.day, step })}
             />
@@ -1015,6 +1019,7 @@ interface DayTimelineProps {
   editable: boolean;
   onMoveStop: (stopId: string, direction: 'up' | 'down') => void;
   onRemoveStop: (stopId: string) => void;
+  onRequestSwapStop?: (step: V9ActivityStep) => void;
   onQuickSituation: (step: V9ActivityStep, situation: 'checkin_now' | 'leave_now' | 'traffic_30m' | 'rain_delay_45m' | 'skip_stop') => void;
   onOpenSituationModal: (step: V9ActivityStep) => void;
 }
@@ -1030,6 +1035,7 @@ function DayTimeline({
   editable,
   onMoveStop,
   onRemoveStop,
+  onRequestSwapStop,
   onQuickSituation,
   onOpenSituationModal,
 }: DayTimelineProps) {
@@ -1181,6 +1187,7 @@ function DayTimeline({
               onMoveUp={() => step.stop_id && onMoveStop(step.stop_id, 'up')}
               onMoveDown={() => step.stop_id && onMoveStop(step.stop_id, 'down')}
               onRemove={() => step.stop_id && onRemoveStop(step.stop_id)}
+              onRequestSwap={onRequestSwapStop ? () => onRequestSwapStop(step) : undefined}
               onQuickSituation={(situation) => onQuickSituation(step, situation)}
               onOpenSituationModal={() => onOpenSituationModal(step)}
             />
@@ -1242,6 +1249,7 @@ interface StopCardProps {
   onMoveUp?: () => void;
   onMoveDown?: () => void;
   onRemove?: () => void;
+  onRequestSwap?: () => void;
   onQuickSituation?: (situation: 'checkin_now' | 'leave_now' | 'traffic_30m' | 'rain_delay_45m' | 'skip_stop') => void;
   onOpenSituationModal?: () => void;
 }
@@ -1264,6 +1272,7 @@ function StopCard({
   onMoveUp,
   onMoveDown,
   onRemove,
+  onRequestSwap,
   onQuickSituation,
   onOpenSituationModal,
 }: StopCardProps) {
@@ -1476,14 +1485,38 @@ function StopCard({
           <div className="flex shrink-0 flex-col items-stretch gap-2 sm:items-end">
             {/* Stop Reordering & Delete Controls (Backlog 8) */}
             {editable && isStop && (
-              <div className="flex items-center gap-1 rounded-xl bg-sand-50/80 p-1 ring-1 ring-sand-200">
+              <div className="flex items-center gap-1.5 rounded-2xl bg-white p-1 shadow-2xs ring-1 ring-sand-200/90 backdrop-blur-xs">
+                {onRequestSwap && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={onRequestSwap}
+                      title="Đổi địa điểm này bằng AI — Tự động tính toán & cảnh báo đường đi"
+                      className="group relative inline-flex items-center gap-1.5 overflow-hidden rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-leaf-700 px-3 py-1.5 text-xs font-extrabold text-white shadow-xs ring-1 ring-emerald-400/40 transition-all duration-300 hover:scale-105 hover:shadow-md hover:shadow-emerald-600/30 hover:ring-emerald-300 active:scale-95"
+                    >
+                      {/* Animated Shimmer sweep */}
+                      <span className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/35 to-transparent transition-transform duration-700 ease-out group-hover:translate-x-full" />
+
+                      {/* Glowing Sparkle icon */}
+                      <Sparkles className="size-3.5 text-amber-300 transition-transform duration-300 group-hover:rotate-12 group-hover:scale-110" />
+
+                      <span className="tracking-tight text-white drop-shadow-xs">Đổi điểm</span>
+
+                      {/* Animated rotating icon pill */}
+                      <span className="inline-flex size-4 items-center justify-center rounded-full bg-white/20 text-white backdrop-blur-xs transition-all duration-500 group-hover:bg-white/30 group-hover:rotate-180">
+                        <RefreshCw className="size-2.5" />
+                      </span>
+                    </button>
+                    <span className="h-4 w-px bg-sand-200" />
+                  </>
+                )}
                 <button
                   type="button"
                   disabled={!canMoveUp}
                   onClick={onMoveUp}
                   title="Di chuyển lên trước"
                   aria-label="Di chuyển lên trước"
-                  className="rounded-lg p-1 text-river-500 transition hover:bg-white hover:text-leaf-700 disabled:opacity-25"
+                  className="rounded-lg p-1.5 text-river-400 transition hover:bg-sand-100 hover:text-leaf-700 disabled:opacity-20"
                 >
                   <ArrowUp className="size-3.5" />
                 </button>
@@ -1493,17 +1526,17 @@ function StopCard({
                   onClick={onMoveDown}
                   title="Di chuyển xuống sau"
                   aria-label="Di chuyển xuống sau"
-                  className="rounded-lg p-1 text-river-500 transition hover:bg-white hover:text-leaf-700 disabled:opacity-25"
+                  className="rounded-lg p-1.5 text-river-400 transition hover:bg-sand-100 hover:text-leaf-700 disabled:opacity-20"
                 >
                   <ArrowDown className="size-3.5" />
                 </button>
-                <span className="h-3 w-px bg-sand-200" />
+                <span className="h-4 w-px bg-sand-200" />
                 <button
                   type="button"
                   onClick={onRemove}
                   title="Bỏ điểm này khỏi lịch trình"
                   aria-label="Bỏ điểm này khỏi lịch trình"
-                  className="rounded-lg p-1 text-river-400 transition hover:bg-red-50 hover:text-red-600"
+                  className="rounded-lg p-1.5 text-river-400 transition hover:bg-rose-50 hover:text-rose-600"
                 >
                   <Trash2 className="size-3.5" />
                 </button>
@@ -1515,9 +1548,9 @@ function StopCard({
                 href={buildMapsUrl(coords?.lat, coords?.lon, title, userGps)}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center justify-center gap-1.5 rounded-full border border-sand-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-river-700 transition hover:-translate-y-0.5 hover:border-leaf-400 hover:text-leaf-700 hover:shadow-card"
+                className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-sand-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-river-700 shadow-2xs transition-all hover:-translate-y-0.5 hover:border-leaf-400 hover:text-leaf-700 hover:shadow-xs"
               >
-                <Compass className="size-3.5" aria-hidden />
+                <Compass className="size-3.5 text-leaf-600" aria-hidden />
                 Mở bản đồ
               </a>
             )}

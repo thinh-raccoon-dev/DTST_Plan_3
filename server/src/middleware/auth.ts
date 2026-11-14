@@ -32,8 +32,11 @@ function readUserId(token: string): string | null {
 
 /** Resolves the current user from the HttpOnly cookie. Role and status always come from the DB. */
 export async function attachUser(req: Request, res: Response, next: NextFunction): Promise<void> {
-  const token: unknown = req.cookies?.[AUTH_COOKIE];
-  if (typeof token !== 'string' || token.length === 0) return next();
+  let token: string | undefined = typeof req.cookies?.[AUTH_COOKIE] === 'string' ? req.cookies[AUTH_COOKIE] : undefined;
+  if (!token && req.headers.authorization?.startsWith('Bearer ')) {
+    token = req.headers.authorization.slice(7).trim();
+  }
+  if (!token || token.length === 0) return next();
 
   const userId = readUserId(token);
   if (!userId) {

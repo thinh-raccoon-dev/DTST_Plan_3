@@ -5,10 +5,13 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../models/api_models.dart';
 import '../theme/app_theme.dart';
+import 'common_widgets.dart';
 
 class V9ItineraryViewWidget extends StatefulWidget {
   final V9ItineraryObject itinerary;
   final List<V9Place> primaryPlaces;
+  /// placeId -> ảnh điểm đến (lấy từ danh mục địa điểm đã gắn ảnh trên server).
+  final Map<String, String> placeImages;
   final int? itineraryVersion;
   final bool enableLiveReplan;
   final String? replanningStopId;
@@ -23,6 +26,7 @@ class V9ItineraryViewWidget extends StatefulWidget {
     super.key,
     required this.itinerary,
     this.primaryPlaces = const [],
+    this.placeImages = const {},
     this.itineraryVersion,
     this.enableLiveReplan = false,
     this.replanningStopId,
@@ -574,6 +578,17 @@ class _V9ItineraryViewWidgetState extends State<V9ItineraryViewWidget> {
     );
   }
 
+  String? _imageFor(String placeId) {
+    final fromMap = widget.placeImages[placeId];
+    if (fromMap != null && fromMap.trim().isNotEmpty) return fromMap;
+    for (final p in widget.primaryPlaces) {
+      if (p.id == placeId && p.imageUrl != null && p.imageUrl!.trim().isNotEmpty) {
+        return p.imageUrl;
+      }
+    }
+    return null;
+  }
+
   Widget _buildDayCard(V9Day day) {
     final stops = day.activities.where((s) => s.stopId != null).toList();
     final firstIncompleteStopId = stops
@@ -806,6 +821,18 @@ class _V9ItineraryViewWidgetState extends State<V9ItineraryViewWidget> {
                         ],
                       ],
                     ),
+
+                    // Ảnh điểm đến (nếu có)
+                    if (step.placeId != null && _imageFor(step.placeId!) != null) ...[
+                      const SizedBox(height: 10),
+                      DestinationImageView(
+                        imageUrl: _imageFor(step.placeId!),
+                        category: isMeal ? 'food' : 'nature',
+                        name: step.name,
+                        height: 140,
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ],
 
                     const SizedBox(height: 8),
 

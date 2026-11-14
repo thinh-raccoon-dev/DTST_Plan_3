@@ -218,7 +218,8 @@ void main() {
     await tester.pumpAndSettle();
 
     // Verify initial values
-    expect(find.text('TP. Cao Lãnh, Đồng Tháp'), findsOneWidget);
+    expect(find.text('Mục tiêu chuyến đi:'), findsOneWidget);
+    expect(find.text('🏛️ Tham quan'), findsOneWidget);
     expect(find.text('🛵 Xe máy'), findsOneWidget);
     expect(find.text('⚖️ Cân bằng'), findsOneWidget);
 

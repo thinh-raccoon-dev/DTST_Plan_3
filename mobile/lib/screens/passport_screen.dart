@@ -417,13 +417,15 @@ class _PassportScreenState extends State<PassportScreen> {
           const SizedBox(height: 16),
 
           // 4 Stat Cards
-          GridView.count(
-            crossAxisCount: 2,
+          GridView(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
-            mainAxisSpacing: 10,
-            crossAxisSpacing: 10,
-            childAspectRatio: 1.9,
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              mainAxisSpacing: 10,
+              crossAxisSpacing: 10,
+              mainAxisExtent: 68,
+            ),
             children: [
               _PassportStatCard(
                 emoji: '📍',

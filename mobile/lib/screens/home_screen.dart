@@ -274,7 +274,7 @@ class _HomeScreenState extends State<HomeScreen> {
               crossAxisCount: 3,
               mainAxisSpacing: 10,
               crossAxisSpacing: 10,
-              childAspectRatio: 1.05,
+              mainAxisExtent: 86,
             ),
             itemBuilder: (context, index) {
               final cat = AppCatalog.categories[index];
@@ -283,29 +283,28 @@ class _HomeScreenState extends State<HomeScreen> {
                   borderRadius: BorderRadius.circular(20),
                   onTap: () => widget.appState.navigateToExplore(category: cat.value),
                   child: Padding(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Container(
-                          padding: const EdgeInsets.all(8),
+                          padding: const EdgeInsets.all(6),
                           decoration: BoxDecoration(
                             color: AppColors.leaf50,
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(10),
                             border: Border.all(color: AppColors.leaf200),
                           ),
-                          child: Icon(cat.icon, size: 20, color: AppColors.leaf700),
+                          child: Icon(cat.icon, size: 18, color: AppColors.leaf700),
                         ),
                         Text(
                           cat.label,
-                          maxLines: 2,
+                          maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
-                            fontSize: 12.5,
+                            fontSize: 12,
                             fontWeight: FontWeight.w700,
                             color: AppColors.river900,
-                            height: 1.2,
                           ),
                         ),
                       ],

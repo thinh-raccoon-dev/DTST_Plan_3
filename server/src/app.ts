@@ -43,11 +43,35 @@ export function createApp(): Express {
       origin: (origin, callback) => {
         // Same-origin and non-browser requests have no Origin header.
         if (!origin || env.corsOrigins.includes(origin)) return callback(null, true);
+        // Allow Flutter Web and local emulators in development
+        if (env.NODE_ENV !== 'production') {
+          try {
+            const url = new URL(origin);
+            if (
+              url.hostname === 'localhost' ||
+              url.hostname === '127.0.0.1' ||
+              url.hostname === '10.0.2.2'
+            ) {
+              return callback(null, true);
+            }
+          } catch {
+            // Malformed URL, reject
+          }
+        }
         callback(null, false);
       },
       credentials: true,
-      allowedHeaders: ['Content-Type', CSRF_HEADER],
-      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
+      allowedHeaders: [
+        'Content-Type',
+        CSRF_HEADER,
+        'Authorization',
+        'X-Requested-With',
+        'x-device-session-id',
+        'x-anonymous-id',
+        'x-client-platform',
+      ],
+      exposedHeaders: ['x-csrf-token', 'x-device-session-id', 'set-cookie'],
+      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     }),
   );
   app.use(pinoHttp({ logger, autoLogging: { ignore: (req) => req.url === '/api/v1/health' } }));

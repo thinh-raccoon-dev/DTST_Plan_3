@@ -39,7 +39,7 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__=='__main__':
     import math,socket,threading
-    p=argparse.ArgumentParser();p.add_argument('--port',type=int,default=8010);p.add_argument('--valhalla-url',default='http://localhost:8002');a=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('--port',type=int,default=8010);p.add_argument('--valhalla-url',default='http://127.0.0.1:8002');a=p.parse_args()
     def is_port_open(host,port):
         with socket.socket(socket.AF_INET,socket.SOCK_STREAM) as s:
             s.settimeout(0.5)

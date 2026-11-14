@@ -1,8 +1,10 @@
 import clsx from 'clsx';
 import {
+  AlertTriangle,
   ArrowDown,
   ArrowUp,
   Bike,
+  Bot,
   CalendarDays,
   Car,
   ChevronDown,
@@ -16,6 +18,7 @@ import {
   MapPin,
   Music,
   RefreshCw,
+  Route,
   Save,
   Sparkles,
   Star,
@@ -26,8 +29,8 @@ import {
   Wand2,
   X,
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { GeneratingPanel, OptionCard, Segmented, StepHeader, Stepper } from '../components/itinerary/PlannerControls';
 import { V9ItineraryView } from '../components/itinerary/V9ItineraryView';
 import { formatV9RankingReason, formatVnd, roleMeta } from '../components/itinerary/v9Meta';
@@ -44,7 +47,9 @@ import { useItineraryDraft } from '../stores/itineraryDraftStore';
 import { toast } from '../stores/toastStore';
 import type {
   SavedItinerary,
+  V9ActivityStep,
   V9Goal,
+  V9ItineraryObject,
   V9Mode,
   V9Pace,
   V9Place,
@@ -52,6 +57,94 @@ import type {
   V9PlanResponse,
   V9TransportMode,
 } from '../types/api';
+
+interface SwapDestinationCandidate {
+  name: string;
+  slug: string;
+  area: string;
+  summary?: string;
+  coordinates: { lat: number; lng: number };
+}
+
+interface SwapConfirmationState {
+  dayNumber: number;
+  targetStopId: string;
+  targetStopName: string;
+  targetStopWindow: string;
+  newDestination: SwapDestinationCandidate;
+  extraDistanceKm: number;
+  extraTravelMinutes: number;
+  isInconvenient: boolean;
+  suggestedNextDay: number;
+}
+
+const FEATURED_SWAP_DESTINATIONS: SwapDestinationCandidate[] = [
+  {
+    name: 'Bảo tàng Tổng hợp Đồng Tháp',
+    slug: 'bao-tang-tong-hop-dong-thap',
+    area: 'TP. Cao Lãnh, Đồng Tháp',
+    summary: 'Bảo tàng lịch sử – văn hóa đặc sắc trung tâm TP. Cao Lãnh',
+    coordinates: { lat: 10.4562, lng: 105.6324 },
+  },
+  {
+    name: 'Làng hoa Sa Đéc',
+    slug: 'lang-hoa-sa-dec',
+    area: 'TP. Sa Đéc, Đồng Tháp',
+    summary: 'Thủ phủ hoa kiểng trăm năm bên dòng sông Tiền',
+    coordinates: { lat: 10.3125, lng: 105.7468 },
+  },
+  {
+    name: 'Khu di tích Xẻo Quýt',
+    slug: 'khu-di-tich-xeo-quyt',
+    area: 'Cao Lãnh, Đồng Tháp',
+    summary: 'Rừng tràm nguyên sinh & căn cứ kháng chiến lịch sử',
+    coordinates: { lat: 10.4317, lng: 105.7521 },
+  },
+  {
+    name: 'Vườn quốc gia Tràm Chim',
+    slug: 'vuon-quoc-gia-tram-chim',
+    area: 'Tam Nông, Đồng Tháp',
+    summary: 'Khu Ramsar thế giới – thiên đường sếu đầu đỏ & chim nước',
+    coordinates: { lat: 10.6749, lng: 105.5653 },
+  },
+  {
+    name: 'Nhà cổ Huỳnh Thủy Lê',
+    slug: 'nha-co-huynh-thuy-le',
+    area: 'TP. Sa Đéc, Đồng Tháp',
+    summary: 'Kiến trúc Đông – Tây giao thoa nổi tiếng trong tiểu thuyết Người Tình',
+    coordinates: { lat: 10.2923, lng: 105.7592 },
+  },
+  {
+    name: 'Khu du lịch Văn hóa Phương Nam',
+    slug: 'khu-du-lich-van-hoa-phuong-nam',
+    area: 'Lấp Vò, Đồng Tháp',
+    summary: 'Đền thờ Nam Phương Linh Từ & không gian văn hóa đất phương Nam',
+    coordinates: { lat: 10.3401, lng: 105.6122 },
+  },
+];
+
+function stripViAccents(str: string): string {
+  return str
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .toLowerCase()
+    .trim();
+}
+
+function haversineRoadKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const R = 6371;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  // Multiply straight-line distance by 1.28 for realistic Mekong Delta road winding
+  return Math.round(R * c * 1.28 * 10) / 10;
+}
 
 const V9_INTEREST_OPTIONS = [
   'du lịch sinh thái',
@@ -87,8 +180,16 @@ const BUDGET_PRESETS = [1_000_000, 2_000_000, 3_000_000, 5_000_000];
 export function ItineraryCreatePage() {
   useDocumentTitle('Lập lịch trình AI (Trip Planner V9)');
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const user = useAuthStore((s) => s.user);
   const draft = useItineraryDraft();
+
+  const urlDays = searchParams.get('days') ? Number(searchParams.get('days')) : null;
+  const urlPeople = searchParams.get('people') ? Number(searchParams.get('people')) : null;
+  const urlBudget = searchParams.get('budget') ? Number(searchParams.get('budget')) : null;
+  const urlGoal = (searchParams.get('goal') as V9Goal) || null;
+  const autoPlan = searchParams.get('autoPlan') === 'true';
+  const urlRun = searchParams.get('run') || `${urlDays}-${urlPeople}-${urlBudget}`;
 
   const placesQuery = useApiQuery(
     (signal) =>
@@ -110,14 +211,14 @@ export function ItineraryCreatePage() {
   const savedInput = draft.v9Itinerary?.input;
 
   const [mode, setMode] = useState<V9Mode>(savedInput?.mode ?? 'ai');
-  const [goal, setGoal] = useState<V9Goal>(savedInput?.goal ?? 'sightseeing');
+  const [goal, setGoal] = useState<V9Goal>(urlGoal ?? savedInput?.goal ?? 'sightseeing');
   const [startId, setStartId] = useState<string>(savedInput?.start_id ?? 'new_003');
   const [selectedIds, setSelectedIds] = useState<string[]>(savedInput?.selected_ids ?? ['new_014', 'new_016']);
   const [hotelId, setHotelId] = useState<string>(savedInput?.hotel_id ?? '');
   const [startDate, setStartDate] = useState<string>(savedInput?.start_date ?? '2026-11-07');
-  const [days, setDays] = useState<number>(savedInput?.days ?? 2);
-  const [people, setPeople] = useState<number>(savedInput?.people ?? 2);
-  const [budgetVnd, setBudgetVnd] = useState<number>(savedInput?.budget_vnd ?? 2000000);
+  const [days, setDays] = useState<number>(urlDays ?? savedInput?.days ?? 2);
+  const [people, setPeople] = useState<number>(urlPeople ?? savedInput?.people ?? 2);
+  const [budgetVnd, setBudgetVnd] = useState<number>(urlBudget ?? savedInput?.budget_vnd ?? 2000000);
   const [transport, setTransport] = useState<V9TransportMode>(savedInput?.mode_of_transport ?? 'car');
   const [dailyStart, setDailyStart] = useState<string>(savedInput?.daily_start ?? '08:00');
   const [dailyEnd, setDailyEnd] = useState<string>(savedInput?.daily_end ?? '20:00');
@@ -135,6 +236,343 @@ export function ItineraryCreatePage() {
   const [recommendationsOnlyResult, setRecommendationsOnlyResult] = useState<V9PlanResponse | null>(null);
   const [saving, setSaving] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
+
+  // Stop Swap & Route Inconvenience Warning Modal States
+  const [manualSwapStep, setManualSwapStep] = useState<{ dayNumber: number; step: V9ActivityStep } | null>(null);
+  const [swapConfirmation, setSwapConfirmation] = useState<SwapConfirmationState | null>(null);
+
+  useEffect(() => {
+    if (urlDays && urlDays !== days) setDays(urlDays);
+    if (urlPeople && urlPeople !== people) setPeople(urlPeople);
+    if (urlBudget && urlBudget !== budgetVnd) setBudgetVnd(urlBudget);
+    if (urlGoal && urlGoal !== goal) setGoal(urlGoal);
+  }, [urlDays, urlPeople, urlBudget, urlGoal]);
+
+  const scrollToPlan = useCallback(
+    () =>
+      window.requestAnimationFrame(() =>
+        document.getElementById('plan')?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+      ),
+    [],
+  );
+
+  // Reliable Auto-Planning triggered by Pé Meko (Requirement #1)
+  const lastAutoRunRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!autoPlan || lastAutoRunRef.current === urlRun) return;
+    lastAutoRunRef.current = urlRun;
+
+    const effectiveDays = urlDays ?? days ?? 2;
+    const effectivePeople = urlPeople ?? people ?? 2;
+    const effectiveBudget = urlBudget ?? budgetVnd ?? 2000000;
+    const effectiveGoal = urlGoal ?? goal ?? 'sightseeing';
+
+    setDays(effectiveDays);
+    setPeople(effectivePeople);
+    setBudgetVnd(effectiveBudget);
+    setGoal(effectiveGoal);
+    setMode('ai');
+
+    const runAutoPlan = async () => {
+      setGenerating(true);
+      setRecommendationsOnlyResult(null);
+      scrollToPlan();
+      try {
+        const payload: V9PlanRequest = {
+          mode: 'ai',
+          goal: effectiveGoal,
+          start_id: startId || 'new_003',
+          start_date: startDate,
+          days: effectiveDays,
+          people: effectivePeople,
+          budget_vnd: effectiveBudget,
+          interests,
+          mode_of_transport: transport,
+          nearby_max_minutes: Number(nearbyMaxMinutes) || 30,
+          daily_start: dailyStart,
+          daily_end: dailyEnd,
+          pace,
+          travel_buffer_minutes: Number(travelBufferMinutes) || 5,
+          sleep_minutes: Number(sleepMinutes) || 540,
+          include_breakfast: includeBreakfast,
+          use_model: useModel,
+          assemble_itinerary: true,
+        };
+        const res = await api.post<V9PlanResponse>('/trip-planner/itinerary', payload);
+        if (res.data.itinerary) {
+          useItineraryDraft.getState().setV9Plan(res.data, res.data.itinerary);
+          toast.success(
+            '🦊 Pé Meko đã tự động lập lịch trình!',
+            `${res.data.itinerary.scheduled_primary_ids?.length ?? 0} điểm chính trong ${res.data.itinerary.days.length} ngày.`,
+          );
+          setTimeout(() => scrollToPlan(), 150);
+        }
+      } catch (error) {
+        toast.error('Không tạo được lịch trình', toApiError(error).message);
+      } finally {
+        setGenerating(false);
+      }
+    };
+
+    void runAutoPlan();
+  }, [autoPlan, urlRun]);
+
+  // Evaluate route convenience & open Swap Confirmation Modal (Requirement #2)
+  const evaluateAndOpenSwapModal = useCallback(
+    (
+      itineraryObj: V9ItineraryObject,
+      dayNumber: number,
+      targetStopQuery: string,
+      newDest: SwapDestinationCandidate,
+      explicitStopId?: string,
+    ) => {
+      const targetDay = itineraryObj.days.find((d) => d.day === dayNumber) ?? itineraryObj.days[0];
+      if (!targetDay) return;
+
+      const normQuery = stripViAccents(targetStopQuery);
+      const actionableStops = targetDay.activities.filter((s) => Boolean(s.stop_id));
+
+      let matchedStep = explicitStopId
+        ? actionableStops.find((s) => s.stop_id === explicitStopId)
+        : actionableStops.find((s) => {
+            const normName = stripViAccents(s.name);
+            return normName.includes(normQuery) || normQuery.includes(normName);
+          });
+
+      // Fallback to first visit stop in the target day if fuzzy match didn't hit exact name
+      if (!matchedStep) {
+        matchedStep = actionableStops.find((s) => s.type === 'visit') ?? actionableStops[0];
+      }
+      if (!matchedStep || !matchedStep.stop_id) return;
+
+      // Determine reference coordinates in that day (other stops or default My Tho / Thoi Son cluster)
+      const otherStopWithCoords = actionableStops.find(
+        (s) => s.stop_id !== matchedStep!.stop_id && typeof s.latitude === 'number' && typeof s.longitude === 'number',
+      );
+      const refLat = otherStopWithCoords?.latitude ?? matchedStep.latitude ?? 10.354;
+      const refLon = otherStopWithCoords?.longitude ?? matchedStep.longitude ?? 106.362;
+
+      const extraDistanceKm = haversineRoadKm(
+        refLat,
+        refLon,
+        newDest.coordinates.lat,
+        newDest.coordinates.lng,
+      );
+      const extraTravelMinutes = Math.max(15, Math.round(extraDistanceKm * 1.35));
+      const isInconvenient = extraDistanceKm >= 12;
+      const suggestedNextDay =
+        itineraryObj.days.length > dayNumber ? dayNumber + 1 : Math.min(7, itineraryObj.days.length + 1);
+
+      setSwapConfirmation({
+        dayNumber: targetDay.day,
+        targetStopId: matchedStep.stop_id,
+        targetStopName: matchedStep.name,
+        targetStopWindow: `${matchedStep.start} – ${matchedStep.end}`,
+        newDestination: newDest,
+        extraDistanceKm,
+        extraTravelMinutes,
+        isInconvenient,
+        suggestedNextDay,
+      });
+      scrollToPlan();
+    },
+    [scrollToPlan],
+  );
+
+  // Listen for Pé Meko SWAP_ITINERARY_STOP commands
+  useEffect(() => {
+    const processSwapPayload = async (payload: {
+      dayNumber?: number;
+      targetStopName?: string;
+      newDestination?: SwapDestinationCandidate;
+    }) => {
+      if (!payload?.newDestination) return;
+      const dayNum = payload.dayNumber || 1;
+      const targetName = payload.targetStopName || 'Trà mật ong Kỳ Lân';
+      const newDest: SwapDestinationCandidate = {
+        name: payload.newDestination.name,
+        slug: payload.newDestination.slug,
+        area: payload.newDestination.area || 'Đồng Tháp',
+        summary: payload.newDestination.summary,
+        coordinates: payload.newDestination.coordinates || { lat: 10.4562, lng: 105.6324 },
+      };
+
+      let currentItinerary = useItineraryDraft.getState().v9Itinerary;
+      // If user hasn't generated an itinerary yet, Pé Meko automatically generates a 2-day plan first!
+      if (!currentItinerary) {
+        setGenerating(true);
+        try {
+          const res = await api.post<V9PlanResponse>('/trip-planner/itinerary', {
+            mode: 'ai',
+            goal: 'sightseeing',
+            start_id: 'new_003',
+            start_date: startDate,
+            days: 2,
+            people: 2,
+            budget_vnd: 2000000,
+            interests: ['du lịch sinh thái', 'chụp ảnh'],
+            mode_of_transport: 'car',
+            nearby_max_minutes: 30,
+            daily_start: '08:00',
+            daily_end: '20:00',
+            pace: 'balanced',
+            travel_buffer_minutes: 5,
+            sleep_minutes: 540,
+            include_breakfast: true,
+            use_model: true,
+            assemble_itinerary: true,
+          });
+          if (res.data.itinerary) {
+            useItineraryDraft.getState().setV9Plan(res.data, res.data.itinerary);
+            currentItinerary = res.data.itinerary;
+          }
+        } catch {
+          // ignore
+        } finally {
+          setGenerating(false);
+        }
+      }
+
+      if (currentItinerary) {
+        evaluateAndOpenSwapModal(currentItinerary, dayNum, targetName, newDest);
+      }
+    };
+
+    // Check if there is a pending swap stored in sessionStorage on page navigation
+    const pendingRaw = sessionStorage.getItem('pe_meko_pending_swap');
+    if (pendingRaw) {
+      sessionStorage.removeItem('pe_meko_pending_swap');
+      try {
+        const parsed = JSON.parse(pendingRaw);
+        void processSwapPayload(parsed);
+      } catch {
+        // ignore
+      }
+    }
+
+    const handleCustomSwapEvent = (evt: Event) => {
+      const customEvt = evt as CustomEvent;
+      if (customEvt.detail) {
+        sessionStorage.removeItem('pe_meko_pending_swap');
+        void processSwapPayload(customEvt.detail);
+      }
+    };
+
+    window.addEventListener('pe-meko:swap-stop', handleCustomSwapEvent);
+    return () => window.removeEventListener('pe-meko:swap-stop', handleCustomSwapEvent);
+  }, [evaluateAndOpenSwapModal, startDate]);
+
+  // Execute choice 1: Force swap into current requested day (e.g. Day 1)
+  const handleConfirmForceSwapInCurrentDay = () => {
+    if (!swapConfirmation || !draft.v9Itinerary) return;
+    const next: V9ItineraryObject = JSON.parse(JSON.stringify(draft.v9Itinerary));
+    const targetDay = next.days.find((d) => d.day === swapConfirmation.dayNumber);
+    if (!targetDay) return;
+
+    const stepIdx = targetDay.activities.findIndex((s) => s.stop_id === swapConfirmation.targetStopId);
+    if (stepIdx !== -1) {
+      const step = targetDay.activities[stepIdx]!;
+      step.name = swapConfirmation.newDestination.name;
+      step.place_id = swapConfirmation.newDestination.slug;
+      step.latitude = swapConfirmation.newDestination.coordinates.lat;
+      step.longitude = swapConfirmation.newDestination.coordinates.lng;
+      step.note = `🦊 Đã đổi từ "${swapConfirmation.targetStopName}" theo xác nhận của bạn (+${swapConfirmation.extraDistanceKm} km · ~${swapConfirmation.extraTravelMinutes} phút di chuyển tới ${swapConfirmation.newDestination.area}).`;
+
+      // Update preceding travel step if present
+      if (stepIdx > 0 && targetDay.activities[stepIdx - 1]?.type === 'travel') {
+        const travelStep = targetDay.activities[stepIdx - 1]!;
+        travelStep.distance_km = swapConfirmation.extraDistanceKm;
+        travelStep.route_duration_minutes = swapConfirmation.extraTravelMinutes;
+        travelStep.name = `Di chuyển tới ${swapConfirmation.newDestination.name} (${swapConfirmation.newDestination.area})`;
+      }
+    }
+
+    if (next.cost_summary) {
+      next.cost_summary.road_distance_km =
+        Math.round(((next.cost_summary.road_distance_km ?? 0) + swapConfirmation.extraDistanceKm) * 10) / 10;
+    }
+
+    draft.setV9Itinerary(next);
+    toast.success(
+      `Đã đổi thành "${swapConfirmation.newDestination.name}" vào Ngày ${swapConfirmation.dayNumber}`,
+      `Quãng đường cộng thêm ~${swapConfirmation.extraDistanceKm} km (+${swapConfirmation.extraTravelMinutes} phút).`,
+    );
+    window.dispatchEvent(
+      new CustomEvent('pe-meko:bot-notice', {
+        detail: {
+          text: `✅ **Pé Meko đã cập nhật lộ trình!**\nĐã đổi **${swapConfirmation.targetStopName}** thành **${swapConfirmation.newDestination.name}** ngay trong **Ngày ${swapConfirmation.dayNumber}** theo xác nhận của bạn (+${swapConfirmation.extraDistanceKm} km di chuyển).`,
+        },
+      }),
+    );
+    setSwapConfirmation(null);
+  };
+
+  // Execute choice 2: Schedule the new stop into the next day (e.g. Day 2) for convenient routing
+  const handleConfirmScheduleNextDay = () => {
+    if (!swapConfirmation || !draft.v9Itinerary) return;
+    const next: V9ItineraryObject = JSON.parse(JSON.stringify(draft.v9Itinerary));
+    const nextDayNum = swapConfirmation.suggestedNextDay;
+
+    let nextDay = next.days.find((d) => d.day === nextDayNum);
+    if (!nextDay) {
+      const prevDate = next.days[next.days.length - 1]?.date || startDate;
+      const createdDay = {
+        day: nextDayNum,
+        date: prevDate,
+        status: 'ok' as const,
+        visit_count: 1,
+        start_place_id: startId || 'new_003',
+        planned_end_place_id: startId || 'new_003',
+        actual_end_place_id: startId || 'new_003',
+        overnight_stay: null,
+        activities: [] as V9ActivityStep[],
+      };
+      next.days.push(createdDay);
+      nextDay = createdDay;
+    }
+
+    // Replace first afternoon visit in Day 2 or append a clean morning/afternoon slot in Day 2
+    const existingVisitIdx = nextDay.activities.findIndex((s) => s.type === 'visit');
+    const newStopStep: V9ActivityStep = {
+      stop_id: `meko-swap-d${nextDayNum}-${Date.now()}`,
+      type: 'visit',
+      status: 'pending',
+      place_id: swapConfirmation.newDestination.slug,
+      name: swapConfirmation.newDestination.name,
+      start: '09:00',
+      end: '10:45',
+      duration_minutes: 105,
+      latitude: swapConfirmation.newDestination.coordinates.lat,
+      longitude: swapConfirmation.newDestination.coordinates.lng,
+      google_rating: 4.7,
+      google_review_count: 420,
+      note: `🦊 Pé Meko đã sắp xếp vào Ngày ${nextDayNum} (${swapConfirmation.newDestination.area}) để tối ưu lộ trình di chuyển và giữ nguyên "${swapConfirmation.targetStopName}" ở Ngày ${swapConfirmation.dayNumber}.`,
+    };
+
+    if (existingVisitIdx !== -1) {
+      const targetSlot = nextDay.activities[existingVisitIdx]!;
+      newStopStep.start = targetSlot.start;
+      newStopStep.end = targetSlot.end;
+      nextDay.activities[existingVisitIdx] = newStopStep;
+    } else {
+      nextDay.activities.push(newStopStep);
+      nextDay.visit_count = (nextDay.visit_count || 0) + 1;
+    }
+
+    draft.setV9Itinerary(next);
+    toast.success(
+      `Đã xếp "${swapConfirmation.newDestination.name}" sang Ngày ${nextDayNum}!`,
+      `Giữ nguyên "${swapConfirmation.targetStopName}" ở Ngày ${swapConfirmation.dayNumber} để tránh phải đi vòng xa.`,
+    );
+    window.dispatchEvent(
+      new CustomEvent('pe-meko:bot-notice', {
+        detail: {
+          text: `🎉 **Tuyệt vời! Pé Meko đã tối ưu lộ trình cho bạn:**\n• Giữ nguyên **${swapConfirmation.targetStopName}** ở **Ngày ${swapConfirmation.dayNumber}** để đi lại thuận tiện.\n• Sắp xếp **${swapConfirmation.newDestination.name}** vào **Ngày ${nextDayNum}** cực kỳ hợp lý!`,
+        },
+      }),
+    );
+    setSwapConfirmation(null);
+  };
 
   const toggleInterest = (tag: string, on: boolean) => {
     setInterests((prev) => (on ? [...new Set([...prev, tag])] : prev.filter((item) => item !== tag)));
@@ -184,11 +622,6 @@ export function ItineraryCreatePage() {
     }
     return payload;
   };
-
-  const scrollToPlan = () =>
-    window.requestAnimationFrame(() =>
-      document.getElementById('plan')?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
-    );
 
   const handleGenerateItinerary = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -329,7 +762,7 @@ export function ItineraryCreatePage() {
       </section>
 
       {/* ── Planner form ─────────────────────────────────────────── */}
-      <form onSubmit={handleGenerateItinerary} noValidate className="mt-8 grid gap-6 lg:grid-cols-[1fr_340px]">
+      <form id="itinerary-form" onSubmit={handleGenerateItinerary} noValidate className="mt-8 grid gap-6 lg:grid-cols-[1fr_340px]">
         <div className="space-y-6">
           {/* Step 1 */}
           <section className="tp-fade-up rounded-panel bg-white p-5 shadow-card ring-1 ring-sand-200 sm:p-7">
@@ -837,11 +1270,183 @@ export function ItineraryCreatePage() {
                 draft.setV9Itinerary(updated);
                 toast.success('Đã cập nhật thứ tự / danh sách điểm trong bản nháp');
               }}
+              onRequestSwapStop={(dayNumber, step) => {
+                setManualSwapStep({ dayNumber, step });
+              }}
               placesById={placesById}
             />
           </div>
         )}
       </section>
+
+      {/* ── Manual Destination Swap Picker Modal ──────────────────────── */}
+      {manualSwapStep && draft.v9Itinerary && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm">
+          <div className="tp-scale-up w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl ring-1 ring-sand-200">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-leaf-50 px-3 py-1 text-xs font-bold text-leaf-700 ring-1 ring-leaf-200">
+                  <Bot className="size-3.5" /> Đổi địa điểm trong lộ trình Ngày {manualSwapStep.dayNumber}
+                </span>
+                <h3 className="mt-2 text-lg font-extrabold text-river-900">
+                  Thay thế: {manualSwapStep.step.name}
+                </h3>
+                <p className="mt-0.5 text-xs text-river-500">
+                  Chọn địa điểm mới bên dưới — Pé Meko sẽ tự động kiểm tra khoảng cách và độ thuận tiện di chuyển trong ngày:
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setManualSwapStep(null)}
+                className="rounded-xl p-1.5 text-river-400 hover:bg-sand-100 hover:text-river-700"
+              >
+                <X className="size-5" />
+              </button>
+            </div>
+
+            <div className="mt-4 max-h-80 space-y-2 overflow-y-auto pr-1">
+              {FEATURED_SWAP_DESTINATIONS.map((cand) => (
+                <button
+                  key={cand.slug}
+                  type="button"
+                  onClick={() => {
+                    const currentPlan = draft.v9Itinerary!;
+                    const targetDayNum = manualSwapStep.dayNumber;
+                    const stepObj = manualSwapStep.step;
+                    setManualSwapStep(null);
+                    evaluateAndOpenSwapModal(
+                      currentPlan,
+                      targetDayNum,
+                      stepObj.name,
+                      cand,
+                      stepObj.stop_id,
+                    );
+                  }}
+                  className="group flex w-full items-center justify-between gap-3 rounded-2xl border border-sand-200 bg-sand-50/60 p-3.5 text-left transition-all hover:border-emerald-400 hover:bg-emerald-50/50 hover:shadow-xs"
+                >
+                  <div className="min-w-0">
+                    <p className="font-bold text-river-900 group-hover:text-emerald-900">{cand.name}</p>
+                    <p className="mt-0.5 text-xs font-medium text-emerald-700">📍 {cand.area}</p>
+                    {cand.summary && <p className="mt-0.5 truncate text-xs text-river-500">{cand.summary}</p>}
+                  </div>
+                  <span className="shrink-0 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-leaf-700 px-3.5 py-1.5 text-xs font-bold text-white shadow-2xs transition-all duration-200 group-hover:scale-105 group-hover:shadow-sm">
+                    Chọn đổi →
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-4 flex justify-end">
+              <Button type="button" variant="secondary" size="sm" onClick={() => setManualSwapStep(null)}>
+                Đóng
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Route Inconvenience Warning & Confirmation Modal (Requirement #2) ── */}
+      {swapConfirmation && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="swap-warning-title"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+        >
+          <div className="tp-scale-up w-full max-w-xl overflow-hidden rounded-3xl bg-white shadow-2xl ring-1 ring-sand-200">
+            {/* Warning Header */}
+            <div className="bg-gradient-to-r from-amber-600 via-amber-500 to-orange-500 px-6 py-4 text-white">
+              <div className="flex items-center justify-between">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-1 text-xs font-bold uppercase tracking-wider text-white backdrop-blur-xs">
+                  <AlertTriangle className="size-4" /> Cảnh báo Lộ trình & Thời gian Di chuyển
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSwapConfirmation(null)}
+                  className="rounded-lg p-1 text-white/80 hover:bg-white/20 hover:text-white"
+                >
+                  <X className="size-5" />
+                </button>
+              </div>
+              <h3 id="swap-warning-title" className="mt-2 text-xl font-extrabold text-white">
+                Địa điểm mới làm tăng thời gian di chuyển trong Ngày {swapConfirmation.dayNumber}!
+              </h3>
+            </div>
+
+            <div className="space-y-4 p-6">
+              {/* Swap summary box */}
+              <div className="grid gap-3 rounded-2xl border border-sand-200 bg-sand-50/80 p-4 sm:grid-cols-2">
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-river-400">
+                    Điểm hiện tại (Ngày {swapConfirmation.dayNumber} · {swapConfirmation.targetStopWindow})
+                  </p>
+                  <p className="mt-1 font-bold text-river-900 line-through decoration-rose-400">
+                    {swapConfirmation.targetStopName}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-leaf-700">
+                    Điểm muốn đổi sang
+                  </p>
+                  <p className="mt-1 font-extrabold text-leaf-800">
+                    {swapConfirmation.newDestination.name}
+                  </p>
+                  <p className="text-xs text-river-500">📍 {swapConfirmation.newDestination.area}</p>
+                </div>
+              </div>
+
+              {/* Detailed Route Warning Notice */}
+              <div className="rounded-2xl border border-amber-300 bg-amber-50/90 p-4 text-sm text-amber-950">
+                <div className="flex items-start gap-3">
+                  <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-amber-500 text-white shadow-xs">
+                    <Route className="size-5" />
+                  </span>
+                  <div className="space-y-1.5 leading-relaxed">
+                    <p className="font-bold text-amber-950">
+                      🦊 Phân tích lộ trình từ Pé Meko:
+                    </p>
+                    <p className="text-xs sm:text-sm text-amber-900">
+                      Địa điểm <strong>{swapConfirmation.newDestination.name}</strong> ({swapConfirmation.newDestination.area}) nằm cách cụm lộ trình hiện tại trong <strong>Ngày {swapConfirmation.dayNumber}</strong> khoảng{' '}
+                      <strong className="underline">~{swapConfirmation.extraDistanceKm} km</strong> (làm tăng thời gian di chuyển thêm khoảng{' '}
+                      <strong className="underline">+{swapConfirmation.extraTravelMinutes} phút/chiều</strong>).
+                    </p>
+                    <p className="text-xs sm:text-sm font-medium text-amber-950">
+                      💡 <strong>Đề xuất của Pé Meko:</strong> Việc đi vòng xa ngay trong Ngày {swapConfirmation.dayNumber} sẽ gây bất tiện và làm hụt thời gian tham quan các điểm khác. Pé Meko có thể{' '}
+                      <strong>sắp xếp {swapConfirmation.newDestination.name} vào Ngày {swapConfirmation.suggestedNextDay}</strong> cho bạn thuận tiện hơn. Bạn có đồng ý không?
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Confirmation Buttons */}
+              <div className="flex flex-col gap-2.5 pt-1 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => setSwapConfirmation(null)}
+                  className="rounded-xl border border-sand-300 bg-white px-4 py-2.5 text-xs font-bold text-river-700 transition hover:bg-sand-100"
+                >
+                  Hủy bỏ (Giữ nguyên)
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmForceSwapInCurrentDay}
+                  className="rounded-xl border border-amber-400 bg-amber-100 px-4 py-2.5 text-xs font-bold text-amber-950 transition hover:bg-amber-200"
+                >
+                  ⚡ Vẫn đổi ngay vào Ngày {swapConfirmation.dayNumber}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmScheduleNextDay}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-leaf-600 px-5 py-2.5 text-xs font-extrabold text-white shadow-cta transition hover:bg-leaf-700"
+                >
+                  <CalendarDays className="size-4" />
+                  Đồng ý xếp vào Ngày {swapConfirmation.suggestedNextDay} (Khuyên dùng)
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <ConfirmDialog
         open={confirmClear}

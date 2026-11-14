@@ -21,6 +21,7 @@ const envSchema = z.object({
   SERVE_CLIENT_DIR: z.string().optional(),
   TRIP_PLANNER_API_URL: z.string().url().default('http://127.0.0.1:8010'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).optional(),
+  GEMINI_API_KEY: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);

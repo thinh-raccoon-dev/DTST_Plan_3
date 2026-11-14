@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../models/api_models.dart';
@@ -37,6 +39,15 @@ class AppState extends ChangeNotifier {
   Future<void> initialize() async {
     _loadingSession = true;
     notifyListeners();
+
+    // Tự động lắng nghe trạng thái kết nối mạng từ mọi request
+    ApiClient.onConnectionStatusChanged = (online) {
+      if (_serverOnline != online) {
+        _serverOnline = online;
+        notifyListeners();
+      }
+    };
+
     try {
       await api.init();
       _serverOnline = await api.checkHealth();
@@ -69,6 +80,9 @@ class AppState extends ChangeNotifier {
     if (_currentTabIndex == index) return;
     _currentTabIndex = index;
     notifyListeners();
+    if (!_serverOnline) {
+      unawaited(checkServerConnection());
+    }
   }
 
   /// Chuyển sang tab Khám phá (index 1) kèm bộ lọc danh mục hoặc từ khóa.

@@ -13,6 +13,7 @@ import * as adminReviews from '../controllers/admin/reviews.controller.js';
 import * as adminSystem from '../controllers/admin/system.controller.js';
 import * as adminUpload from '../controllers/admin/upload.controller.js';
 import * as adminUsers from '../controllers/admin/users.controller.js';
+import * as aiController from '../controllers/ai.controller.js';
 import * as auth from '../controllers/auth.controller.js';
 import * as banners from '../controllers/banner.controller.js';
 import * as destinations from '../controllers/destination.controller.js';
@@ -43,6 +44,9 @@ export function buildApiRouter(): Router {
   api.post('/auth/logout', auth.logout);
   api.get('/auth/me', auth.me);
   api.patch('/auth/profile', requireAuth, auth.updateProfile);
+
+  // AI Copilot & Voice Assistant (UI Automation & Navigation)
+  api.post('/ai/copilot', eventLimiter, aiController.handleCopilotChat);
 
   // Homepage banners / sponsored covers (active + within schedule only)
   api.get('/banners', banners.listPublicBanners);

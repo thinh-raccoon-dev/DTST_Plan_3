@@ -73,43 +73,48 @@ class DestinationImageView extends StatelessWidget {
           colors: [AppColors.leaf800, AppColors.leaf600, AppColors.teal600],
         ),
       ),
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.16),
-              borderRadius: BorderRadius.circular(16),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      alignment: Alignment.center,
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.16),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(
+                AppCatalog.categoryIcon(category),
+                color: Colors.white,
+                size: 24,
+              ),
             ),
-            child: Icon(
-              AppCatalog.categoryIcon(category),
-              color: Colors.white,
-              size: 32,
+            const SizedBox(height: 6),
+            Text(
+              name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+                fontSize: 12.5,
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w700,
-              fontSize: 13,
+            const SizedBox(height: 2),
+            Text(
+              AppCatalog.categoryLabel(category),
+              style: const TextStyle(
+                color: AppColors.leaf100,
+                fontSize: 10.5,
+              ),
             ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            AppCatalog.categoryLabel(category),
-            style: const TextStyle(
-              color: AppColors.leaf100,
-              fontSize: 11,
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
