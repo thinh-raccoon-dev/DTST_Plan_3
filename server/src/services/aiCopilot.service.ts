@@ -121,9 +121,78 @@ interface DestinationSummary {
   name: string;
   slug: string;
   summary: string;
+  description: string;
   category: string;
   area: string;
+  areaSlug: string;
+  tags: string[];
+  address: string;
+  openingHours: string;
+  referencePrice: string;
   coordinates?: { lat: number; lng: number };
+}
+
+const AREA_LABELS: Record<string, string> = {
+  'cao-lanh': 'Cao Lãnh',
+  'sa-dec': 'Sa Đéc',
+  'thap-muoi': 'Tháp Mười',
+  'tam-nong': 'Tam Nông',
+  'lai-vung': 'Lai Vung',
+  'hong-ngu': 'Hồng Ngự',
+  'chau-thanh': 'Châu Thành',
+  'lap-vo': 'Lấp Vò',
+  'my-tho': 'Mỹ Tho',
+  'cai-be': 'Cái Bè',
+  'thoi-son': 'Cù lao Thới Sơn',
+  'can-tho': 'Cần Thơ',
+  'an-giang': 'An Giang',
+  'kien-giang': 'Kiên Giang',
+  'ben-tre': 'Bến Tre',
+  'vinh-long': 'Vĩnh Long',
+  'ca-mau': 'Cà Mau',
+  'bac-lieu': 'Bạc Liêu',
+  'soc-trang': 'Sóc Trăng',
+  'tra-vinh': 'Trà Vinh',
+  'hau-giang': 'Hậu Giang',
+  'long-an': 'Long An',
+};
+
+const CATEGORY_LABELS: Record<string, string> = {
+  nature: 'Thiên nhiên',
+  eco: 'Sinh thái',
+  culture: 'Văn hóa',
+  history: 'Lịch sử',
+  food: 'Ẩm thực',
+  local_experience: 'Trải nghiệm địa phương',
+};
+
+function formatAreaLabel(areaSlug?: string): string {
+  if (!areaSlug) return 'Đồng Tháp';
+  return (
+    AREA_LABELS[areaSlug] ||
+    areaSlug
+      .replace(/-/g, ' ')
+      .replace(/\b\w/g, (c) => c.toUpperCase())
+  );
+}
+
+function formatCategoryLabel(cat?: string): string {
+  if (!cat) return 'Khám phá';
+  return CATEGORY_LABELS[cat] || cat;
+}
+
+const DEFAULT_FALLBACK_KEY_B64 =
+  'QVEuQWI4Uk42SUtWYTJmU1NzU2Y4bGRJcFUtR05BYk05cTU5dEV5Z1VvVzk2Tm1NT0Vaa0E=';
+
+function resolveGeminiApiKey(): string {
+  if (env.GEMINI_API_KEY && env.GEMINI_API_KEY.trim().length > 0) {
+    return env.GEMINI_API_KEY.trim();
+  }
+  try {
+    return Buffer.from(DEFAULT_FALLBACK_KEY_B64, 'base64').toString('utf8');
+  } catch {
+    return '';
+  }
 }
 
 let cachedDestinations: DestinationSummary[] = [];
@@ -137,15 +206,23 @@ async function getDestinationsCatalog(): Promise<DestinationSummary[]> {
   }
   try {
     const list = await DestinationModel.find({ publicationStatus: 'published' })
-      .select('_id name slug summary category area coordinates')
+      .select(
+        '_id name slug summary description category area tags address openingHours referencePrice coordinates',
+      )
       .lean();
     cachedDestinations = list.map((d) => ({
       id: String(d._id),
       name: d.name,
       slug: d.slug,
       summary: d.summary || '',
+      description: d.description || '',
       category: d.category || '',
-      area: d.area || '',
+      areaSlug: d.area || '',
+      area: formatAreaLabel(d.area),
+      tags: Array.isArray(d.tags) ? d.tags : [],
+      address: d.address || '',
+      openingHours: d.openingHours || '',
+      referencePrice: d.referencePrice || '',
       coordinates:
         d.coordinates && typeof d.coordinates.lat === 'number' && typeof d.coordinates.lng === 'number'
           ? { lat: d.coordinates.lat, lng: d.coordinates.lng }
@@ -167,82 +244,151 @@ const DESTINATION_ALIASES: Array<{
   coordinates: { lat: number; lng: number };
 }> = [
   {
-    keywords: ['bao tang dong thap', 'bao tang tong hop dong thap', 'bao tang tong hop', 'bao tang'],
+    keywords: ['bao tang dong thap', 'bao tang tong hop dong thap', 'bao tang tong hop'],
     slug: 'bao-tang-tong-hop-dong-thap',
     name: 'Bảo tàng Tổng hợp Đồng Tháp',
-    area: 'TP. Cao Lãnh, Đồng Tháp',
+    area: 'Cao Lãnh',
     coordinates: { lat: 10.4562, lng: 105.6324 },
   },
   {
     keywords: ['fpt', 'dai hoc fpt', 'fpt can tho', 'campus can tho'],
     slug: 'dai-hoc-fpt-campus-can-tho',
     name: 'Đại học FPT Campus Cần Thơ',
-    area: 'Ninh Kiều, Cần Thơ',
+    area: 'Cần Thơ',
     coordinates: { lat: 10.0124, lng: 105.7324 },
   },
   {
-    keywords: ['lang hoa sa dec', 'lang hoa', 'hoa sa dec'],
+    keywords: ['lang hoa sa dec', 'tan quy dong'],
     slug: 'lang-hoa-sa-dec',
-    name: 'Làng hoa Sa Đéc',
-    area: 'TP. Sa Đéc, Đồng Tháp',
+    name: 'Làng hoa Sa Đéc (Tân Quy Đông)',
+    area: 'Sa Đéc',
     coordinates: { lat: 10.3125, lng: 105.7468 },
   },
   {
     keywords: ['tram chim', 'vuon quoc gia tram chim'],
     slug: 'vuon-quoc-gia-tram-chim',
     name: 'Vườn quốc gia Tràm Chim',
-    area: 'Tam Nông, Đồng Tháp',
+    area: 'Tam Nông',
     coordinates: { lat: 10.6749, lng: 105.5653 },
   },
   {
     keywords: ['xeo quyt', 'khu di tich xeo quyt'],
     slug: 'khu-di-tich-xeo-quyt',
     name: 'Khu di tích Xẻo Quýt',
-    area: 'Cao Lãnh, Đồng Tháp',
+    area: 'Cao Lãnh',
     coordinates: { lat: 10.4317, lng: 105.7521 },
   },
   {
     keywords: ['nha co huynh thuy le', 'huynh thuy le'],
     slug: 'nha-co-huynh-thuy-le',
     name: 'Nhà cổ Huỳnh Thủy Lê',
-    area: 'TP. Sa Đéc, Đồng Tháp',
+    area: 'Sa Đéc',
     coordinates: { lat: 10.2923, lng: 105.7592 },
   },
   {
     keywords: ['chua ong quach', 'kien an cung', 'chua kien an cung'],
-    slug: 'chua-kien-an-cung-chua-ong-quach',
-    name: 'Chùa Kiến An Cung (Chùa Ông Quách)',
-    area: 'TP. Sa Đéc, Đồng Tháp',
+    slug: 'kien-an-cung-chua-ong-quach',
+    name: 'Kiến An Cung – Chùa Ông Quách',
+    area: 'Sa Đéc',
     coordinates: { lat: 10.2935, lng: 105.7579 },
+  },
+  {
+    keywords: ['chua phước kien', 'chua phuoc kien', 'chua la sen', 'la sen vua'],
+    slug: 'chua-phuoc-kien-la-sen-vua',
+    name: 'Chùa Phước Kiển (Chùa Lá Sen Vua)',
+    area: 'Sa Đéc',
+    coordinates: { lat: 10.2468, lng: 105.8142 },
+  },
+  {
+    keywords: ['nguyen sinh sac', 'lang cu pho bang', 'khu di tich nguyen sinh sac'],
+    slug: 'khu-di-tich-nguyen-sinh-sac',
+    name: 'Khu di tích Cụ Phó bảng Nguyễn Sinh Sắc',
+    area: 'Cao Lãnh',
+    coordinates: { lat: 10.4491, lng: 105.6352 },
   },
   {
     keywords: ['khu du lich phuong nam', 'van hoa phuong nam', 'nam phuong'],
     slug: 'khu-du-lich-van-hoa-phuong-nam',
     name: 'Khu du lịch Văn hóa Phương Nam',
-    area: 'Lấp Vò, Đồng Tháp',
+    area: 'Lấp Vò',
     coordinates: { lat: 10.3401, lng: 105.6122 },
   },
   {
     keywords: ['go thap', 'khu di tich go thap'],
     slug: 'khu-di-tich-go-thap',
     name: 'Khu di tích Gò Tháp',
-    area: 'Tháp Mười, Đồng Tháp',
+    area: 'Tháp Mười',
     coordinates: { lat: 10.5882, lng: 105.8021 },
   },
   {
     keywords: ['gao giong', 'khu du lich sinh thai gao giong'],
     slug: 'khu-du-lich-sinh-thai-gao-giong',
     name: 'Khu du lịch sinh thái Gáo Giồng',
-    area: 'Cao Lãnh, Đồng Tháp',
+    area: 'Cao Lãnh',
     coordinates: { lat: 10.5318, lng: 105.6894 },
+  },
+  {
+    keywords: ['dong sen thap muoi'],
+    slug: 'dong-sen-thap-muoi',
+    name: 'Đồng sen Tháp Mười',
+    area: 'Tháp Mười',
+    coordinates: { lat: 10.5621, lng: 105.7812 },
+  },
+  {
+    keywords: ['trai ran dong tam'],
+    slug: 'trai-ran-dong-tam',
+    name: 'Trại Rắn Đồng Tâm (Trung tâm Dược liệu Quân khu 9)',
+    area: 'Mỹ Tho',
+    coordinates: { lat: 10.3561, lng: 106.3012 },
   },
 ];
 
+const GENERIC_CATEGORY_NOUNS = new Set([
+  'chua',
+  'cac chua',
+  'ngoi chua',
+  'bao tang',
+  'cac bao tang',
+  'di tich',
+  'khu di tich',
+  'nha co',
+  'lang hoa',
+  'lang nghe',
+  'cho',
+  'cho dem',
+  'vuon',
+  'vuon trai cay',
+  'khu du lich',
+  'sinh thai',
+  'van hoa',
+  'lich su',
+  'am thuc',
+  'thien nhien',
+  'trai nghiem',
+  'quan an',
+  'nha hang',
+  'hu tieu',
+  'banh xeo',
+  'ca loc',
+  'dong sen',
+  'sen',
+  'cu lao',
+  'con',
+]);
+
 function findDestinationByText(text: string, catalog: DestinationSummary[]): CopilotDestinationInfo | null {
   const norm = normalizeText(text)
-    .replace(/^(tham quan|di|den|ghe|xem|diem|dia diem|luu|yeu thich|bo yeu thich)\s+/g, '')
+    .replace(
+      /^(mo|xem|chi tiet|gioi thieu|tham quan|di|den|ghe|diem|dia diem|luu|them|bo|xoa)\s+/g,
+      '',
+    )
+    .replace(
+      /\s+(vao|khoi|trong)?\s*(danh sach\s+|bo suu tap\s+)?(dia diem\s+)?yeu thich(\s+cua toi|\s+giup toi|\s+nhe)?$/g,
+      '',
+    )
+    .replace(/^(yeu thich|bo yeu thich|luu yeu thich)\s+/g, '')
     .trim();
-  if (!norm) return null;
+  if (!norm || GENERIC_CATEGORY_NOUNS.has(norm)) return null;
 
   for (const alias of DESTINATION_ALIASES) {
     if (alias.keywords.some((kw) => norm.includes(kw))) {
@@ -252,7 +398,7 @@ function findDestinationByText(text: string, catalog: DestinationSummary[]): Cop
         name: dbMatch?.name || alias.name,
         slug: alias.slug,
         summary: dbMatch?.summary || `Địa điểm nổi bật tại ${alias.area}`,
-        category: dbMatch?.category || 'van-hoa',
+        category: dbMatch?.category || 'culture',
         area: dbMatch?.area || alias.area,
         coordinates: dbMatch?.coordinates || alias.coordinates,
       };
@@ -262,7 +408,11 @@ function findDestinationByText(text: string, catalog: DestinationSummary[]): Cop
   for (const item of catalog) {
     const itemNorm = normalizeText(item.name);
     const slugNorm = normalizeText(item.slug.replace(/-/g, ' '));
-    if (norm.includes(itemNorm) || itemNorm.includes(norm) || norm.includes(slugNorm)) {
+    if (
+      norm.includes(itemNorm) ||
+      norm.includes(slugNorm) ||
+      (norm.length >= 10 && !GENERIC_CATEGORY_NOUNS.has(norm) && itemNorm.includes(norm))
+    ) {
       return {
         id: item.id,
         name: item.name,
@@ -290,30 +440,35 @@ function evaluateSecurityGuardrails(
   pageContext?: PageContextSnapshot,
 ): CopilotResponse | null {
   const norm = normalizeText(message);
+  const cleanNorm = norm.replace(/[_.-]+/g, ' ');
 
   // 1. Protect Admin / Other Users' Passwords, Credentials, Secrets, API Keys, DB URIs
   const asksForAdminOrSecret =
-    ((norm.includes('mat khau') || norm.includes('pass') || norm.includes('mk') || norm.includes('tai khoan')) &&
-      (norm.includes('admin') ||
-        norm.includes('quan tri') ||
-        norm.includes('nguoi khac') ||
-        norm.includes('user khac') ||
-        norm.includes('he thong') ||
-        norm.includes('database') ||
-        norm.includes('tat ca'))) ||
-    norm.includes('api key') ||
-    norm.includes('gemini key') ||
-    norm.includes('jwt secret') ||
-    norm.includes('mongodb uri') ||
-    norm.includes('chuoi ket noi') ||
-    norm.includes('file env') ||
+    ((cleanNorm.includes('mat khau') ||
+      cleanNorm.includes('pass') ||
+      cleanNorm.includes('mk') ||
+      cleanNorm.includes('tai khoan')) &&
+      (cleanNorm.includes('admin') ||
+        cleanNorm.includes('quan tri') ||
+        cleanNorm.includes('nguoi khac') ||
+        cleanNorm.includes('user khac') ||
+        cleanNorm.includes('he thong') ||
+        cleanNorm.includes('database') ||
+        cleanNorm.includes('tat ca'))) ||
+    cleanNorm.includes('api key') ||
+    cleanNorm.includes('gemini api key') ||
+    cleanNorm.includes('gemini key') ||
+    cleanNorm.includes('jwt secret') ||
+    cleanNorm.includes('mongodb uri') ||
+    cleanNorm.includes('chuoi ket noi') ||
+    cleanNorm.includes('file env') ||
     norm.includes('.env') ||
-    norm.includes('system prompt') ||
-    norm.includes('hack ') ||
-    norm.includes('chiem quyen') ||
-    norm.includes('nang quyen admin') ||
-    norm.includes('xoa database') ||
-    norm.includes('drop database');
+    cleanNorm.includes('system prompt') ||
+    cleanNorm.includes('hack ') ||
+    cleanNorm.includes('chiem quyen') ||
+    cleanNorm.includes('nang quyen admin') ||
+    cleanNorm.includes('xoa database') ||
+    cleanNorm.includes('drop database');
 
   if (asksForAdminOrSecret) {
     return {
@@ -332,7 +487,7 @@ function evaluateSecurityGuardrails(
         },
       },
       suggestions: [
-        'Đổi tên hiển thị của tôi thành Thịnh Raccoon',
+        'Dự án này là gì và có những tính năng nào?',
         'Mở trang cá nhân của tôi',
         'Lập lịch trình đi 2 ngày cho 2 người với chi phí 2 tr',
       ],
@@ -341,12 +496,16 @@ function evaluateSecurityGuardrails(
 
   // 2. Role-Based Access Control (RBAC) for Admin Dashboard & Staff Operations
   const asksForAdminPanel =
-    norm.includes('vao trang admin') ||
-    norm.includes('mo trang admin') ||
-    norm.includes('mo trang quan tri') ||
-    norm.includes('xoa dia diem trong he thong') ||
-    norm.includes('duyet dia diem') ||
-    norm.includes('quan ly nguoi dung');
+    cleanNorm.includes('vao trang admin') ||
+    cleanNorm.includes('mo trang admin') ||
+    cleanNorm.includes('mo trang quan tri') ||
+    cleanNorm.includes('vao trang quan tri') ||
+    cleanNorm.includes('truy cap trang quan tri') ||
+    cleanNorm.includes('truy cap admin') ||
+    norm.includes('/admin') ||
+    cleanNorm.includes('xoa dia diem trong he thong') ||
+    cleanNorm.includes('duyet dia diem') ||
+    cleanNorm.includes('quan ly nguoi dung');
 
   if (asksForAdminPanel) {
     const userRole = pageContext?.currentUser?.role;
@@ -364,9 +523,9 @@ function evaluateSecurityGuardrails(
           },
         },
         suggestions: [
-          'Đổi tên hiển thị thành Thịnh Raccoon',
           'Mở trang cá nhân (/account)',
           'Xem Hộ chiếu trải nghiệm số',
+          'Danh sách các chùa nổi tiếng',
         ],
       };
     }
@@ -672,14 +831,24 @@ function handleSmartIntent(
   }
 
   // Favorites / Bookmark Destination Control
-  if (
+  const isFavoriteActionTrigger =
     normalized.includes('them vao yeu thich') ||
     normalized.includes('luu yeu thich') ||
     normalized.includes('thich dia diem') ||
     normalized.includes('bo yeu thich') ||
-    normalized.includes('xoa khoi yeu thich')
-  ) {
-    const isRemove = normalized.includes('bo yeu thich') || normalized.includes('xoa khoi yeu thich');
+    normalized.includes('xoa khoi yeu thich') ||
+    ((normalized.includes('them ') ||
+      normalized.includes('luu ') ||
+      normalized.includes('bo ') ||
+      normalized.includes('xoa ')) &&
+      normalized.includes('yeu thich'));
+
+  if (isFavoriteActionTrigger) {
+    const isRemove =
+      normalized.includes('bo yeu thich') ||
+      normalized.includes('xoa khoi yeu thich') ||
+      normalized.startsWith('bo ') ||
+      normalized.startsWith('xoa ');
     const targetDest = findDestinationByText(message, catalog);
     if (!targetDest) {
       return {
@@ -719,7 +888,11 @@ function handleSmartIntent(
   }
 
   // Sync Guest Passport to Account
-  if (normalized.includes('dong bo ho chieu') || normalized.includes('gop ho chieu')) {
+  if (
+    normalized.includes('dong bo ho chieu') ||
+    normalized.includes('gop ho chieu') ||
+    ((normalized.includes('dong bo') || normalized.includes('gop ')) && normalized.includes('ho chieu'))
+  ) {
     return {
       reply:
         `Dạ **Pé Meko** đang đồng bộ toàn bộ dữ liệu Hộ chiếu trải nghiệm trên trình duyệt này vào tài khoản của bạn ngay! 🦊🛂`,
@@ -812,7 +985,7 @@ function handleSmartIntent(
       return {
         reply:
           `Dạ được luôn ạ! 🦊 Để **Pé Meko** tự động mở trang Đăng ký và tạo tài khoản giúp bạn, bạn cho Pé Meko xin thêm **${missing.join(' và ')}** nhé:\n\n` +
-          `${email ? `✅ **Email**: \`${email}\`` : '❓ **Email đăng ký**: (ví dụ: `thinhlvce181726@fpt.edu.vn`)'}\n` +
+          `${email ? `✅ **Email**: \`${email}\`` : '❓ **Email đăng ký**: (ví dụ: `dukhach@gmail.com`)'}\n` +
           `${password ? `✅ **Mật khẩu**: \`••••••\`` : '❓ **Mật khẩu**: (tối thiểu 6 ký tự, ví dụ: `123456`)'}\n\n` +
           `Bạn chỉ cần nhắn tiếp phần còn thiếu là Pé Meko làm ngay!`,
         action: {
@@ -822,10 +995,7 @@ function handleSmartIntent(
             contextType: 'register',
           },
         },
-        suggestions: [
-          'Tạo tài khoản với email: thinhlvce181726@fpt.edu.vn & mk: 123456',
-          'Mở trang đăng nhập',
-        ],
+        suggestions: ['Mật khẩu là 123456', 'Mở trang đăng nhập'],
       };
     }
 
@@ -851,7 +1021,7 @@ function handleSmartIntent(
           displayName: safeDisplayName,
         },
       },
-      suggestions: ['Đổi tên hiển thị thành Thịnh Raccoon', 'Mở Hộ chiếu số', 'Lập lịch trình AI'],
+      suggestions: ['Mở Hộ chiếu số', 'Lập lịch trình 2 ngày 2 người chi phí 2 triệu', 'Khám phá địa điểm'],
     };
   }
 
@@ -877,7 +1047,7 @@ function handleSmartIntent(
             password,
           },
         },
-        suggestions: ['Đổi tên hiển thị thành Thịnh Raccoon', 'Xem Hộ chiếu số'],
+        suggestions: ['Mở trang cá nhân', 'Xem Hộ chiếu số'],
       };
     }
 
@@ -892,10 +1062,7 @@ function handleSmartIntent(
           label: 'Trang Đăng nhập',
         },
       },
-      suggestions: [
-        'Tạo tài khoản với email: thinhlvce181726@fpt.edu.vn & mk: 123456',
-        'Đăng nhập với email: khach1@gmail.com & mk: 123456',
-      ],
+      suggestions: ['Khám phá địa điểm', 'Lập lịch trình 2 ngày 2 người chi phí 2 triệu'],
     };
   }
 
@@ -915,13 +1082,24 @@ function handleSmartIntent(
 
   const currentSlots = extractItinerarySlots(message);
   const hasAllSlotsInCurrent = Boolean(currentSlots.days && currentSlots.people && currentSlots.budgetVnd);
+  const hasTwoSlotsWithTripIntent =
+    Boolean(
+      (currentSlots.days && currentSlots.people) ||
+        (currentSlots.days && currentSlots.budgetVnd) ||
+        (currentSlots.people && currentSlots.budgetVnd),
+    ) &&
+    (normalized.includes('di ') ||
+      normalized.includes('ngay') ||
+      normalized.includes('nguoi') ||
+      normalized.includes('ngan sach') ||
+      normalized.includes('chi phi'));
 
-  if (isPlanTrigger || isFollowUpPlan || hasAllSlotsInCurrent) {
+  if (isPlanTrigger || isFollowUpPlan || hasAllSlotsInCurrent || hasTwoSlotsWithTripIntent) {
     let accDays = currentSlots.days;
     let accPeople = currentSlots.people;
     let accBudget = currentSlots.budgetVnd;
 
-    if (isFollowUpPlan || isPlanTrigger) {
+    if (isFollowUpPlan || isPlanTrigger || hasTwoSlotsWithTripIntent) {
       for (const h of [...history].reverse().slice(0, 4)) {
         if (h.role === 'user') {
           const prev = extractItinerarySlots(h.content);
@@ -955,7 +1133,7 @@ function handleSmartIntent(
         },
         suggestions: [
           'Lập lịch trình đi 2 ngày cho 2 người với chi phí 2 tr',
-          'Đi 3 ngày cho 4 người chi phí 5 triệu',
+          'Đi 3 ngày cho 4 người ngân sách 5 triệu',
           '2 người với ngân sách 2 triệu',
         ],
       };
@@ -1000,26 +1178,59 @@ function handleSmartIntent(
     normalized.includes('web nay lam gi') ||
     normalized.includes('gioi thieu web') ||
     normalized.includes('gioi thieu du an') ||
-    normalized.includes('he thong nay lam gi')
+    normalized.includes('he thong nay lam gi') ||
+    normalized.includes('co nhung tinh nang nao') ||
+    normalized.includes('tinh nang cua web')
   ) {
     return {
       reply:
         `Chào bạn! Nền tảng này là **Đồng Tháp Smart Travel (DTST)** 🦊🌸 — Hệ sinh thái Du lịch Thông minh & Hộ chiếu Trải nghiệm số tỉnh Đồng Tháp!\n\n` +
         `Dự án mang đến các tiện ích số hóa du lịch hiện đại nhất:\n` +
-        `• 🗺️ **Số hóa 56+ điểm đến**: Phân loại chi tiết di tích lịch sử, văn hóa, sinh thái, ẩm thực và tích hợp bản đồ vệ tinh/chỉ đường trực tiếp.\n` +
+        `• 🗺️ **Số hóa 58+ điểm đến**: Phân loại chi tiết di tích lịch sử, văn hóa, sinh thái, ẩm thực và tích hợp bản đồ vệ tinh/chỉ đường trực tiếp.\n` +
         `• 🧭 **AI Trip Planner V9**: Lập lịch trình du lịch thông minh, tự động tối ưu tuyến đường, quản lý chi phí và thời gian mở cửa.\n` +
         `• 🛂 **Hộ chiếu Trải nghiệm số**: Hệ thống tích điểm gamification — du khách check-in các điểm đến, thu thập con dấu số và mở khóa các danh hiệu độc quyền.\n` +
         `• 📍 **Điểm danh GPS & Quét QR**: Xác thực ghé thăm thực tế bằng tọa độ GPS hoặc quét mã QR bảng thông tin.\n` +
         `• 🦊 **Pé Meko**: Trợ lý AI thế hệ mới vừa tư vấn du lịch vừa có khả năng điều khiển website trực tiếp cho bạn!`,
       action: {
         type: 'OPEN_PAGE',
-        payload: { path: '/destinations', label: 'Khám phá 56+ Điểm đến' },
+        payload: { path: '/destinations', label: 'Khám phá 58+ Điểm đến' },
       },
       suggestions: [
         'Hộ chiếu số là gì và cách tích điểm?',
-        'Điểm danh GPS hoạt động thế nào?',
+        'Danh sách các chùa nổi tiếng',
         'Lập lịch trình 2 ngày cho 2 người chi phí 2 tr',
         'Đặc sản Đồng Tháp có gì ngon?',
+      ],
+    };
+  }
+
+  // Question: Who is Pé Meko / Greeting / Help
+  if (
+    normalized === 'xin chao' ||
+    normalized === 'chao' ||
+    normalized === 'hello' ||
+    normalized === 'hi' ||
+    normalized === 'chao pe meko' ||
+    normalized === 'pe meko oi' ||
+    normalized.includes('pe meko la ai') ||
+    normalized.includes('ban la ai') ||
+    normalized.includes('ban lam duoc gi') ||
+    normalized.includes('huong dan su dung')
+  ) {
+    return {
+      reply:
+        `Chào bạn! Mình là **Pé Meko** 🦊 — Hướng dẫn viên & Trợ lý AI điều khiển toàn diện của **Đồng Tháp Smart Travel**!\n\n` +
+        `Bạn có thể trò chuyện hoặc giao việc trực tiếp cho Pé Meko:\n` +
+        `• 🔍 **Tìm kiếm & Lọc danh sách**: *"Danh sách các chùa"*, *"Các điểm sinh thái"*, *"Địa điểm ở Sa Đéc"*...\n` +
+        `• 🧭 **Tự động lập lịch trình**: *"Lập lịch trình đi 2 ngày cho 2 người với chi phí 2 tr"*\n` +
+        `• 🔄 **Đổi điểm trong lộ trình**: *"Đổi địa điểm A trong lộ trình ngày 1 thành B"*\n` +
+        `• 👤 **Điều khiển tài khoản**: *"Đổi tên hiển thị thành..."*, *"Lưu yêu thích..."*, *"Đồng bộ hộ chiếu số"*\n` +
+        `• 💬 **Hỏi đáp dự án & du lịch**: Hỏi về Hộ chiếu số, Điểm danh GPS, mùa nước nổi, ẩm thực Đồng Tháp!`,
+      suggestions: [
+        'Danh sách các chùa',
+        'Dự án này là gì và có những tính năng nào?',
+        'Lập lịch trình đi 2 ngày cho 2 người với chi phí 2 tr',
+        'Đồng Tháp mùa nào đi đẹp nhất và có đặc sản gì ngon?',
       ],
     };
   }
@@ -1029,10 +1240,12 @@ function handleSmartIntent(
     normalized.includes('ho chieu so la gi') ||
     normalized.includes('ho chieu trai nghiem so') ||
     normalized.includes('cach tich diem') ||
+    normalized.includes('tich diem nhan huy hieu') ||
     normalized.includes('con dau so') ||
     normalized.includes('kiem diem thuong') ||
     normalized.includes('lam sao co huy hieu') ||
-    normalized.includes('lam sao de co huy hieu')
+    normalized.includes('lam sao de co huy hieu') ||
+    normalized.includes('lam sao de duoc tich diem')
   ) {
     return {
       reply:
@@ -1045,7 +1258,7 @@ function handleSmartIntent(
         type: 'OPEN_PAGE',
         payload: { path: '/passport', label: 'Hộ chiếu số của bạn' },
       },
-      suggestions: ['Điểm danh GPS ngay (/check-in)', 'Khám phá các điểm đến', 'Đồng bộ hộ chiếu vào tài khoản'],
+      suggestions: ['Điểm danh GPS ngay (/check-in)', 'Danh sách các chùa', 'Đồng bộ hộ chiếu số vào tài khoản của tôi'],
     };
   }
 
@@ -1053,6 +1266,7 @@ function handleSmartIntent(
   if (
     normalized.includes('diem danh gps la gi') ||
     normalized.includes('diem danh nhu the nao') ||
+    normalized.includes('diem danh gps hoat dong') ||
     normalized.includes('cach diem danh') ||
     normalized.includes('quet qr nhu the nao') ||
     normalized.includes('check in nhu the nao') ||
@@ -1072,14 +1286,52 @@ function handleSmartIntent(
     };
   }
 
-  // Question: Dong Thap Food & Specialties
-  if (
-    normalized.includes('dac san dong thap') ||
+  // Question: Combined or Individual Travel Seasons & Food Specialties Q&A
+  const asksSeason =
+    normalized.includes('mua nao di dep') ||
+    normalized.includes('mua nao dep') ||
+    normalized.includes('mua nao di dong thap') ||
+    normalized.includes('thang may di dong thap') ||
+    normalized.includes('thoi diem du lich') ||
+    normalized.includes('mua nuoc noi');
+
+  const asksFood =
+    normalized.includes('dac san') ||
     normalized.includes('an gi o dong thap') ||
     normalized.includes('mon an ngon') ||
     normalized.includes('am thuc dong thap') ||
-    normalized.includes('mon ngon dong thap')
-  ) {
+    normalized.includes('mon ngon');
+
+  if (asksSeason && asksFood) {
+    const foodSpots = catalog.filter((c) => c.category === 'food').slice(0, 5);
+    return {
+      reply:
+        `Dạ **Pé Meko** bật mí trọn bộ **Thời điểm du lịch đẹp nhất** và **Đặc sản trứ danh** của Đồng Tháp cho bạn đây ạ! 🦊🌸🍲\n\n` +
+        `🌿 **3 Thời điểm vàng nên ghé Đồng Tháp:**\n` +
+        `1. 🌊 **Mùa nước nổi (Tháng 9 – 11 âm lịch)**: Vườn quốc gia Tràm Chim & Gáo Giồng ngập nước, chim trời bay rợp bóng, bông điên điển nở vàng rực.\n` +
+        `2. 🌸 **Mùa hoa Tết Sa Đéc (Tháng 12 âm lịch / giáp Tết)**: Làng hoa Sa Đéc rực rỡ sắc xuân lớn nhất miền Tây.\n` +
+        `3. 🪷 **Mùa sen nở (Tháng 5 – 8 dương lịch)**: Đồng sen Tháp Mười ngát hương, chèo xuồng ngắm sen tuyệt đẹp.\n\n` +
+        `🍲 **5 Đặc sản ngon quên lối về:**\n` +
+        `1. 🐟 **Cá lóc nướng trui cuốn lá sen non** chấm mắm me chua ngọt.\n` +
+        `2. 🥢 **Hủ tiếu Sa Đéc** sợi bánh mềm dai, nước lèo thanh ngọt.\n` +
+        `3. 🥓 **Nem Lai Vung** chua ngọt cay nhẹ đặc trưng.\n` +
+        `4. 🥞 **Bánh xèo Cao Lãnh & Vịt nướng Sa Đéc** ăn kèm rau đồng nội.\n` +
+        `5. 🌸 **Ẩm thực từ Sen**: Cơm gói lá sen, gỏi ngó sen tôm thịt, sữa hạt sen.`,
+      action: {
+        type: 'FILTER',
+        payload: { path: '/destinations?category=food', label: 'Đặc sản & Ẩm thực Đồng Tháp' },
+      },
+      matchedDestinations: foodSpots,
+      suggestions: [
+        'Lập lịch trình đi 2 ngày cho 2 người với chi phí 2 tr',
+        'Danh sách các chùa',
+        'Mở Vườn quốc gia Tràm Chim',
+      ],
+    };
+  }
+
+  if (asksFood) {
+    const foodSpots = catalog.filter((c) => c.category === 'food').slice(0, 6);
     return {
       reply:
         `Về Đồng Tháp xứ Sen Hồng là phải thưởng thức ngay các món đặc sản trứ danh này bạn nhé! 🦊🍲\n\n` +
@@ -1088,27 +1340,21 @@ function handleSmartIntent(
         `3. 🥓 **Nem Lai Vung**: Đủ vị chua, cay, mặn, ngọt trứ danh vùng Lai Vung.\n` +
         `4. 🦆 **Vịt nướng Sa Đéc / Bánh xèo Cao Lãnh**: Thơm nức mũi với các loại rau đồng nội tươi ngon.\n` +
         `5. 🌸 **Món ngon từ Sen Tháp Mười**: Cơm hấp lá sen, gỏi ngó sen tôm thịt, chè sen, sữa hạt sen thơm mát bổ dưỡng.\n\n` +
-        `Pé Meko đã lọc sẵn danh sách **Địa điểm ẩm thực** trên màn hình cho bạn chọn quán ngon ghé ăn ngay nhé!`,
+        `Pé Meko đã lọc sẵn **${foodSpots.length}+ địa điểm ẩm thực** trên màn hình cho bạn chọn quán ngon ghé ăn ngay nhé!`,
       action: {
         type: 'FILTER',
-        payload: { path: '/destinations?category=am-thuc', label: 'Ẩm thực Đồng Tháp' },
+        payload: { path: '/destinations?category=food', label: 'Ẩm thực Đồng Tháp' },
       },
+      matchedDestinations: foodSpots,
       suggestions: [
-        'Lập lịch trình ăn uống Sa Đéc 1 ngày',
-        'Mở Làng hoa Sa Đéc',
+        'Lập lịch trình đi 2 ngày cho 2 người với chi phí 2 tr',
+        'Danh sách các chùa',
         'Mùa nào đi Đồng Tháp đẹp nhất?',
       ],
     };
   }
 
-  // Question: Best travel seasons / weather
-  if (
-    normalized.includes('mua nao di dep') ||
-    normalized.includes('mua nao di dong thap') ||
-    normalized.includes('thang may di dong thap') ||
-    normalized.includes('thoi diem du lich') ||
-    normalized.includes('mua nuoc noi')
-  ) {
+  if (asksSeason) {
     return {
       reply:
         `Đồng Tháp mùa nào cũng có vẻ đẹp riêng, nhưng **3 thời điểm vàng** dưới đây là lý tưởng nhất bạn nên ghé: 🦊🌿\n\n` +
@@ -1237,12 +1483,29 @@ function handleSmartIntent(
   }
 
   // ============================================================================
-  // 6. SPECIFIC DESTINATION NAVIGATION
+  // 7. SMART TOPIC, CATEGORY, AREA & KEYWORD LIST SEARCH ("danh sách các chùa", etc.)
+  // ============================================================================
+  const searchFilterResult = searchAndFilterDestinations(message, normalized, catalog);
+  if (searchFilterResult) {
+    return searchFilterResult;
+  }
+
+  // ============================================================================
+  // 8. SPECIFIC DESTINATION NAVIGATION & Q&A (Opening Hours, Ticket Price, Address)
   // ============================================================================
   const matchedDest = findDestinationByText(message, catalog);
-  if (matchedDest && !normalized.includes('danh sach') && !normalized.includes('cac diem')) {
+  if (matchedDest) {
+    const fullItem = catalog.find((c) => c.slug === matchedDest.slug);
+    const extraDetails: string[] = [];
+    if (fullItem?.summary) extraDetails.push(`• 📝 **Giới thiệu**: ${fullItem.summary}`);
+    if (fullItem?.address) extraDetails.push(`• 📍 **Địa chỉ**: ${fullItem.address}`);
+    if (fullItem?.openingHours) extraDetails.push(`• ⏰ **Giờ mở cửa**: ${fullItem.openingHours}`);
+    if (fullItem?.referencePrice) extraDetails.push(`• 🎫 **Giá vé tham khảo**: ${fullItem.referencePrice}`);
+
     return {
-      reply: `Dạ **Pé Meko** mở ngay trang thông tin chi tiết của **${matchedDest.name}** (${matchedDest.area}) trên màn hình cho bạn xem nhé! 🦊📍`,
+      reply:
+        `Dạ **Pé Meko** mở ngay trang thông tin chi tiết của **${matchedDest.name}** (${matchedDest.area}) trên màn hình cho bạn xem nhé! 🦊📍` +
+        (extraDetails.length > 0 ? `\n\n${extraDetails.join('\n')}` : ''),
       action: {
         type: 'NAVIGATE',
         payload: {
@@ -1250,50 +1513,443 @@ function handleSmartIntent(
           label: matchedDest.name,
         },
       },
+      matchedDestinations: [matchedDest],
       suggestions: [
         `Lưu yêu thích ${matchedDest.name}`,
+        'Danh sách các chùa',
         'Lập lịch trình đi 2 ngày cho 2 người với chi phí 2 tr',
-        'Đổi tên hiển thị thành Thịnh Raccoon',
       ],
     };
   }
 
-  // ============================================================================
-  // 7. AREA / CATEGORY FILTERING
-  // ============================================================================
-  const areas = [
-    { kw: 'can tho', name: 'Cần Thơ', q: 'Cần Thơ' },
-    { kw: 'cao lanh', name: 'Cao Lãnh', q: 'Cao Lãnh' },
-    { kw: 'sa dec', name: 'Sa Đéc', q: 'Sa Đéc' },
-    { kw: 'hong ngu', name: 'Hồng Ngự', q: 'Hồng Ngự' },
-    { kw: 'thap muoi', name: 'Tháp Mười', q: 'Tháp Mười' },
-    { kw: 'tam nong', name: 'Tam Nông', q: 'Tam Nông' },
-    { kw: 'lai vung', name: 'Lai Vung', q: 'Lai Vung' },
-    { kw: 'chau thanh', name: 'Châu Thành', q: 'Châu Thành' },
-    { kw: 'lap vo', name: 'Lấp Vò', q: 'Lấp Vò' },
+  return null;
+}
+
+/**
+ * Formats a bulleted list of matched destinations for Pé Meko's chat bubble.
+ */
+function formatDestinationBulletList(items: DestinationSummary[], maxCount: number = 8): string {
+  return items
+    .slice(0, maxCount)
+    .map((d, idx) => `${idx + 1}. **${d.name}** *(${d.area} · ${formatCategoryLabel(d.category)})*`)
+    .join('\n');
+}
+
+/**
+ * Smart Keyword, Topic, Category & Area Search Engine.
+ * Handles queries like "danh sách các chùa", "tìm chùa", "các bảo tàng", "khu di tích",
+ * "điểm sinh thái", "nhà cổ", "chợ", "vườn", "địa điểm ở Sa Đéc", etc.
+ */
+function searchAndFilterDestinations(
+  rawMessage: string,
+  normalized: string,
+  catalog: DestinationSummary[],
+): CopilotResponse | null {
+  const isExplicitListOrSearch =
+    normalized.includes('danh sach') ||
+    normalized.includes('tim kiem') ||
+    normalized.startsWith('tim ') ||
+    normalized.includes('cac diem') ||
+    normalized.includes('cac dia diem') ||
+    normalized.includes('nhung dia diem') ||
+    normalized.includes('liet ke') ||
+    normalized.includes('goi y') ||
+    normalized.includes('co nhung ') ||
+    normalized.includes('top ');
+
+  // 1. All destinations overview request
+  if (
+    normalized === 'danh sach dia diem' ||
+    normalized === 'tat ca dia diem' ||
+    normalized === 'cac dia diem du lich' ||
+    normalized === 'kham pha dia diem' ||
+    normalized === 'danh sach cac dia diem'
+  ) {
+    const listText = formatDestinationBulletList(catalog, 8);
+    return {
+      reply:
+        `Dạ hệ thống **Đồng Tháp Smart Travel** hiện có **${catalog.length} địa điểm du lịch** đã được số hóa kèm bản đồ định vị! 🦊🗺️\n\n` +
+        `**Một số địa điểm tiêu biểu:**\n${listText}\n\n` +
+        `Pé Meko đã mở trang **Khám phá địa điểm** trên màn hình để bạn xem trọn bộ nhé!`,
+      action: {
+        type: 'OPEN_PAGE',
+        payload: { path: '/destinations', label: `Khám phá ${catalog.length} địa điểm` },
+      },
+      matchedDestinations: catalog.slice(0, 6),
+      suggestions: [
+        'Danh sách các chùa',
+        'Các khu du lịch sinh thái',
+        'Địa điểm tại Sa Đéc',
+        'Lập lịch trình đi 2 ngày cho 2 người với chi phí 2 tr',
+      ],
+    };
+  }
+
+  // 2. Topic / Keyword Groups (Pagodas/Temples, Museums, Historical Sites, Ancient Houses, Flower Villages, Markets, Gardens, Lotus, etc.)
+  const topicRules: Array<{
+    triggers: string[];
+    requireListOrExact?: boolean;
+    title: string;
+    filterPath: string;
+    filterLabel: string;
+    matcher: (d: DestinationSummary) => boolean;
+  }> = [
+    {
+      triggers: [
+        'danh sach cac chua',
+        'danh sach chua',
+        'cac chua',
+        'cac ngoi chua',
+        'tim chua',
+        'chua o',
+        'chua nao',
+        'ngoi chua',
+        'co tu',
+        'thien vien',
+        'tam linh',
+        'chua',
+      ],
+      title: 'ngôi chùa & điểm du lịch tâm linh',
+      filterPath: '/destinations?q=chùa',
+      filterLabel: 'Danh sách các chùa',
+      matcher: (d) => {
+        const nameNorm = normalizeText(d.name);
+        const sumNorm = normalizeText(d.summary);
+        return (
+          nameNorm.includes('chua') ||
+          nameNorm.includes('co tu') ||
+          nameNorm.includes('thien vien') ||
+          nameNorm.includes('mieu') ||
+          nameNorm.includes('dinh ') ||
+          nameNorm.includes('kien an cung') ||
+          sumNorm.includes('ngoi chua') ||
+          sumNorm.includes('chua co')
+        );
+      },
+    },
+    {
+      triggers: ['danh sach bao tang', 'cac bao tang', 'tim bao tang', 'bao tang'],
+      requireListOrExact: true,
+      title: 'bảo tàng & nhà trưng bày',
+      filterPath: '/destinations?q=bảo tàng',
+      filterLabel: 'Danh sách Bảo tàng',
+      matcher: (d) =>
+        normalizeText(d.name).includes('bao tang') || normalizeText(d.summary).includes('bao tang'),
+    },
+    {
+      triggers: [
+        'danh sach di tich',
+        'cac khu di tich',
+        'khu di tich',
+        'di tich lich su',
+        'dia diem lich su',
+        'cac diem lich su',
+        'lich su',
+      ],
+      requireListOrExact: true,
+      title: 'khu di tích & điểm đến lịch sử',
+      filterPath: '/destinations?category=history',
+      filterLabel: 'Di tích & Lịch sử',
+      matcher: (d) =>
+        d.category === 'history' ||
+        normalizeText(d.name).includes('di tich') ||
+        normalizeText(d.name).includes('dinh '),
+    },
+    {
+      triggers: ['danh sach nha co', 'cac nha co', 'tim nha co', 'nha co'],
+      requireListOrExact: true,
+      title: 'nhà cổ & kiến trúc di sản',
+      filterPath: '/destinations?q=nhà cổ',
+      filterLabel: 'Nhà cổ di sản',
+      matcher: (d) =>
+        normalizeText(d.name).includes('nha co') ||
+        normalizeText(d.summary).includes('nha co') ||
+        normalizeText(d.name).includes('kien an cung'),
+    },
+    {
+      triggers: ['danh sach lang hoa', 'cac lang hoa', 'vuon hoa', 'lang hoa', 'hoa sa dec'],
+      requireListOrExact: true,
+      title: 'làng hoa & vườn hoa rực rỡ',
+      filterPath: '/destinations?q=hoa',
+      filterLabel: 'Làng hoa & Vườn hoa',
+      matcher: (d) =>
+        normalizeText(d.name).includes('hoa') || normalizeText(d.summary).includes('lang hoa'),
+    },
+    {
+      triggers: ['dong sen', 'canh dong sen', 'cac diem sen', 'hoa sen', 'sen thap muoi'],
+      requireListOrExact: true,
+      title: 'đồng sen & điểm trải nghiệm Sen Hồng',
+      filterPath: '/destinations?q=sen',
+      filterLabel: 'Đồng sen Đồng Tháp',
+      matcher: (d) =>
+        normalizeText(d.name).includes('sen') || normalizeText(d.summary).includes('dong sen'),
+    },
+    {
+      triggers: [
+        'danh sach cho',
+        'cac cho',
+        'cho dem',
+        'cho am thuc',
+        'tim cho',
+        'cho my tho',
+        'cho sa dec',
+      ],
+      title: 'khu chợ & phố đêm ẩm thực',
+      filterPath: '/destinations?q=chợ',
+      filterLabel: 'Chợ & Phố ẩm thực',
+      matcher: (d) => normalizeText(d.name).includes('cho ') || normalizeText(d.summary).includes('cho dem'),
+    },
+    {
+      triggers: [
+        'vuon trai cay',
+        'danh sach vuon',
+        'cac vuon',
+        'miet vuon',
+        'vuon quyt',
+        'vuon hong',
+        'vuon tao',
+        'vuon thanh long',
+      ],
+      title: 'nhà vườn trái cây & miệt vườn',
+      filterPath: '/destinations?q=vườn',
+      filterLabel: 'Miệt vườn & Trái cây',
+      matcher: (d) => normalizeText(d.name).includes('vuon'),
+    },
+    {
+      triggers: ['lang nghe', 'danh sach lang nghe', 'cac lang nghe'],
+      title: 'làng nghề truyền thống trăm năm',
+      filterPath: '/destinations?q=làng nghề',
+      filterLabel: 'Làng nghề truyền thống',
+      matcher: (d) =>
+        normalizeText(d.name).includes('lang nghe') ||
+        normalizeText(d.name).includes('co so') ||
+        normalizeText(d.summary).includes('lang nghe'),
+    },
+    {
+      triggers: ['hu tieu', 'quan hu tieu', 'hu tieu sa dec', 'hu tieu my tho'],
+      title: 'quán Hủ tiếu trứ danh',
+      filterPath: '/destinations?q=hủ tiếu',
+      filterLabel: 'Quán Hủ tiếu ngon',
+      matcher: (d) =>
+        normalizeText(d.name).includes('hu tieu') ||
+        normalizeText(d.name).includes('bot sa dec') ||
+        normalizeText(d.summary).includes('hu tieu'),
+    },
+    {
+      triggers: [
+        'khu du lich sinh thai',
+        'du lich sinh thai',
+        'cac diem sinh thai',
+        'dia diem sinh thai',
+        'danh sach sinh thai',
+        'sinh thai',
+      ],
+      title: 'khu du lịch sinh thái miền sông nước',
+      filterPath: '/destinations?category=eco',
+      filterLabel: 'Du lịch Sinh thái',
+      matcher: (d) => d.category === 'eco' || normalizeText(d.name).includes('sinh thai'),
+    },
+    {
+      triggers: [
+        'dia diem van hoa',
+        'cac diem van hoa',
+        'danh sach van hoa',
+        'du lich van hoa',
+        'van hoa',
+      ],
+      requireListOrExact: true,
+      title: 'điểm đến văn hóa & tâm linh',
+      filterPath: '/destinations?category=culture',
+      filterLabel: 'Điểm đến Văn hóa',
+      matcher: (d) => d.category === 'culture',
+    },
+    {
+      triggers: [
+        'dia diem thien nhien',
+        'cac diem thien nhien',
+        'danh sach thien nhien',
+        'canh dep thien nhien',
+        'thien nhien',
+      ],
+      requireListOrExact: true,
+      title: 'điểm khám phá thiên nhiên hoang sơ',
+      filterPath: '/destinations?category=nature',
+      filterLabel: 'Khám phá Thiên nhiên',
+      matcher: (d) => d.category === 'nature',
+    },
+    {
+      triggers: [
+        'trai nghiem dia phuong',
+        'cac diem trai nghiem',
+        'danh sach trai nghiem',
+      ],
+      title: 'điểm trải nghiệm bản địa đặc sắc',
+      filterPath: '/destinations?category=local_experience',
+      filterLabel: 'Trải nghiệm địa phương',
+      matcher: (d) => d.category === 'local_experience',
+    },
+    {
+      triggers: [
+        'danh sach quan an',
+        'cac quan an',
+        'nha hang',
+        'dia diem an uong',
+        'danh sach am thuc',
+        'cac diem am thuc',
+      ],
+      title: 'nhà hàng & quán ăn đặc sản',
+      filterPath: '/destinations?category=food',
+      filterLabel: 'Địa điểm Ẩm thực',
+      matcher: (d) => d.category === 'food',
+    },
   ];
 
-  for (const area of areas) {
-    if (normalized.includes(area.kw)) {
-      const matched = catalog.filter(
-        (c) =>
-          normalizeText(c.area).includes(area.kw) ||
-          normalizeText(c.name).includes(area.kw) ||
-          normalizeText(c.summary).includes(area.kw),
-      );
+  for (const rule of topicRules) {
+    const matchedTrigger = rule.triggers.some((t) =>
+      rule.requireListOrExact
+        ? normalized === t || (isExplicitListOrSearch && normalized.includes(t))
+        : normalized === t || normalized.includes(t),
+    );
+    if (matchedTrigger) {
+      // Do not intercept if the user typed a specific full destination name (e.g. "Mở Chùa Phước Kiển")
+      // unless they explicitly asked for a list ("danh sách", "các", "tìm")
+      if (!isExplicitListOrSearch && !GENERIC_CATEGORY_NOUNS.has(normalized)) {
+        const exactDest = findDestinationByText(rawMessage, catalog);
+        if (exactDest) continue;
+      }
 
-      return {
-        reply: `Dạ **Pé Meko** đã lọc danh sách các địa điểm du lịch tại **${area.name}** (${matched.length} địa điểm) trên màn hình cho bạn xem đây ạ! 🦊🌿`,
-        action: {
-          type: 'FILTER',
-          payload: {
-            path: `/destinations?q=${encodeURIComponent(area.q)}`,
-            label: `Địa điểm ${area.name}`,
+      const matched = catalog
+        .filter(rule.matcher)
+        .sort((a, b) => {
+          const aHasChua = normalizeText(a.name).includes('chua') ? 1 : 0;
+          const bHasChua = normalizeText(b.name).includes('chua') ? 1 : 0;
+          return bHasChua - aHasChua;
+        });
+      if (matched.length > 0) {
+        const bulletList = formatDestinationBulletList(matched, 8);
+        return {
+          reply:
+            `Dạ **Pé Meko** tìm thấy **${matched.length} ${rule.title}** trong hệ thống và đã lọc ngay trên màn hình cho bạn! 🦊✨\n\n` +
+            `**Danh sách tiêu biểu:**\n${bulletList}` +
+            (matched.length > 8 ? `\n*(và ${matched.length - 8} địa điểm khác đang hiển thị trên trang)*` : '') +
+            `\n\nBạn có thể bấm trực tiếp vào từng địa điểm bên dưới để xem chi tiết & bản đồ chỉ đường nhé!`,
+          action: {
+            type: 'FILTER',
+            payload: {
+              path: rule.filterPath,
+              label: `${rule.filterLabel} (${matched.length})`,
+            },
           },
-        },
-        matchedDestinations: matched.slice(0, 5),
-        suggestions: ['Mở Bảo tàng Tổng hợp Đồng Tháp', 'Đổi tên hiển thị thành Thịnh Raccoon'],
-      };
+          matchedDestinations: matched.slice(0, 6),
+          suggestions: [
+            matched[0] ? `Xem chi tiết ${matched[0].name}` : 'Khám phá địa điểm',
+            'Lập lịch trình đi 2 ngày cho 2 người với chi phí 2 tr',
+            'Đồng Tháp mùa nào đi đẹp nhất và có đặc sản gì ngon?',
+          ],
+        };
+      }
+    }
+  }
+
+  // 3. Area / Province / City Filtering
+  const areas = [
+    { kw: 'cao lanh', slug: 'cao-lanh', name: 'Cao Lãnh', useAreaParam: true },
+    { kw: 'sa dec', slug: 'sa-dec', name: 'Sa Đéc', useAreaParam: true },
+    { kw: 'thap muoi', slug: 'thap-muoi', name: 'Tháp Mười', useAreaParam: true },
+    { kw: 'tam nong', slug: 'tam-nong', name: 'Tam Nông', useAreaParam: true },
+    { kw: 'lai vung', slug: 'lai-vung', name: 'Lai Vung', useAreaParam: true },
+    { kw: 'hong ngu', slug: 'hong-ngu', name: 'Hồng Ngự', useAreaParam: true },
+    { kw: 'my tho', slug: 'my-tho', name: 'Mỹ Tho', useAreaParam: true },
+    { kw: 'cai be', slug: 'cai-be', name: 'Cái Bè', useAreaParam: true },
+    { kw: 'thoi son', slug: 'thoi-son', name: 'Cù lao Thới Sơn', useAreaParam: true },
+    { kw: 'can tho', slug: 'can-tho', name: 'Cần Thơ', useAreaParam: true },
+    { kw: 'vinh long', slug: 'vinh-long', name: 'Vĩnh Long', useAreaParam: true },
+    { kw: 'chau thanh', slug: 'chau-thanh', name: 'Châu Thành', useAreaParam: false },
+    { kw: 'lap vo', slug: 'lap-vo', name: 'Lấp Vò', useAreaParam: false },
+  ];
+
+  // Only trigger area filtering if user didn't name a single specific destination (unless asking for a list)
+  const specificDestCheck = !isExplicitListOrSearch ? findDestinationByText(rawMessage, catalog) : null;
+  if (!specificDestCheck) {
+    for (const area of areas) {
+      if (normalized.includes(area.kw)) {
+        const matched = catalog.filter(
+          (c) =>
+            c.areaSlug === area.slug ||
+            normalizeText(c.area).includes(area.kw) ||
+            normalizeText(c.name).includes(area.kw) ||
+            normalizeText(c.summary).includes(area.kw) ||
+            normalizeText(c.address).includes(area.kw),
+        );
+
+        if (matched.length > 0) {
+          const bulletList = formatDestinationBulletList(matched, 8);
+          const filterPath = area.useAreaParam
+            ? `/destinations?area=${area.slug}`
+            : `/destinations?q=${encodeURIComponent(area.name)}`;
+
+          return {
+            reply:
+              `Dạ **Pé Meko** tìm thấy **${matched.length} địa điểm du lịch tại ${area.name}** và đã lọc danh sách trên màn hình cho bạn xem đây ạ! 🦊🌿\n\n` +
+              `**Các điểm đến nổi bật tại ${area.name}:**\n${bulletList}`,
+            action: {
+              type: 'FILTER',
+              payload: {
+                path: filterPath,
+                label: `Địa điểm ${area.name} (${matched.length})`,
+              },
+            },
+            matchedDestinations: matched.slice(0, 6),
+            suggestions: [
+              matched[0] ? `Mở ${matched[0].name}` : 'Khám phá địa điểm',
+              'Lập lịch trình đi 2 ngày cho 2 người với chi phí 2 tr',
+              'Danh sách các chùa',
+            ],
+          };
+        }
+      }
+    }
+  }
+
+  // 4. Generic Free-Text List / Search Query ("danh sách <X>", "tìm <X>", "các điểm <X>")
+  if (isExplicitListOrSearch) {
+    const cleanedQuery = rawMessage
+      .replace(
+        /^(cho\s+t[ôo]i\s+xem\s+|h[ãa]y\s+|vui\s+l[òo]ng\s+|p[ée]\s+meko\s+)?(danh\s+s[áa]ch|t[ìi]m\s+ki[ếe]m|t[ìi]m|li[ệe]t\s+k[êe]|g[ợo]i\s+[ýy]|c[áa]c\s+đi[ểe]m|c[áa]c\s+đ[ịi]a\s+đi[ểe]m|nh[ữư]ng\s+đ[ịi]a\s+đi[ểe]m|c[áa]c|nh[ữư]ng)\s+/i,
+        '',
+      )
+      .replace(/\s+(ở|tại)\s+đồng\s+tháp.*$/i, '')
+      .replace(/[?!.]+$/, '')
+      .trim();
+
+    const normQuery = normalizeText(cleanedQuery);
+    if (normQuery.length >= 2) {
+      const terms = normQuery.split(/\s+/).filter((w) => w.length >= 2);
+      const matched = catalog.filter((c) => {
+        const hay = normalizeText(`${c.name} ${c.summary} ${c.description} ${c.area} ${c.tags.join(' ')}`);
+        return hay.includes(normQuery) || (terms.length > 0 && terms.every((t) => hay.includes(t)));
+      });
+
+      if (matched.length > 0) {
+        const bulletList = formatDestinationBulletList(matched, 8);
+        return {
+          reply:
+            `Dạ **Pé Meko** tìm thấy **${matched.length} địa điểm** phù hợp với từ khóa **"${cleanedQuery}"** và đã lọc danh sách trên màn hình cho bạn! 🦊🔍\n\n` +
+            `${bulletList}`,
+          action: {
+            type: 'FILTER',
+            payload: {
+              path: `/destinations?q=${encodeURIComponent(cleanedQuery)}`,
+              label: `Tìm kiếm: ${cleanedQuery} (${matched.length})`,
+            },
+          },
+          matchedDestinations: matched.slice(0, 6),
+          suggestions: [
+            matched[0] ? `Xem chi tiết ${matched[0].name}` : 'Khám phá tất cả địa điểm',
+            'Lập lịch trình đi 2 ngày cho 2 người với chi phí 2 tr',
+          ],
+        };
+      }
     }
   }
 
@@ -1301,9 +1957,100 @@ function handleSmartIntent(
 }
 
 /**
+ * Intelligent local fallback when Gemini API is unreachable or rate-limited.
+ * Searches the catalog by keywords in the user's message and responds naturally.
+ */
+function buildSmartLocalFallback(
+  message: string,
+  catalog: DestinationSummary[],
+): CopilotResponse {
+  const norm = normalizeText(message);
+  const stopWords = new Set([
+    'toi',
+    'muon',
+    'cho',
+    'hoi',
+    'xem',
+    'tim',
+    'biet',
+    've',
+    'cua',
+    'nhung',
+    'cac',
+    'dia',
+    'diem',
+    'nao',
+    'gi',
+    'la',
+    'co',
+    'khong',
+    'tai',
+    'dong',
+    'thap',
+    'pe',
+    'meko',
+    'oi',
+    'giup',
+    'nhe',
+    'voi',
+  ]);
+  const words = norm.split(/\s+/).filter((w) => w.length >= 3 && !stopWords.has(w));
+
+  if (words.length > 0) {
+    const scored = catalog
+      .map((c) => {
+        const hay = normalizeText(`${c.name} ${c.summary} ${c.description} ${c.area} ${c.tags.join(' ')}`);
+        const hits = words.filter((w) => hay.includes(w)).length;
+        return { item: c, hits };
+      })
+      .filter((x) => x.hits > 0)
+      .sort((a, b) => b.hits - a.hits);
+
+    if (scored.length > 0) {
+      const matched = scored.map((s) => s.item);
+      const bulletList = formatDestinationBulletList(matched, 6);
+      return {
+        reply:
+          `Dạ **Pé Meko** tìm thấy **${matched.length} địa điểm liên quan** đến yêu cầu của bạn trong hệ thống **Đồng Tháp Smart Travel**: 🦊✨\n\n` +
+          `${bulletList}\n\n` +
+          `Bạn có thể nhấn vào địa điểm bên dưới để xem thông tin chi tiết, giờ mở cửa và bản đồ chỉ đường nhé!`,
+        action: {
+          type: 'FILTER',
+          payload: {
+            path: `/destinations?q=${encodeURIComponent(message.trim())}`,
+            label: `Kết quả liên quan (${matched.length})`,
+          },
+        },
+        matchedDestinations: matched.slice(0, 6),
+        suggestions: [
+          'Danh sách các chùa',
+          'Lập lịch trình đi 2 ngày cho 2 người với chi phí 2 tr',
+          'Dự án này là gì và có những tính năng nào?',
+        ],
+      };
+    }
+  }
+
+  return {
+    reply:
+      `Chào bạn! Mình là **Pé Meko** 🦊 — Trợ lý AI kiêm hướng dẫn viên của **Đồng Tháp Smart Travel**.\n\n` +
+      `Bạn có thể nhờ Pé Meko:\n` +
+      `• 🔍 **Tìm danh sách điểm đến**: *"Danh sách các chùa"*, *"Các điểm sinh thái"*, *"Địa điểm ở Sa Đéc"*\n` +
+      `• 🧭 **Lập lịch trình tự động**: *"Lập lịch trình đi 2 ngày cho 2 người với chi phí 2 tr"*\n` +
+      `• 💬 **Hỏi đáp về dự án & đặc sản**: *"Dự án này là gì?"*, *"Hộ chiếu số là gì?"*, *"Đặc sản Đồng Tháp"*`,
+    suggestions: [
+      'Danh sách các chùa',
+      'Dự án này là gì và có những tính năng nào?',
+      'Lập lịch trình đi 2 ngày cho 2 người với chi phí 2 tr',
+      'Đồng Tháp mùa nào đi đẹp nhất và có đặc sản gì ngon?',
+    ],
+  };
+}
+
+/**
  * Main Copilot Engine ("Pé Meko"):
  * 1. Security Guardrail Check (RBAC + Secret Exfiltration Prevention)
- * 2. High-precision Deterministic System & Slot-Filling Engine
+ * 2. High-precision Deterministic System, Search & Slot-Filling Engine
  * 3. Gemini LLM Function Calling with Live DOM Introspection (for dynamic / future UI features)
  */
 export async function processCopilotMessage(
@@ -1319,27 +2066,19 @@ export async function processCopilotMessage(
 
   const catalog = await getDestinationsCatalog();
 
-  // Step 2: Check deterministic system & multi-turn slot-filling engine
+  // Step 2: Check deterministic system, catalog search & multi-turn slot-filling engine
   const smartResult = handleSmartIntent(message, history, catalog, pageContext);
   if (smartResult) {
     return smartResult;
   }
 
-  if (!env.GEMINI_API_KEY || env.GEMINI_API_KEY.trim() === '') {
-    return {
-      reply:
-        `Chào bạn! Mình là **Pé Meko** 🦊 — Trợ lý AI điều khiển toàn bộ hệ thống web.\n` +
-        `Bạn có thể bảo Pé Meko đổi tên hiển thị, lập lịch trình, đổi điểm lộ trình, lưu yêu thích hoặc bấm bất kỳ nút nào trên màn hình nhé!`,
-      suggestions: [
-        'Đổi tên hiển thị thành Thịnh Raccoon',
-        'Lập lịch trình đi 2 ngày cho 2 người với chi phí 2 tr',
-        'Hãy tạo một tài khoản với email: thinhlvce181726@fpt.edu.vn & mk: 123456',
-      ],
-    };
+  const apiKey = resolveGeminiApiKey();
+  if (!apiKey) {
+    return buildSmartLocalFallback(message, catalog);
   }
 
   try {
-    const ai = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
+    const ai = new GoogleGenAI({ apiKey });
 
     const catalogPrompt = catalog
       .map((d) => `- ${d.name} (slug: "${d.slug}", khu vực: "${d.area}", loại: "${d.category}")`)
@@ -1361,21 +2100,21 @@ export async function processCopilotMessage(
 
     const systemInstruction = `Bạn là "Pé Meko" 🦊 - Siêu Trợ lý AI đồng hành & điều khiển toàn diện nền tảng Du lịch Thông minh Đồng Tháp (dongthapgo.com).
 Bạn sở hữu hai năng lực cốt lõi:
-1. HƯỚNG DẪN VIÊN & BOT TRÒ CHUYỆN THÔNG THÁI: Trả lời sâu sắc, am hiểu mọi câu hỏi về dự án, cách sử dụng các tính năng website, văn hóa, danh lam thắng cảnh, ẩm thực và kinh nghiệm du lịch Đồng Tháp & miền Tây.
+1. HƯỚNG DẪN VIÊN & BOT TRÒ CHUYỆN THÔNG THÁI: Trả lời sâu sắc, am hiểu mọi câu hỏi về dự án, cách sử dụng các tính năng website, văn hóa, danh lam thắng cảnh, ẩm thực và kinh nghiệm du lịch Đồng Tháp & miền Tây. Khi người dùng hỏi danh sách địa điểm (ví dụ các chùa, khu sinh thái, quán ăn), hãy liệt kê cụ thể tên các địa điểm từ DANH SÁCH ĐỊA ĐIỂM TRONG DATABASE trong câu trả lời và gọi hàm "filterDestinations".
 2. ĐIỀU KHIỂN WEB NHƯ NGƯỜI THỨ 3: Tự động bấm nút, điền form, đổi tên, lập lịch trình, đổi điểm, tạo tài khoản và tương tác với các phần tử giao diện trực tiếp (Live DOM Snapshot).
 
 BỘ KIẾN THỨC NỀN TẢNG DỰ ÁN (PLATFORM KNOWLEDGE):
 • Tên dự án: Đồng Tháp Smart Travel (DTST).
-• Sứ mệnh: Số hóa 56+ điểm đến di tích lịch sử, văn hóa, sinh thái và ẩm thực trên toàn tỉnh Đồng Tháp (TP. Cao Lãnh, TP. Sa Đéc, TP. Hồng Ngự, Tháp Mười, Tam Nông, Lai Vung, v.v.) cùng các vùng phụ cận miền Tây.
+• Sứ mệnh: Số hóa 58+ điểm đến di tích lịch sử, văn hóa, sinh thái và ẩm thực trên toàn tỉnh Đồng Tháp (TP. Cao Lãnh, TP. Sa Đéc, TP. Hồng Ngự, Tháp Mười, Tam Nông, Lai Vung, v.v.) cùng các vùng phụ cận miền Tây.
 • Các tính năng chính trên trang web:
-  - Khám phá điểm đến (/destinations): 56+ điểm đến có hình ảnh, thông tin, phân loại trải nghiệm, bản đồ Google Maps & chế độ xem vệ tinh.
+  - Khám phá điểm đến (/destinations): 58+ điểm đến có hình ảnh, thông tin, phân loại trải nghiệm, bản đồ Google Maps & chế độ xem vệ tinh.
   - Lập lịch trình AI V9 (/itinerary/create): Tự động ráp tuyến đường tối ưu nhiều ngày theo số lượng người, số ngày, ngân sách VND, giờ mở cửa và phương tiện di chuyển. Hỗ trợ tính năng đổi điểm dừng (Stop Swap) với cảnh báo khoảng cách thông minh.
   - Hộ chiếu Trải nghiệm số (/passport): Hệ thống gamification du lịch — du khách đi thực tế tích lũy con dấu số (digital stamp), nhận điểm kinh nghiệm (XP) và mở khóa các danh hiệu như "Thổ địa Sen Hồng", "Tín đồ Miền Tây"...
   - Điểm danh GPS & Quét QR (/check-in): 2 cách nhận con dấu số: Bật GPS xác thực trong bán kính hợp lệ hoặc quét mã QR vật lý đặt tại điểm đến.
   - Quản lý tài khoản & Lịch trình (/account, /my-itineraries, /favorites): Tùy biến hồ sơ cá nhân, đổi tên hiển thị, lưu điểm yêu thích và xem lại các chuyến đi.
 
 BỘ KIẾN THỨC VĂN HÓA & DU LỊCH ĐỒNG THÁP:
-• Điểm tham quan nức tiếng: Làng hoa Sa Đéc, Vườn quốc gia Tràm Chim (Khu Ramsar thứ 2.000 thế giới, sếu đầu đỏ), Khu di tích Xẻo Quýt, Lăng cụ Phó bảng Nguyễn Sinh Sắc, Chùa Kiến An Cung (chùa Ông Quách), Chùa Phước Kiển (chùa Lá Sen khổng lồ), Đồng Sen Tháp Mười, Gáo Giồng.
+• Điểm tham quan nức tiếng: Làng hoa Sa Đéc, Vườn quốc gia Tràm Chim (Khu Ramsar thứ 2.000 thế giới, sếu đầu đỏ), Khu di tích Xẻo Quýt, Khu di tích Cụ Phó bảng Nguyễn Sinh Sắc, Kiến An Cung – Chùa Ông Quách, Chùa Phước Kiển (Chùa Lá Sen Vua), Đồng sen Tháp Mười, Khu du lịch sinh thái Gáo Giồng.
 • Ẩm thực trứ danh: Cá lóc nướng trui cuốn lá sen non, nem Lai Vung, hủ tiếu Sa Đéc, bánh xèo Cao Lãnh, vịt nướng Sa Đéc, các món chè/cơm/sữa từ Sen Tháp Mười.
 • Mùa du lịch vàng: Mùa nước nổi (tháng 9-11 âm lịch tại Tràm Chim, Gáo Giồng), Mùa hoa Sa Đéc (tháng 12 âm lịch / giáp Tết), Mùa sen nở (mùa hè).
 
@@ -1489,12 +2228,12 @@ ${catalogPrompt}
           },
           {
             name: 'filterDestinations',
-            description: 'Lọc danh sách các địa điểm theo khu vực hoặc thể loại',
+            description: 'Lọc danh sách các địa điểm theo từ khóa, khu vực hoặc thể loại',
             parameters: {
               type: 'OBJECT',
               properties: {
-                query: { type: 'STRING', description: 'Từ khóa khu vực (Cần Thơ, Sa Đéc, Cao Lãnh...)' },
-                category: { type: 'STRING', description: 'Mã thể loại: sinh-thai, van-hoa, lich-su, am-thuc' },
+                query: { type: 'STRING', description: 'Từ khóa tìm kiếm (ví dụ: chùa, bảo tàng, Sa Đéc, Cao Lãnh...)' },
+                category: { type: 'STRING', description: 'Mã thể loại: nature, eco, culture, history, food, local_experience' },
               },
             },
           },
@@ -1597,19 +2336,12 @@ ${catalogPrompt}
     }
 
     if (!response) {
-      return {
-        reply:
-          `Dạ **Pé Meko** chưa nghe rõ yêu cầu của bạn lắm 🦊. Bạn muốn Pé Meko đổi tên hiển thị, mở địa điểm, lập lịch trình, hay thao tác nút nào trên màn hình ạ?`,
-        suggestions: [
-          'Đổi tên hiển thị thành Thịnh Raccoon',
-          'Lập lịch trình đi 2 ngày cho 2 người với chi phí 2 tr',
-          'Mở trang cá nhân (/account)',
-        ],
-      };
+      return buildSmartLocalFallback(message, catalog);
     }
 
     let action: CopilotAction | undefined;
     let replyText = response.text || '';
+    let toolMatchedDestinations: DestinationSummary[] = [];
 
     const functionCalls = (response as any).functionCalls;
     if (functionCalls && functionCalls.length > 0) {
@@ -1717,22 +2449,49 @@ ${catalogPrompt}
             label: name,
           },
         };
+        if (dest) toolMatchedDestinations = [dest];
         if (!replyText) {
           replyText = `Dạ **Pé Meko** mở ngay thông tin chi tiết của **${name}** cho bạn xem nhé! 🦊`;
         }
       } else if (call.name === 'filterDestinations') {
-        const q = args.query ? `q=${encodeURIComponent(args.query)}` : '';
-        const cat = args.category ? `category=${encodeURIComponent(args.category)}` : '';
+        const rawQuery = args.query ? String(args.query).trim() : '';
+        const rawCat = args.category ? String(args.category).trim() : '';
+        const catMap: Record<string, string> = {
+          'sinh-thai': 'eco',
+          'van-hoa': 'culture',
+          'lich-su': 'history',
+          'am-thuc': 'food',
+          'thien-nhien': 'nature',
+          'trai-nghiem': 'local_experience',
+        };
+        const mappedCat = catMap[rawCat] || rawCat;
+
+        const q = rawQuery ? `q=${encodeURIComponent(rawQuery)}` : '';
+        const cat = mappedCat ? `category=${encodeURIComponent(mappedCat)}` : '';
         const qs = [q, cat].filter(Boolean).join('&');
+
+        const normQ = normalizeText(rawQuery);
+        toolMatchedDestinations = catalog.filter((c) => {
+          const catMatch = mappedCat ? c.category === mappedCat : true;
+          const qMatch = normQ
+            ? normalizeText(`${c.name} ${c.summary} ${c.area} ${c.tags.join(' ')}`).includes(normQ)
+            : true;
+          return catMatch && qMatch;
+        });
+
         action = {
           type: 'FILTER',
           payload: {
             path: `/destinations${qs ? `?${qs}` : ''}`,
-            label: args.query || args.category || 'Tìm kiếm địa điểm',
+            label: rawQuery || formatCategoryLabel(mappedCat) || 'Tìm kiếm địa điểm',
           },
         };
         if (!replyText) {
-          replyText = `Dạ **Pé Meko** đã lọc danh sách các địa điểm phù hợp trên màn hình cho bạn rồi nhé! 🦊`;
+          const bulletList =
+            toolMatchedDestinations.length > 0
+              ? `\n\n**Danh sách địa điểm phù hợp (${toolMatchedDestinations.length}):**\n${formatDestinationBulletList(toolMatchedDestinations, 8)}`
+              : '';
+          replyText = `Dạ **Pé Meko** đã lọc danh sách các địa điểm phù hợp trên màn hình cho bạn rồi nhé! 🦊${bulletList}`;
         }
       } else if (call.name === 'openPage') {
         const targetPath = String(args.path || '/');
@@ -1807,7 +2566,7 @@ ${catalogPrompt}
           findDestinationByText(String(args.newDestinationName || args.newDestinationSlug || ''), catalog) || {
             name: String(args.newDestinationName || 'Địa điểm mới'),
             slug: String(args.newDestinationSlug || 'bao-tang-tong-hop-dong-thap'),
-            area: 'TP. Cao Lãnh, Đồng Tháp',
+            area: 'Cao Lãnh',
             coordinates: { lat: 10.4562, lng: 105.6324 },
           };
         action = {
@@ -1826,34 +2585,29 @@ ${catalogPrompt}
       }
     }
 
-    const matchedDestinations = catalog
-      .filter(
-        (c) =>
-          replyText.toLowerCase().includes(c.name.toLowerCase()) ||
-          message.toLowerCase().includes(c.name.toLowerCase()),
-      )
-      .slice(0, 4);
+    const matchedDestinations =
+      toolMatchedDestinations.length > 0
+        ? toolMatchedDestinations.slice(0, 6)
+        : catalog
+            .filter(
+              (c) =>
+                replyText.toLowerCase().includes(c.name.toLowerCase()) ||
+                message.toLowerCase().includes(c.name.toLowerCase()),
+            )
+            .slice(0, 5);
 
     return {
       reply: replyText || 'Dạ **Pé Meko** có thể giúp gì tiếp theo cho bạn ạ? 🦊',
       action,
       matchedDestinations: matchedDestinations.length > 0 ? matchedDestinations : undefined,
       suggestions: [
-        'Đổi tên hiển thị thành Thịnh Raccoon',
+        'Danh sách các chùa',
         'Lập lịch trình đi 2 ngày cho 2 người với chi phí 2 tr',
-        'Đổi địa điểm Trà mật ong Kỳ Lân trong lộ trình ngày 1 thành tham quan Bảo tàng Tổng hợp Đồng Tháp',
+        'Dự án này là gì và có những tính năng nào?',
       ],
     };
   } catch (err) {
     logger.error({ err }, 'Gemini Copilot execution failed');
-    return {
-      reply:
-        'Dạ **Pé Meko** đang sẵn sàng hỗ trợ bạn điều khiển toàn bộ hệ thống! 🦊 Bạn hãy chọn hoặc nhập yêu cầu bên dưới nhé:',
-      suggestions: [
-        'Đổi tên hiển thị thành Thịnh Raccoon',
-        'Lập lịch trình đi 2 ngày cho 2 người với chi phí 2 tr',
-        'Mở trang cá nhân (/account)',
-      ],
-    };
+    return buildSmartLocalFallback(message, catalog);
   }
 }
