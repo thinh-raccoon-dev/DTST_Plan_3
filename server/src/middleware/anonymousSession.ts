@@ -10,12 +10,14 @@ const ONE_YEAR_MS = 1000 * 60 * 60 * 24 * 365;
  * It carries no personal data and is not a reliable person identifier.
  */
 export function anonymousSession(req: Request, res: Response, next: NextFunction): void {
-  const current: unknown = req.cookies?.[ANON_COOKIE];
+  const headerId = req.get('x-device-session-id') || req.get('x-anonymous-id');
+  const current: unknown = req.cookies?.[ANON_COOKIE] || headerId;
   if (typeof current === 'string' && UUID_PATTERN.test(current)) {
     req.anonymousSessionId = current;
   } else {
     req.anonymousSessionId = randomUUID();
     res.cookie(ANON_COOKIE, req.anonymousSessionId, { ...baseCookieOptions(), maxAge: ONE_YEAR_MS });
   }
+  res.set('x-device-session-id', req.anonymousSessionId);
   next();
 }

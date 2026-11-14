@@ -1,6 +1,7 @@
 import { Mail, Phone } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link, Outlet, ScrollRestoration } from 'react-router-dom';
+import { AiCopilotWidget } from '../ai/AiCopilotWidget';
 import { Header } from './Header';
 import { LogoFull } from './Logo';
 import { PetalBackdrop } from './PetalBackdrop';
@@ -119,6 +120,7 @@ export function PublicLayout() {
         <Outlet />
       </main>
       <Footer />
+      <AiCopilotWidget />
       <ScrollRestoration />
     </div>
   );

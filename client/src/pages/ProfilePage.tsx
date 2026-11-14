@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Compass, KeyRound, Save, UserRound } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { CategoryIcon } from '../components/destination/CategoryIcon';
@@ -30,8 +30,8 @@ const schema = z
   })
   .superRefine((value, ctx) => {
     if (value.newPassword) {
-      if (value.newPassword.length < 8) {
-        ctx.addIssue({ code: 'custom', path: ['newPassword'], message: 'Mật khẩu mới cần ít nhất 8 ký tự' });
+      if (value.newPassword.length < 6) {
+        ctx.addIssue({ code: 'custom', path: ['newPassword'], message: 'Mật khẩu mới cần ít nhất 6 ký tự' });
       }
       if (!value.currentPassword) {
         ctx.addIssue({ code: 'custom', path: ['currentPassword'], message: 'Nhập mật khẩu hiện tại để đổi mật khẩu' });
@@ -67,6 +67,14 @@ export function ProfilePage() {
       confirmPassword: '',
     },
   });
+
+  useEffect(() => {
+    form.setValue('displayName', user.displayName);
+    form.setValue('numberOfDays', user.preferences?.numberOfDays ?? 2);
+    form.setValue('hoursPerDay', user.preferences?.hoursPerDay ?? 8);
+    form.setValue('areas', user.preferences?.areas ?? []);
+    form.setValue('interests', user.preferences?.interests ?? []);
+  }, [user.displayName, user.preferences, form]);
 
   const onSubmit = async (values: FormValues) => {
     setFormError(null);

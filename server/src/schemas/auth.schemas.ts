@@ -4,7 +4,7 @@ import { AREAS, INTERESTS } from '../config/catalog.js';
 export const registerSchema = z
   .object({
     email: z.string().trim().toLowerCase().email('Email không hợp lệ.').max(254),
-    password: z.string().min(8, 'Mật khẩu cần ít nhất 8 ký tự.').max(128),
+    password: z.string().min(6, 'Mật khẩu cần ít nhất 6 ký tự.').max(128),
     displayName: z.string().trim().min(2, 'Tên hiển thị cần ít nhất 2 ký tự.').max(80),
   })
   .strict();
@@ -30,7 +30,7 @@ export const updateProfileSchema = z
     displayName: z.string().trim().min(2, 'Tên hiển thị cần ít nhất 2 ký tự.').max(80).optional(),
     preferences: profilePreferencesSchema.optional(),
     currentPassword: z.string().min(1).max(128).optional(),
-    newPassword: z.string().min(8, 'Mật khẩu mới cần ít nhất 8 ký tự.').max(128).optional(),
+    newPassword: z.string().min(6, 'Mật khẩu mới cần ít nhất 6 ký tự.').max(128).optional(),
   })
   .strict()
   .refine((value) => Object.keys(value).length > 0, 'Không có dữ liệu cần cập nhật.')

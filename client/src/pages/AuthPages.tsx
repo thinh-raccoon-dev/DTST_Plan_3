@@ -1,8 +1,8 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { ShieldCheck, Sparkles } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import { Bot, ShieldCheck, Sparkles } from 'lucide-react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useForm } from 'react-hook-form';
-import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { z } from 'zod';
 import { Logo } from '../components/layout/Logo';
 import { Button } from '../components/ui/Button';
@@ -24,7 +24,7 @@ const registerSchema = z
   .object({
     displayName: z.string().trim().min(2, 'Tên hiển thị cần ít nhất 2 ký tự').max(80),
     email: z.string().trim().min(1, 'Vui lòng nhập email').email('Email không hợp lệ'),
-    password: z.string().min(8, 'Mật khẩu cần ít nhất 8 ký tự').max(128),
+    password: z.string().min(6, 'Mật khẩu cần ít nhất 6 ký tự').max(128),
     confirmPassword: z.string(),
     acceptTerms: z.literal(true, { errorMap: () => ({ message: 'Bạn cần đồng ý điều khoản để tiếp tục' }) }),
   })
@@ -69,9 +69,12 @@ function LoginForm({ admin }: { admin: boolean }) {
   const logout = useAuthStore((s) => s.logout);
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
   const [formError, setFormError] = useState<string | null>(null);
+  const [aiAutoRunning, setAiAutoRunning] = useState(false);
   const form = useForm<LoginValues>({ resolver: zodResolver(loginSchema), defaultValues: { email: '', password: '' } });
   const from = (location.state as { from?: string } | null)?.from;
+  const lastRunRef = useRef<string | null>(null);
 
   const onSubmit = async (values: LoginValues) => {
     setFormError(null);
@@ -90,11 +93,39 @@ function LoginForm({ admin }: { admin: boolean }) {
       const apiError = toApiError(error);
       const unplaced = applyFieldErrors(apiError, form.setError, ['email', 'password']);
       if (apiError.fieldIssues.length === 0 || unplaced.length > 0) setFormError(apiError.message);
+    } finally {
+      setAiAutoRunning(false);
     }
   };
 
+  useEffect(() => {
+    const emailParam = searchParams.get('email');
+    const passwordParam = searchParams.get('password');
+    const autoSubmit = searchParams.get('autoSubmit') === 'true';
+    const runKey = searchParams.get('run') || `${emailParam}-${passwordParam}`;
+
+    if (emailParam) form.setValue('email', emailParam);
+    if (passwordParam) form.setValue('password', passwordParam);
+
+    if (autoSubmit && emailParam && passwordParam && lastRunRef.current !== runKey) {
+      setAiAutoRunning(true);
+      const timer = setTimeout(() => {
+        if (lastRunRef.current === runKey) return;
+        lastRunRef.current = runKey;
+        void onSubmit({ email: emailParam, password: passwordParam });
+      }, 350);
+      return () => clearTimeout(timer);
+    }
+  }, [searchParams]);
+
   return (
     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4" noValidate>
+      {aiAutoRunning && (
+        <div className="flex items-center gap-2.5 rounded-xl border border-leaf-300 bg-leaf-50 px-3.5 py-2.5 text-xs font-semibold text-leaf-900">
+          <Bot className="size-4 shrink-0 animate-bounce text-leaf-600" />
+          <span>Pé Meko đang tự động điền thông tin và đăng nhập cho bạn...</span>
+        </div>
+      )}
       {formError && <Notice tone="warning">{formError}</Notice>}
       <FormField label="Email" required error={form.formState.errors.email?.message}>
         <Input type="email" autoComplete="email" {...form.register('email')} />
@@ -102,7 +133,7 @@ function LoginForm({ admin }: { admin: boolean }) {
       <FormField label="Mật khẩu" required error={form.formState.errors.password?.message}>
         <Input type="password" autoComplete="current-password" {...form.register('password')} />
       </FormField>
-      <Button type="submit" size="lg" className="w-full" loading={form.formState.isSubmitting}>
+      <Button type="submit" size="lg" className="w-full" loading={form.formState.isSubmitting || aiAutoRunning}>
         Đăng nhập
       </Button>
     </form>
@@ -113,7 +144,10 @@ export function LoginPage() {
   useDocumentTitle('Đăng nhập');
   const user = useAuthStore((s) => s.user);
   const location = useLocation();
-  if (user) return <Navigate to={safeRedirect((location.state as { from?: string } | null)?.from, '/passport')} replace />;
+  const [searchParams] = useSearchParams();
+  if (user && searchParams.get('autoSubmit') !== 'true') {
+    return <Navigate to={safeRedirect((location.state as { from?: string } | null)?.from, '/passport')} replace />;
+  }
   return (
     <AuthShell title="Đăng nhập" description="Đăng nhập để lưu hộ chiếu, lịch trình và địa điểm yêu thích vào tài khoản.">
       <LoginForm admin={false} />
@@ -131,36 +165,119 @@ export function RegisterPage() {
   useDocumentTitle('Đăng ký');
   const user = useAuthStore((s) => s.user);
   const register = useAuthStore((s) => s.register);
+  const login = useAuthStore((s) => s.login);
+  const logout = useAuthStore((s) => s.logout);
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
   const [formError, setFormError] = useState<string | null>(null);
+  const [aiAutoRunning, setAiAutoRunning] = useState(false);
+  const lastRunRef = useRef<string | null>(null);
+
   const form = useForm<RegisterValues>({
     resolver: zodResolver(registerSchema),
     defaultValues: { displayName: '', email: '', password: '', confirmPassword: '' },
   });
-  if (user) return <Navigate to="/passport" replace />;
 
   const onSubmit = async (values: RegisterValues) => {
     setFormError(null);
     try {
+      if (user) {
+        await logout();
+      }
       const created = await register({ email: values.email, password: values.password, displayName: values.displayName });
-      toast.success(`Chào mừng, ${created.displayName}!`);
+      toast.success(`Pé Meko đã tạo tài khoản thành công! Chào mừng ${created.displayName}!`);
+      window.dispatchEvent(
+        new CustomEvent('pe-meko:bot-notice', {
+          detail: {
+            text: `🎉 **Pé Meko báo cáo:** Đã tạo tài khoản và đăng nhập thành công cho **${created.displayName}** (\`${values.email}\`)! Hiện bạn đang ở trang Hộ chiếu số của mình.`,
+          },
+        }),
+      );
       void offerDeviceSync();
       navigate(safeRedirect((location.state as { from?: string } | null)?.from, '/passport'), { replace: true });
     } catch (error) {
       const apiError = toApiError(error);
-      if (apiError.code === 'EMAIL_TAKEN') form.setError('email', { message: apiError.message });
-      else {
+      if (apiError.code === 'EMAIL_TAKEN') {
+        try {
+          const loggedIn = await login(values.email, values.password);
+          toast.success(`Email đã có tài khoản — Pé Meko đã tự động đăng nhập vào ${loggedIn.displayName}!`);
+          window.dispatchEvent(
+            new CustomEvent('pe-meko:bot-notice', {
+              detail: {
+                text: `✅ **Pé Meko báo cáo:** Email \`${values.email}\` đã được đăng ký trước đó — Pé Meko đã tự động đăng nhập thẳng vào tài khoản **${loggedIn.displayName}** cho bạn!`,
+              },
+            }),
+          );
+          void offerDeviceSync();
+          navigate(safeRedirect((location.state as { from?: string } | null)?.from, '/passport'), { replace: true });
+          return;
+        } catch {
+          form.setError('email', { message: apiError.message });
+        }
+      } else {
         const unplaced = applyFieldErrors(apiError, form.setError, ['email', 'password', 'displayName']);
         if (apiError.fieldIssues.length === 0 || unplaced.length > 0) setFormError(apiError.message);
       }
+    } finally {
+      setAiAutoRunning(false);
     }
   };
+
+  useEffect(() => {
+    const emailParam = searchParams.get('email');
+    const passwordParam = searchParams.get('password');
+    const displayNameParam = searchParams.get('displayName');
+    const autoSubmit = searchParams.get('autoSubmit') === 'true';
+    const runKey = searchParams.get('run') || `${emailParam}-${passwordParam}`;
+
+    if (emailParam) {
+      form.setValue('email', emailParam);
+      const fallbackName = displayNameParam || emailParam.split('@')[0] || 'Du khách Đồng Tháp';
+      form.setValue('displayName', fallbackName.length >= 2 ? fallbackName : `${fallbackName} DT`);
+    } else if (displayNameParam) {
+      form.setValue('displayName', displayNameParam);
+    }
+
+    if (passwordParam) {
+      form.setValue('password', passwordParam);
+      form.setValue('confirmPassword', passwordParam);
+    }
+    if (autoSubmit) {
+      form.setValue('acceptTerms', true as never);
+    }
+
+    if (autoSubmit && emailParam && passwordParam && lastRunRef.current !== runKey) {
+      setAiAutoRunning(true);
+      const derivedName = displayNameParam || emailParam.split('@')[0] || 'Du khách Đồng Tháp';
+      const safeName = derivedName.length >= 2 ? derivedName : `${derivedName} DT`;
+      const timer = setTimeout(() => {
+        if (lastRunRef.current === runKey) return;
+        lastRunRef.current = runKey;
+        void onSubmit({
+          displayName: safeName,
+          email: emailParam,
+          password: passwordParam,
+          confirmPassword: passwordParam,
+          acceptTerms: true,
+        });
+      }, 350);
+      return () => clearTimeout(timer);
+    }
+  }, [searchParams]);
+
+  if (user && searchParams.get('autoSubmit') !== 'true') return <Navigate to="/passport" replace />;
 
   const errors = form.formState.errors;
   return (
     <AuthShell title="Tạo tài khoản du khách" description="Tài khoản giúp đồng bộ hộ chiếu và lịch trình giữa các thiết bị.">
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4" noValidate>
+        {aiAutoRunning && (
+          <div className="flex items-center gap-2.5 rounded-xl border border-leaf-300 bg-leaf-50 px-3.5 py-2.5 text-xs font-semibold text-leaf-900">
+            <Bot className="size-4 shrink-0 animate-bounce text-leaf-600" />
+            <span>Pé Meko đang tự động điền biểu mẫu và khởi tạo tài khoản cho bạn...</span>
+          </div>
+        )}
         {formError && <Notice tone="warning">{formError}</Notice>}
         <FormField label="Tên hiển thị" required error={errors.displayName?.message}>
           <Input autoComplete="nickname" {...form.register('displayName')} />
@@ -168,7 +285,7 @@ export function RegisterPage() {
         <FormField label="Email" required error={errors.email?.message}>
           <Input type="email" autoComplete="email" {...form.register('email')} />
         </FormField>
-        <FormField label="Mật khẩu" required hint="Tối thiểu 8 ký tự." error={errors.password?.message}>
+        <FormField label="Mật khẩu" required hint="Tối thiểu 6 ký tự." error={errors.password?.message}>
           <Input type="password" autoComplete="new-password" {...form.register('password')} />
         </FormField>
         <FormField label="Nhập lại mật khẩu" required error={errors.confirmPassword?.message}>
@@ -184,7 +301,7 @@ export function RegisterPage() {
           </label>
           {errors.acceptTerms && <p role="alert" className="mt-1 text-xs font-medium text-red-700">{errors.acceptTerms.message}</p>}
         </div>
-        <Button type="submit" size="lg" className="w-full" loading={form.formState.isSubmitting}>
+        <Button type="submit" size="lg" className="w-full" loading={form.formState.isSubmitting || aiAutoRunning}>
           Đăng ký
         </Button>
       </form>

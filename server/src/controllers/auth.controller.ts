@@ -11,8 +11,10 @@ const SESSION_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 7;
 // Compared against when the email does not exist, so response time does not reveal accounts.
 const DUMMY_HASH = bcrypt.hashSync('dtst-timing-equalizer', BCRYPT_ROUNDS);
 
-function setSessionCookie(res: Response, userId: string) {
-  res.cookie(AUTH_COOKIE, signAccessToken(userId), { ...baseCookieOptions(), maxAge: SESSION_MAX_AGE_MS });
+function setSessionCookie(res: Response, userId: string): string {
+  const token = signAccessToken(userId);
+  res.cookie(AUTH_COOKIE, token, { ...baseCookieOptions(), maxAge: SESSION_MAX_AGE_MS });
+  return token;
 }
 
 function defaultPreferences(prefs?: {
@@ -61,8 +63,8 @@ export async function register(req: Request, res: Response) {
     passwordHash: await bcrypt.hash(input.password, BCRYPT_ROUNDS),
     role: 'tourist',
   });
-  setSessionCookie(res, String(user._id));
-  res.status(201).json({ user: toAuthUser(user) });
+  const token = setSessionCookie(res, String(user._id));
+  res.status(201).json({ user: toAuthUser(user), token });
 }
 
 export async function login(req: Request, res: Response) {
@@ -72,8 +74,8 @@ export async function login(req: Request, res: Response) {
   if (!user || !passwordOk) throw new AppError(401, 'INVALID_CREDENTIALS', 'Email hoặc mật khẩu không đúng.');
   if (user.status !== 'active') throw new AppError(403, 'ACCOUNT_DISABLED', 'Tài khoản đã bị vô hiệu hóa.');
 
-  setSessionCookie(res, String(user._id));
-  res.json({ user: toAuthUser(user) });
+  const token = setSessionCookie(res, String(user._id));
+  res.json({ user: toAuthUser(user), token });
 }
 
 export function logout(_req: Request, res: Response) {

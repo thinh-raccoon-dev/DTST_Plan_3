@@ -91,9 +91,11 @@ export function SearchBar({
         maxLength={100}
         className={`w-full rounded-full border border-sand-300 bg-white pl-11 pr-28 text-river-950 shadow-card placeholder:text-river-400 focus:border-leaf-500 focus:outline-none focus:ring-2 focus:ring-leaf-100 ${size === 'lg' ? 'min-h-14 text-base' : 'min-h-12 text-sm'}`}
       />
-      <Button type="submit" size="sm" className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-full">
-        Tìm kiếm
-      </Button>
+      <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center">
+        <Button type="submit" size="sm" className="rounded-full">
+          Tìm kiếm
+        </Button>
+      </div>
     </form>
   );
 }

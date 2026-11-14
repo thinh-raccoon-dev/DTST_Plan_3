@@ -8,15 +8,29 @@ import '../widgets/v9_itinerary_view.dart';
 import 'auth_profile_screen.dart';
 import 'itinerary_detail_screen.dart';
 
+/// Bộ thẻ sở thích dùng chung với web (V9_INTEREST_OPTIONS).
 const List<String> _interestPresets = [
-  'sinh thái',
-  'văn hóa',
-  'di tích',
-  'ẩm thực',
+  'du lịch sinh thái',
+  'thiên nhiên',
+  'tham quan',
   'chụp ảnh',
-  'làng nghề',
-  'hoa kiểng',
-  'nghỉ dưỡng',
+  'ẩm thực',
+  'miệt vườn',
+  'sông nước',
+  'văn hóa địa phương',
+  'gia đình',
+  'thư giãn',
+  'giải trí',
+  'lưu trú',
+];
+
+/// Mục tiêu chuyến đi — giá trị khớp enum V9Goal của server.
+const List<List<String>> _goalOptions = [
+  ['sightseeing', '🏛️ Tham quan'],
+  ['food', '🍜 Ẩm thực'],
+  ['relaxation', '💆 Thư giãn'],
+  ['nightlife', '🎤 Giải trí'],
+  ['stay', '🏨 Nghỉ dưỡng'],
 ];
 
 class TripPlannerScreen extends StatefulWidget {
@@ -37,23 +51,20 @@ class _TripPlannerScreenState extends State<TripPlannerScreen> {
   // Planner Mode: 'ai' or 'manual'
   String _mode = 'ai';
   final TextEditingController _titleCtrl = TextEditingController();
-  final TextEditingController _goalCtrl = TextEditingController(
-    text: 'nghỉ dưỡng nhẹ nhàng, chụp ảnh, ăn đặc sản',
-  );
-  final TextEditingController _startPlaceCtrl = TextEditingController(
-    text: 'TP. Cao Lãnh, Đồng Tháp',
-  );
+  String _goal = 'sightseeing';
+  String? _startId;
   String _startDate = DateTime.now().toIso8601String().split('T').first;
   int _days = 2;
   int _people = 2;
   double _budgetVnd = 2500000;
   String _transport = 'motorcycle';
   String _pace = 'balanced';
-  final Set<String> _interests = {'sinh thái', 'ẩm thực', 'chụp ảnh'};
+  final Set<String> _interests = {'du lịch sinh thái', 'ẩm thực', 'chụp ảnh'};
 
   // Manual place selection
   List<V9Place> _catalogPlaces = const [];
   bool _loadingCatalog = false;
+  bool _catalogFromPlanner = false;
   final Set<String> _selectedPlaceIds = {};
   String _placeSearch = '';
 
@@ -86,8 +97,6 @@ class _TripPlannerScreenState extends State<TripPlannerScreen> {
   void dispose() {
     widget.appState.removeListener(_onAppStateChanged);
     _titleCtrl.dispose();
-    _goalCtrl.dispose();
-    _startPlaceCtrl.dispose();
     super.dispose();
   }
 
@@ -107,6 +116,13 @@ class _TripPlannerScreenState extends State<TripPlannerScreen> {
       if (!mounted) return;
       setState(() {
         _catalogPlaces = res.places;
+        _catalogFromPlanner = res.places.isNotEmpty;
+        if (_startId == null || !res.places.any((p) => p.id == _startId)) {
+          final hasDefault = res.places.any((p) => p.id == 'new_003');
+          _startId = hasDefault
+              ? 'new_003'
+              : (res.places.isNotEmpty ? res.places.first.id : null);
+        }
         _loadingCatalog = false;
       });
     } catch (_) {
@@ -156,21 +172,17 @@ class _TripPlannerScreenState extends State<TripPlannerScreen> {
   Map<String, dynamic> _buildPayload() {
     return {
       'mode': _mode,
-      'goal': _goalCtrl.text.trim().isNotEmpty
-          ? _goalCtrl.text.trim()
-          : 'Khám phá Đồng Tháp',
+      'goal': _goal,
       'days': _days,
       'people': _people,
       'budget_vnd': _budgetVnd.round(),
       'mode_of_transport': _transport,
-      'start_place': _startPlaceCtrl.text.trim().isNotEmpty
-          ? _startPlaceCtrl.text.trim()
-          : 'TP. Cao Lãnh, Đồng Tháp',
+      if (_catalogFromPlanner && _startId != null) 'start_id': _startId,
       'start_date': _startDate,
       'interests': _interests.toList(),
       'pace': _pace,
       'include_breakfast': true,
-      if (_mode == 'manual') 'selected_ids': _selectedPlaceIds.toList(),
+      if (_mode == 'manual' && _catalogFromPlanner) 'selected_ids': _selectedPlaceIds.toList(),
     };
   }
 
@@ -475,25 +487,46 @@ class _TripPlannerScreenState extends State<TripPlannerScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-              TextField(
-                controller: _goalCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Mục tiêu chuyến đi',
-                  hintText: 'VD: nghỉ dưỡng nhẹ nhàng, chụp ảnh, ăn đặc sản',
-                  prefixIcon: Icon(Icons.flag_outlined),
-                ),
+              const Text(
+                'Mục tiêu chuyến đi:',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.river600),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                children: _goalOptions.map((g) {
+                  return ChoiceChip(
+                    selected: _goal == g[0],
+                    onSelected: (_) => setState(() => _goal = g[0]),
+                    label: Text(g[1]),
+                    selectedColor: AppColors.leaf100,
+                    visualDensity: VisualDensity.compact,
+                  );
+                }).toList(),
               ),
               const SizedBox(height: 12),
               Row(
                 children: [
                   Expanded(
                     flex: 3,
-                    child: TextField(
-                      controller: _startPlaceCtrl,
+                    child: DropdownButtonFormField<String>(
+                      isExpanded: true,
+                      key: ValueKey('start--'),
+                      initialValue: _catalogFromPlanner ? _startId : null,
                       decoration: const InputDecoration(
                         labelText: 'Điểm xuất phát',
                         prefixIcon: Icon(Icons.location_on_outlined),
                       ),
+                      items: _catalogFromPlanner
+                          ? _catalogPlaces
+                              .map((p) => DropdownMenuItem(
+                                    value: p.id,
+                                    child: Text(p.name, overflow: TextOverflow.ellipsis),
+                                  ))
+                              .toList()
+                          : const [],
+                      onChanged: (v) => setState(() => _startId = v),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -531,7 +564,7 @@ class _TripPlannerScreenState extends State<TripPlannerScreen> {
                       label: 'Số ngày đi',
                       value: '$_days ngày',
                       onDecrease: _days > 1 ? () => setState(() => _days--) : null,
-                      onIncrease: _days < 5 ? () => setState(() => _days++) : null,
+                      onIncrease: _days < 7 ? () => setState(() => _days++) : null,
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -923,6 +956,10 @@ class _TripPlannerScreenState extends State<TripPlannerScreen> {
           V9ItineraryViewWidget(
             itinerary: _itinerary!,
             primaryPlaces: _planResponse?.primaryPlaces ?? const [],
+            placeImages: {
+              for (final p in _catalogPlaces)
+                if (p.imageUrl != null && p.imageUrl!.isNotEmpty) p.id: p.imageUrl!,
+            },
             enableLiveReplan: false,
             onUpdateItinerary: (updated) async {
               setState(() => _itinerary = updated);

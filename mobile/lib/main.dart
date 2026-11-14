@@ -43,6 +43,16 @@ class _DtstMobileAppState extends State<DtstMobileApp> {
       title: 'Du lịch số Đồng Tháp',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
+      builder: (context, child) {
+        return Container(
+          color: const Color(0xFFE8EFE8),
+          alignment: Alignment.center,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: child != null ? ClipRect(child: child) : const SizedBox.shrink(),
+          ),
+        );
+      },
       home: DtstMainShell(appState: _appState),
     );
   }
@@ -91,6 +101,8 @@ class DtstMainShell extends StatelessWidget {
                     children: [
                       Text(
                         'Du lịch số Đồng Tháp',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w800,
@@ -100,6 +112,8 @@ class DtstMainShell extends StatelessWidget {
                       ),
                       Text(
                         'Hộ chiếu trải nghiệm & AI V9 • v1.0',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontSize: 10.5,
                           fontWeight: FontWeight.w600,
