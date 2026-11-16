@@ -1,7 +1,32 @@
 import type { Request, Response } from 'express';
+import multer from 'multer';
 import { z } from 'zod';
 import { processCopilotMessage, type PageContextSnapshot } from '../services/aiCopilot.service.js';
+import { searchDestinationsByImage } from '../services/visualSearch.service.js';
 import { logger } from '../utils/logger.js';
+
+const ALLOWED_VISUAL_MIMES = new Set([
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+]);
+
+export const visualUploadMiddleware = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 6 * 1024 * 1024, // 6 MB
+    files: 1,
+  },
+  fileFilter: (_req, file, cb) => {
+    if (ALLOWED_VISUAL_MIMES.has(file.mimetype.toLowerCase())) {
+      cb(null, true);
+    } else {
+      cb(new Error('Vui lòng chọn tệp ảnh JPG, PNG, WebP hoặc GIF (tối đa 6MB).'));
+    }
+  },
+});
 
 const domControlSchema = z
   .object({
@@ -78,6 +103,46 @@ export async function handleCopilotChat(req: Request, res: Response): Promise<vo
     logger.error({ err: error }, 'Lỗi xử lý AI Copilot chat');
     res.status(500).json({
       error: 'Không thể xử lý yêu cầu trợ lý AI vào lúc này. Vui lòng thử lại.',
+    });
+  }
+}
+
+export async function handleVisualSearch(req: Request, res: Response): Promise<void> {
+  if (!req.file) {
+    res.status(400).json({
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: 'Vui lòng chọn hoặc chụp một bức ảnh để Pé Meko phân tích tìm điểm tương đồng.',
+      },
+    });
+    return;
+  }
+
+  try {
+    const rawPrompt = typeof req.body?.prompt === 'string' ? req.body.prompt.slice(0, 500) : '';
+    const parsedLat = req.body?.userLat !== undefined ? Number(req.body.userLat) : NaN;
+    const parsedLng = req.body?.userLng !== undefined ? Number(req.body.userLng) : NaN;
+
+    const result = await searchDestinationsByImage({
+      imageBuffer: req.file.buffer,
+      mimeType: req.file.mimetype || 'image/jpeg',
+      originalName: req.file.originalname,
+      userPrompt: rawPrompt,
+      userLat: Number.isFinite(parsedLat) && parsedLat >= -90 && parsedLat <= 90 ? parsedLat : undefined,
+      userLng: Number.isFinite(parsedLng) && parsedLng >= -180 && parsedLng <= 180 ? parsedLng : undefined,
+    });
+
+    res.json({
+      success: true,
+      ...result,
+    });
+  } catch (error) {
+    logger.error({ err: error }, 'Lỗi xử lý AI Visual Search');
+    res.status(500).json({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Không thể phân tích hình ảnh vào lúc này. Vui lòng thử lại.',
+      },
     });
   }
 }

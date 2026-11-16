@@ -43,6 +43,7 @@ export const AREA_GROUPS: AreaGroup[] = [
       { value: 'tra-vinh', label: 'Trà Vinh' },
       { value: 'hau-giang', label: 'Hậu Giang' },
       { value: 'long-an', label: 'Long An' },
+      { value: 'tien-giang', label: 'Tiền Giang (Vùng duyên hải Gò Công)' },
     ],
   },
   {

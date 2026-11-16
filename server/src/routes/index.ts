@@ -21,6 +21,7 @@ import * as itineraries from '../controllers/itinerary.controller.js';
 import * as passport from '../controllers/passport.controller.js';
 import * as qr from '../controllers/qr.controller.js';
 import * as reviews from '../controllers/review.controller.js';
+import * as safety from '../controllers/safety.controller.js';
 import { requireAdmin, requireAuth, requireStaff } from '../middleware/auth.js';
 import { issueCsrfToken } from '../middleware/csrf.js';
 import { challengeLimiter, eventLimiter, loginLimiter, registerLimiter } from '../middleware/rateLimit.js';
@@ -45,8 +46,20 @@ export function buildApiRouter(): Router {
   api.get('/auth/me', auth.me);
   api.patch('/auth/profile', requireAuth, auth.updateProfile);
 
-  // AI Copilot & Voice Assistant (UI Automation & Navigation)
+  // AI Copilot, Voice Assistant & Visual Scene Search
   api.post('/ai/copilot', eventLimiter, aiController.handleCopilotChat);
+  api.post(
+    '/ai/visual-search',
+    eventLimiter,
+    aiController.visualUploadMiddleware.single('image'),
+    aiController.handleVisualSearch,
+  );
+
+  // Real-Time Safety Guardian (Weather, Accidents, Landslides & Safe Alternatives)
+  api.post('/safety/check-itinerary', eventLimiter, safety.checkItinerarySafetyHandler);
+  api.get('/safety/alerts', safety.listActiveAlertsHandler);
+  api.post('/safety/alerts', requireStaff, safety.createSafetyAlertHandler);
+  api.delete('/safety/alerts/:id', requireStaff, safety.deactivateSafetyAlertHandler);
 
   // Homepage banners / sponsored covers (active + within schedule only)
   api.get('/banners', banners.listPublicBanners);

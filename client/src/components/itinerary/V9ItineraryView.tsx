@@ -53,6 +53,14 @@ import {
   formatVndShort,
   roleMeta,
 } from './v9Meta';
+import {
+  SafetyGuardianPanel,
+  StopWeatherChip,
+  type ItinerarySafetyReport,
+  type SafeAlternativeSuggestion,
+  type StopSafetyReport,
+} from './SafetyGuardianPanel';
+import { toast } from '../../stores/toastStore';
 
 // Re-exported for backwards compatibility with existing imports.
 export { formatV9RankingReason } from './v9Meta';
@@ -240,6 +248,47 @@ export function V9ItineraryView({
     dayNumber: number;
     step: V9ActivityStep;
   } | null>(null);
+  const [safetyReport, setSafetyReport] = useState<ItinerarySafetyReport | null>(null);
+
+  const safetyByStopKey = useMemo(() => {
+    const map = new Map<string, StopSafetyReport>();
+    for (const rep of safetyReport?.stopReports ?? []) {
+      if (rep.stopId) {
+        map.set(`${rep.dayNumber}:${rep.stopId}`, rep);
+      }
+      map.set(`${rep.dayNumber}:name:${rep.stepName}`, rep);
+    }
+    return map;
+  }, [safetyReport]);
+
+  const handleApplySafeAlternative = async (rep: StopSafetyReport, alt: SafeAlternativeSuggestion) => {
+    if (!onUpdateItinerary) return;
+    const next: V9ItineraryObject = JSON.parse(JSON.stringify(itinerary));
+    const targetDay = next.days.find((d) => d.day === rep.dayNumber);
+    if (!targetDay) return;
+
+    const stepIdx = targetDay.activities.findIndex(
+      (s) => (rep.stopId && s.stop_id === rep.stopId) || s.name === rep.stepName,
+    );
+    if (stepIdx !== -1) {
+      const step = targetDay.activities[stepIdx]!;
+      step.name = alt.name;
+      step.place_id = alt.slug;
+      step.latitude = alt.coordinates.lat;
+      step.longitude = alt.coordinates.lng;
+      step.note = `🛡️ Đã tự động đổi sang điểm an toàn "${alt.name}" (${alt.reason}).`;
+
+      if (stepIdx > 0 && targetDay.activities[stepIdx - 1]?.type === 'travel') {
+        const travel = targetDay.activities[stepIdx - 1]!;
+        travel.distance_km = alt.distanceKm;
+        travel.route_duration_minutes = alt.estimatedMinutes;
+        travel.name = `Di chuyển tuyến an toàn tới ${alt.name}`;
+      }
+    }
+
+    await onUpdateItinerary(next);
+    toast.success(`Đã đổi sang "${alt.name}"`, 'Lộ trình đã được cập nhật sang điểm an toàn.');
+  };
 
   // Default tab: the day that still has an incomplete stop when tracking live, otherwise day 1.
   const initialDayIndex = useMemo(() => {
@@ -548,6 +597,15 @@ export function V9ItineraryView({
         )}
       </section>
 
+      {/* ── Real-Time Weather, Accident & Landslide Safety Guardian ─ */}
+      <SafetyGuardianPanel
+        itinerary={itinerary}
+        placesById={placesById}
+        onReportChange={setSafetyReport}
+        onApplyAlternative={onUpdateItinerary ? handleApplySafeAlternative : undefined}
+        editable={editable && Boolean(onUpdateItinerary)}
+      />
+
       {/* ── Next stop after replan ───────────────────────────────── */}
       {highlightedNextStop && (
         <section className="tp-fade-up relative overflow-hidden rounded-card border-2 border-leaf-400 bg-gradient-to-r from-leaf-50 via-white to-white p-5 shadow-raised">
@@ -833,6 +891,8 @@ export function V9ItineraryView({
               onRequestSwapStop={onRequestSwapStop ? (step) => onRequestSwapStop(day.day, step) : undefined}
               onQuickSituation={(step, situation) => handleQuickSituation(day, step, situation)}
               onOpenSituationModal={(step) => setSituationModalStop({ dayNumber: day.day, step })}
+              safetyByStopKey={safetyByStopKey}
+              onApplySafeAlternative={onUpdateItinerary ? handleApplySafeAlternative : undefined}
             />
           ))}
         </div>
@@ -1022,6 +1082,8 @@ interface DayTimelineProps {
   onRequestSwapStop?: (step: V9ActivityStep) => void;
   onQuickSituation: (step: V9ActivityStep, situation: 'checkin_now' | 'leave_now' | 'traffic_30m' | 'rain_delay_45m' | 'skip_stop') => void;
   onOpenSituationModal: (step: V9ActivityStep) => void;
+  safetyByStopKey?: Map<string, StopSafetyReport>;
+  onApplySafeAlternative?: (rep: StopSafetyReport, alt: SafeAlternativeSuggestion) => void;
 }
 
 function DayTimeline({
@@ -1038,6 +1100,8 @@ function DayTimeline({
   onRequestSwapStop,
   onQuickSituation,
   onOpenSituationModal,
+  safetyByStopKey,
+  onApplySafeAlternative,
 }: DayTimelineProps) {
   const firstIncompleteStop = day.activities.find((s) => Boolean(s.stop_id) && s.status !== 'completed');
   const dayIssues: V9StopIssue[] = day.replan_state?.issues ?? [];
@@ -1190,6 +1254,11 @@ function DayTimeline({
               onRequestSwap={onRequestSwapStop ? () => onRequestSwapStop(step) : undefined}
               onQuickSituation={(situation) => onQuickSituation(step, situation)}
               onOpenSituationModal={() => onOpenSituationModal(step)}
+              safetyReport={
+                (step.stop_id ? safetyByStopKey?.get(`${day.day}:${step.stop_id}`) : undefined) ??
+                safetyByStopKey?.get(`${day.day}:name:${step.name}`)
+              }
+              onApplySafeAlternative={onApplySafeAlternative}
             />
           );
         })}
@@ -1252,6 +1321,8 @@ interface StopCardProps {
   onRequestSwap?: () => void;
   onQuickSituation?: (situation: 'checkin_now' | 'leave_now' | 'traffic_30m' | 'rain_delay_45m' | 'skip_stop') => void;
   onOpenSituationModal?: () => void;
+  safetyReport?: StopSafetyReport;
+  onApplySafeAlternative?: (rep: StopSafetyReport, alt: SafeAlternativeSuggestion) => void;
 }
 
 function StopCard({
@@ -1275,6 +1346,8 @@ function StopCard({
   onRequestSwap,
   onQuickSituation,
   onOpenSituationModal,
+  safetyReport,
+  onApplySafeAlternative,
 }: StopCardProps) {
   const isStop = Boolean(step.stop_id);
   const isMeal = step.type === 'meal' || step.type === 'meal_unassigned' || step.type === 'meal_unscheduled';
@@ -1371,7 +1444,27 @@ function StopCard({
                   {step.status === 'completed' ? 'Đã hoàn thành' : 'Đang ở tại điểm'}
                 </span>
               )}
+              <StopWeatherChip weather={safetyReport?.weather} />
             </div>
+
+            {safetyReport && safetyReport.status !== 'safe' && safetyReport.hazards.length > 0 && (
+              <div className="mt-2 rounded-xl border border-rose-200 bg-rose-50/80 p-3 text-xs">
+                <p className="font-bold text-rose-800">
+                  ⚠️ {safetyReport.hazards[0]?.title}
+                </p>
+                <p className="mt-0.5 text-rose-700">{safetyReport.hazards[0]?.description}</p>
+                {safetyReport.alternatives[0] && editable && onApplySafeAlternative && (
+                  <button
+                    type="button"
+                    onClick={() => onApplySafeAlternative(safetyReport, safetyReport.alternatives[0]!)}
+                    className="mt-2 inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-emerald-700"
+                  >
+                    <CheckCircle2 className="size-3" />
+                    Đổi nhanh sang {safetyReport.alternatives[0].name} ({safetyReport.alternatives[0].distanceKm} km)
+                  </button>
+                )}
+              </div>
+            )}
 
             {eyebrow && step.type !== 'meal' && <p className="text-xs font-medium text-river-500">{eyebrow}</p>}
             <h4 className={clsx('text-base font-bold text-river-900', step.status === 'completed' && 'line-through decoration-leaf-400')}>

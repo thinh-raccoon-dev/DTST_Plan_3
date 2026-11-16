@@ -1,8 +1,9 @@
-import { Compass, ExternalLink, Layers, Map as MapIcon, MapPin, Navigation, SlidersHorizontal, X } from 'lucide-react';
+import { Camera, Compass, ExternalLink, Layers, Map as MapIcon, MapPin, Navigation, SlidersHorizontal, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { DestinationCard } from '../components/destination/DestinationCard';
 import { FilterPanel, type DestinationFilters } from '../components/destination/FilterPanel';
+import { VisualSearchModal } from '../components/destination/VisualSearchModal';
 import { PageContainer } from '../components/layout/PublicLayout';
 import { Button, buttonClasses } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
@@ -29,6 +30,7 @@ export function DestinationsPage() {
   const [showMapPanel, setShowMapPanel] = useState(true);
   const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
   const [mapType, setMapType] = useState<'m' | 'h'>('m');
+  const [visualModalOpen, setVisualModalOpen] = useState(false);
   const mapSectionRef = useRef<HTMLDivElement | null>(null);
 
   const q = params.get('q') ?? '';
@@ -131,11 +133,23 @@ export function DestinationsPage() {
           <p className="mt-2 max-w-xl text-sm leading-relaxed text-leaf-100 sm:text-base">
             Tìm kiếm theo từ khóa, lọc theo nhóm trải nghiệm, khu vực và định vị trực tiếp từng điểm đến trên Google Maps.
           </p>
-          <div className="mt-5 max-w-2xl">
-            <SearchBar value={q} onSearch={(value) => update({ q: value || null })} />
+          <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center max-w-3xl">
+            <div className="flex-1">
+              <SearchBar value={q} onSearch={(value) => update({ q: value || null })} />
+            </div>
+            <button
+              type="button"
+              onClick={() => setVisualModalOpen(true)}
+              className="inline-flex min-h-12 shrink-0 items-center justify-center gap-2 rounded-full bg-white/15 px-5 text-sm font-bold text-white ring-1 ring-white/30 backdrop-blur-sm transition hover:bg-white/25"
+            >
+              <Camera className="size-4 text-teal-200" aria-hidden />
+              Tìm theo ảnh
+            </button>
           </div>
         </div>
       </section>
+
+      <VisualSearchModal open={visualModalOpen} onClose={() => setVisualModalOpen(false)} />
 
       <details className="mt-4 lg:hidden" open={activeFilterCount > 0 || undefined}>
         <summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-full border border-sand-300 bg-white px-4 text-sm font-semibold text-river-800 shadow-card">

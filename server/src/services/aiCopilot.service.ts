@@ -1,6 +1,7 @@
 import { GoogleGenAI } from '@google/genai';
-import { env } from '../config/env.js';
+import { getAreaLabel } from '../config/catalog.js';
 import { DestinationModel } from '../models/Destination.js';
+import { resolveGeminiApiKey } from '../utils/geminiKey.js';
 import { logger } from '../utils/logger.js';
 import { normalizeText } from '../utils/text.js';
 
@@ -132,31 +133,6 @@ interface DestinationSummary {
   coordinates?: { lat: number; lng: number };
 }
 
-const AREA_LABELS: Record<string, string> = {
-  'cao-lanh': 'Cao Lãnh',
-  'sa-dec': 'Sa Đéc',
-  'thap-muoi': 'Tháp Mười',
-  'tam-nong': 'Tam Nông',
-  'lai-vung': 'Lai Vung',
-  'hong-ngu': 'Hồng Ngự',
-  'chau-thanh': 'Châu Thành',
-  'lap-vo': 'Lấp Vò',
-  'my-tho': 'Mỹ Tho',
-  'cai-be': 'Cái Bè',
-  'thoi-son': 'Cù lao Thới Sơn',
-  'can-tho': 'Cần Thơ',
-  'an-giang': 'An Giang',
-  'kien-giang': 'Kiên Giang',
-  'ben-tre': 'Bến Tre',
-  'vinh-long': 'Vĩnh Long',
-  'ca-mau': 'Cà Mau',
-  'bac-lieu': 'Bạc Liêu',
-  'soc-trang': 'Sóc Trăng',
-  'tra-vinh': 'Trà Vinh',
-  'hau-giang': 'Hậu Giang',
-  'long-an': 'Long An',
-};
-
 const CATEGORY_LABELS: Record<string, string> = {
   nature: 'Thiên nhiên',
   eco: 'Sinh thái',
@@ -168,31 +144,12 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 function formatAreaLabel(areaSlug?: string): string {
   if (!areaSlug) return 'Đồng Tháp';
-  return (
-    AREA_LABELS[areaSlug] ||
-    areaSlug
-      .replace(/-/g, ' ')
-      .replace(/\b\w/g, (c) => c.toUpperCase())
-  );
+  return getAreaLabel(areaSlug);
 }
 
 function formatCategoryLabel(cat?: string): string {
   if (!cat) return 'Khám phá';
   return CATEGORY_LABELS[cat] || cat;
-}
-
-const DEFAULT_FALLBACK_KEY_B64 =
-  'QVEuQWI4Uk42SUtWYTJmU1NzU2Y4bGRJcFUtR05BYk05cTU5dEV5Z1VvVzk2Tm1NT0Vaa0E=';
-
-function resolveGeminiApiKey(): string {
-  if (env.GEMINI_API_KEY && env.GEMINI_API_KEY.trim().length > 0) {
-    return env.GEMINI_API_KEY.trim();
-  }
-  try {
-    return Buffer.from(DEFAULT_FALLBACK_KEY_B64, 'base64').toString('utf8');
-  } catch {
-    return '';
-  }
 }
 
 let cachedDestinations: DestinationSummary[] = [];
@@ -1286,6 +1243,62 @@ function handleSmartIntent(
     };
   }
 
+  // Feature: Real-time Safety Guardian (Weather, Accidents, Landslides & Safe Alternatives)
+  if (
+    normalized.includes('thoi tiet') ||
+    normalized.includes('sat lo') ||
+    normalized.includes('tai nan') ||
+    normalized.includes('su co') ||
+    normalized.includes('ngap lut') ||
+    normalized.includes('mua bao') ||
+    normalized.includes('an toan lich trinh') ||
+    normalized.includes('kiem tra duong di')
+  ) {
+    return {
+      reply:
+        `🛡️ **Hệ thống Cảnh báo Thời tiết & Sự cố Thời gian thực (Smart Safety Guardian)** đang bật trực tiếp trên trang **Lập lịch trình V9**!\n\n` +
+        `Hệ thống tự động:\n` +
+        `• 🌦️ Quét thời tiết thực tế (Open-Meteo Live) tại từng tọa độ điểm dừng trong lịch trình.\n` +
+        `• 🚧 Phát hiện tai nạn giao thông, đóng đường hoặc cảnh báo **sạt lở đất đá** ở khu vực núi đèo.\n` +
+        `• 🔄 Tự động gợi ý & **Đổi 1 chạm sang điểm đến an toàn** *(ví dụ: chuyển sang điểm trong nhà có mái che khi mưa bão, hoặc vùng đồng bằng an toàn nếu có sạt lở)*.\n\n` +
+        `Pé Meko đang mở ngay màn hình Lịch trình để bạn xem báo cáo an toàn hoặc bấm thử chế độ **Mô phỏng sự cố** nhé! 🦊🛡️`,
+      action: {
+        type: 'OPEN_PAGE',
+        payload: { path: '/itinerary/create#plan', label: 'Mở Cảnh báo Thời tiết & Sự cố Lịch trình' },
+      },
+      suggestions: [
+        'Lập lịch trình đi 2 ngày cho 2 người với chi phí 2 tr',
+        'Khám phá các điểm trong nhà (Bảo tàng, Nhà cổ)',
+      ],
+    };
+  }
+
+  // Feature: AI Visual Vibe Search Guide
+  if (
+    normalized.includes('tim bang anh') ||
+    normalized.includes('tim theo anh') ||
+    normalized.includes('tim diem bang hinh') ||
+    normalized.includes('tim diem bang anh') ||
+    normalized.includes('bang hinh anh') ||
+    normalized.includes('up anh') ||
+    normalized.includes('gui anh') ||
+    normalized.includes('chup anh tim') ||
+    normalized.includes('khung canh tuong tu') ||
+    normalized.includes('giong anh nay')
+  ) {
+    return {
+      reply:
+        `📸 **Tính năng Tìm điểm đến bằng Hình ảnh (AI Visual Vibe Search)** đã sẵn sàng!\n\n` +
+        `Bạn chỉ cần bấm nút **📷 Tải ảnh lên** ngay cạnh ô nhập tin nhắn ở góc dưới khung chat này *(hoặc nút **Tìm bằng hình ảnh** trên trang Khám phá)* và chọn 1 bức ảnh bất kỳ *(ví dụ: ảnh biển Phú Quốc, núi non, vườn hoa hay chùa cổ)*.\n\n` +
+        `✨ AI Vision của **Pé Meko** sẽ tự động đọc hiểu khung cảnh, phân tích vibe và tìm ngay những địa điểm có cảnh sắc tương đồng **gần vị trí bạn nhất**! 🦊📷`,
+      action: {
+        type: 'OPEN_PAGE',
+        payload: { path: '/destinations', label: 'Mở trang Khám phá (Tìm bằng ảnh)' },
+      },
+      suggestions: ['Danh sách bãi biển gần bạn', 'Danh sách các chùa', 'Làng hoa Sa Đéc'],
+    };
+  }
+
   // Question: Combined or Individual Travel Seasons & Food Specialties Q&A
   const asksSeason =
     normalized.includes('mua nao di dep') ||
@@ -1801,6 +1814,20 @@ function searchAndFilterDestinations(
       filterPath: '/destinations?category=food',
       filterLabel: 'Địa điểm Ẩm thực',
       matcher: (d) => d.category === 'food',
+    },
+    {
+      triggers: ['danh sach bien', 'cac bai bien', 'du lich bien', 'bai bien', 'bien gan'],
+      title: 'bãi biển đẹp khu vực ĐBSCL & lân cận',
+      filterPath: '/destinations?q=biển',
+      filterLabel: 'Du lịch Biển gần bạn',
+      matcher: (d) => normalizeText(d.name).includes('bien') || normalizeText(d.tags.join(' ')).includes('bai bien'),
+    },
+    {
+      triggers: ['danh sach nui', 'khu du lich nui', 'cac nui', 'du lich nui'],
+      title: 'khu du lịch núi non & săn mây',
+      filterPath: '/destinations?q=núi',
+      filterLabel: 'Du lịch Núi & Săn mây',
+      matcher: (d) => normalizeText(d.name).includes('nui') || normalizeText(d.tags.join(' ')).includes('doi nui'),
     },
   ];
 

@@ -1,5 +1,6 @@
 import {
   ArrowRight,
+  Camera,
   CheckCircle2,
   Compass,
   HelpCircle,
@@ -27,6 +28,10 @@ interface MatchedDestination {
   summary?: string;
   category?: string;
   area?: string;
+  areaLabel?: string;
+  vibeScore?: number;
+  distanceKm?: number;
+  matchReason?: string;
   coordinates?: { lat: number; lng: number };
 }
 
@@ -95,6 +100,7 @@ interface Message {
   id: string;
   sender: 'user' | 'assistant';
   text: string;
+  imageUrl?: string;
   action?: CopilotAction;
   matchedDestinations?: MatchedDestination[];
   suggestions?: string[];
@@ -279,9 +285,11 @@ export function AiCopilotWidget() {
   const [isLoading, setIsLoading] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [speechError, setSpeechError] = useState<string | null>(null);
+  const [pendingImage, setPendingImage] = useState<{ file: File; previewUrl: string } | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
 
   // Auto scroll to bottom of chat
   useEffect(() => {
@@ -616,17 +624,36 @@ export function AiCopilotWidget() {
     [navigate],
   );
 
-  const handleSendMessage = async (textToSend?: string) => {
-    const text = (textToSend ?? inputValue).trim();
-    if (!text || isLoading) return;
+  const handlePickImage = (file?: File | null) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast.error('Định dạng chưa hỗ trợ', 'Vui lòng chọn tệp hình ảnh JPG, PNG hoặc WebP.');
+      return;
+    }
+    if (pendingImage) URL.revokeObjectURL(pendingImage.previewUrl);
+    setPendingImage({ file, previewUrl: URL.createObjectURL(file) });
+  };
 
+  const clearPendingImage = () => {
+    if (pendingImage) URL.revokeObjectURL(pendingImage.previewUrl);
+    setPendingImage(null);
+  };
+
+  const handleSendMessage = async (textToSend?: string) => {
+    const rawText = (textToSend ?? inputValue).trim();
+    const imageToSend = textToSend ? null : pendingImage;
+    if ((!rawText && !imageToSend) || isLoading) return;
+
+    const text = rawText || 'Tìm địa điểm có khung cảnh tương tự bức ảnh này gần tôi';
     setInputValue('');
+    if (!textToSend) setPendingImage(null);
     setSpeechError(null);
 
     const userMsg: Message = {
       id: `user-${Date.now()}`,
       sender: 'user',
       text,
+      imageUrl: imageToSend?.previewUrl,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     };
 
@@ -635,6 +662,46 @@ export function AiCopilotWidget() {
     setIsLoading(true);
 
     try {
+      if (imageToSend) {
+        const coords = await new Promise<{ lat: number; lng: number } | null>((resolve) => {
+          if (!('geolocation' in navigator)) return resolve(null);
+          navigator.geolocation.getCurrentPosition(
+            (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+            () => resolve(null),
+            { enableHighAccuracy: false, timeout: 3000 },
+          );
+        });
+
+        const formData = new FormData();
+        formData.append('image', imageToSend.file);
+        formData.append('prompt', text);
+        if (coords) {
+          formData.append('userLat', String(coords.lat));
+          formData.append('userLng', String(coords.lng));
+        }
+
+        const res = await api.post<{
+          success: boolean;
+          reply: string;
+          matches: MatchedDestination[];
+          suggestions?: string[];
+        }>('/ai/visual-search', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+          timeout: 30000,
+        });
+
+        const botMsg: Message = {
+          id: `bot-${Date.now()}`,
+          sender: 'assistant',
+          text: res.data.reply,
+          matchedDestinations: res.data.matches,
+          suggestions: res.data.suggestions,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        };
+        setMessages((prev) => [...prev, botMsg]);
+        return;
+      }
+
       const historyPayload = messages.slice(-6).map((m) => ({
         role: m.sender,
         content: m.text,
@@ -864,6 +931,15 @@ export function AiCopilotWidget() {
                             : 'bg-white border border-sand-200/90 text-river-900 rounded-bl-xs'
                     }`}
                   >
+                    {m.imageUrl && (
+                      <div className="mb-2 overflow-hidden rounded-xl border border-white/20">
+                        <img
+                          src={m.imageUrl}
+                          alt="Ảnh đã tải lên"
+                          className="max-h-40 w-full object-cover"
+                        />
+                      </div>
+                    )}
                     <div className="text-[13px] leading-relaxed">{renderFormattedText(m.text)}</div>
 
                     {/* Compact Action Pill inside Bot Message */}
@@ -906,11 +982,22 @@ export function AiCopilotWidget() {
                             <div className="truncate mr-2 flex items-center gap-2">
                               <Compass className="h-3.5 w-3.5 text-leaf-600 shrink-0" />
                               <div className="truncate">
-                                <div className="text-xs font-semibold text-river-900 group-hover:text-leaf-800 truncate">
-                                  {d.name}
+                                <div className="text-xs font-semibold text-river-900 group-hover:text-leaf-800 truncate flex items-center gap-1.5">
+                                  <span className="truncate">{d.name}</span>
+                                  {d.vibeScore !== undefined && (
+                                    <span className="shrink-0 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold text-emerald-800">
+                                      {d.vibeScore}%
+                                    </span>
+                                  )}
                                 </div>
-                                {d.area && (
-                                  <div className="text-[10px] text-river-500 truncate">{d.area}</div>
+                                {(d.areaLabel || d.area || d.distanceKm !== undefined) && (
+                                  <div className="text-[10px] text-river-500 truncate">
+                                    {d.areaLabel || d.area}
+                                    {d.distanceKm !== undefined ? ` · ~${d.distanceKm} km` : ''}
+                                  </div>
+                                )}
+                                {d.matchReason && (
+                                  <div className="text-[10px] text-leaf-700 truncate">{d.matchReason}</div>
                                 )}
                               </div>
                             </div>
@@ -981,15 +1068,64 @@ export function AiCopilotWidget() {
             </div>
           )}
 
-          {/* Input & Mic Controls */}
+          {/* Pending Visual Search Image Preview */}
+          {pendingImage && (
+            <div className="flex items-center justify-between gap-2 border-t border-leaf-200 bg-leaf-50/70 px-3.5 py-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <img
+                  src={pendingImage.previewUrl}
+                  alt="Ảnh xem trước"
+                  className="h-9 w-9 shrink-0 rounded-lg object-cover ring-1 ring-leaf-300"
+                />
+                <div className="min-w-0">
+                  <p className="truncate text-[11px] font-bold text-leaf-900">Ảnh tìm điểm tương đồng</p>
+                  <p className="truncate text-[10px] text-river-500">Bấm Gửi hoặc nhập thêm ghi chú</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={clearPendingImage}
+                className="rounded-full p-1 text-river-500 hover:bg-white hover:text-rose-600"
+                title="Bỏ ảnh"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
+
+          {/* Input, Camera & Mic Controls */}
           <div className="p-3 border-t border-sand-200/80 bg-white">
+            <input
+              ref={imageInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                handlePickImage(e.target.files?.[0]);
+                e.target.value = '';
+              }}
+            />
             <form
               onSubmit={(e) => {
                 e.preventDefault();
                 void handleSendMessage();
               }}
-              className="flex items-center gap-2"
+              className="flex items-center gap-1.5"
             >
+              <button
+                type="button"
+                onClick={() => imageInputRef.current?.click()}
+                disabled={isLoading}
+                className={`relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-all ${
+                  pendingImage
+                    ? 'bg-leaf-100 text-leaf-800 ring-1 ring-leaf-400'
+                    : 'bg-sand-100 text-river-600 hover:bg-leaf-50 hover:text-leaf-700'
+                }`}
+                title="Tải ảnh lên để tìm địa điểm giống cảnh trong ảnh"
+              >
+                <Camera className="h-4 w-4" />
+              </button>
+
               <button
                 type="button"
                 onClick={toggleListening}
@@ -1007,14 +1143,32 @@ export function AiCopilotWidget() {
                 type="text"
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
-                placeholder={isListening ? 'Đang nghe bạn nói...' : 'Nhắn Pé Meko hỗ trợ...'}
+                onPaste={(e) => {
+                  const fileItem = Array.from(e.clipboardData?.items || []).find((it) =>
+                    it.type.startsWith('image/'),
+                  );
+                  if (fileItem) {
+                    const imgFile = fileItem.getAsFile();
+                    if (imgFile) {
+                      e.preventDefault();
+                      handlePickImage(imgFile);
+                    }
+                  }
+                }}
+                placeholder={
+                  isListening
+                    ? 'Đang nghe bạn nói...'
+                    : pendingImage
+                      ? 'Thêm ghi chú (vd: tìm biển gần tôi)...'
+                      : 'Nhắn hoặc dán ảnh cho Pé Meko...'
+                }
                 disabled={isLoading}
-                className="flex-1 rounded-full bg-sand-50 px-4 py-2 text-xs text-river-900 placeholder:text-river-400 border border-sand-200 focus:border-leaf-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-leaf-100 transition-all"
+                className="flex-1 min-w-0 rounded-full bg-sand-50 px-3.5 py-2 text-xs text-river-900 placeholder:text-river-400 border border-sand-200 focus:border-leaf-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-leaf-100 transition-all"
               />
 
               <button
                 type="submit"
-                disabled={isLoading || !inputValue.trim()}
+                disabled={isLoading || (!inputValue.trim() && !pendingImage)}
                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-leaf-700 text-white transition-all hover:bg-leaf-800 disabled:opacity-40 shadow-2xs"
                 title="Gửi"
               >
