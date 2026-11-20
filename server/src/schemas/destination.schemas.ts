@@ -19,6 +19,9 @@ export const publicDestinationQuerySchema = paginationSchema.extend({
 export const adminDestinationQuerySchema = paginationSchema.extend({
   q: z.string().trim().max(100).optional(),
   category: z.enum(CATEGORIES).optional(),
+  area: z.string().trim().max(100).optional(),
+  verificationStatus: z.enum(['verified', 'partially_verified', 'unverified']).optional(),
+  assignment: z.enum(['assigned', 'unassigned']).optional(),
   publicationStatus: z.enum(PUBLICATION_STATUSES).optional(),
   limit: z.coerce.number().int().min(1).max(100).default(20),
 });

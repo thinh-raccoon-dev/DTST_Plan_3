@@ -10,6 +10,7 @@ import { PassportEntryModel } from '../models/PassportEntry.js';
 import { recordEvent } from './analytics.service.js';
 import { getActiveQrDestinationIds, type LeanDestination } from './destination.service.js';
 import { ownerFields, ownerFilter, type Identity } from './identity.js';
+import { getEffectiveSystemSettings } from './systemSettings.service.js';
 
 function isDuplicateKey(error: unknown): boolean {
   return typeof error === 'object' && error !== null && (error as { code?: unknown }).code === 11000;
@@ -224,13 +225,15 @@ export async function checkIn(
   qrCodeId?: Types.ObjectId,
   source: 'qr' | 'system' | 'gps' = 'qr',
 ) {
+  const settings = await getEffectiveSystemSettings();
+  const points = settings.general.defaultCheckInPoints ?? CHECKIN_POINTS;
   try {
     await PassportEntryModel.create({
       ...ownerFields(identity),
       entryType: 'check_in',
       destinationId,
       ...(qrCodeId ? { qrCodeId } : {}),
-      scoreAwarded: CHECKIN_POINTS,
+      scoreAwarded: points,
       source,
     });
   } catch (error) {
@@ -239,7 +242,7 @@ export async function checkIn(
   }
   await recordEvent({ eventType: 'destination_check_in', destinationId, ...(qrCodeId ? { qrCodeId } : {}) }, identity);
   const newBadges = await evaluateBadges(identity);
-  return { created: true, pointsAwarded: CHECKIN_POINTS, newBadges };
+  return { created: true, pointsAwarded: points, newBadges };
 }
 
 export async function recordChallengeCompletion(

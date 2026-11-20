@@ -7,6 +7,7 @@ import { Header } from './Header';
 import { LogoFull } from './Logo';
 import { MobileBottomNav } from './MobileBottomNav';
 import { PetalBackdrop } from './PetalBackdrop';
+import { SystemAnnouncementBar } from './SystemAnnouncementBar';
 
 const CONTACT = {
   phone: '0942067646',
@@ -118,6 +119,7 @@ export function PublicLayout() {
     <div className="relative flex min-h-dvh flex-col overflow-x-clip">
       <ScrollProgressBar />
       <PetalBackdrop />
+      <SystemAnnouncementBar />
       <Header />
       <main id="main" className="flex-1">
         <Outlet />

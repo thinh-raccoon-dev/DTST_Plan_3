@@ -28,6 +28,8 @@ const userSchema = new Schema(
     displayName: { type: String, required: true, trim: true, maxlength: 80 },
     role: { type: String, enum: USER_ROLES, default: 'tourist', required: true },
     status: { type: String, enum: ['active', 'disabled'], default: 'active', required: true },
+    // Incremented on password reset, role change, or account disable to revoke all existing JWTs immediately.
+    tokenVersion: { type: Number, default: 0, required: true },
     preferences: {
       type: preferencesSchema,
       default: () => ({ areas: [], interests: [], numberOfDays: 2, hoursPerDay: 8 }),

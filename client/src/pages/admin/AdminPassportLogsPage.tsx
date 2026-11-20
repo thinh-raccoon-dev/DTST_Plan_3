@@ -2,6 +2,8 @@ import {
   Award,
   CheckCircle2,
   Clock,
+  Download,
+  MapPin,
   QrCode,
   Search,
   Sparkles,
@@ -16,26 +18,31 @@ import { Input, Select } from '../../components/ui/Field';
 import { EmptyState, ErrorState, PageLoader } from '../../components/ui/States';
 import { useApiQuery } from '../../hooks/useApiQuery';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
-import { api } from '../../lib/api';
-import type { AdminPassportLogsResponse } from '../../types/api';
+import { api, toApiError } from '../../lib/api';
+import { toast } from '../../stores/toastStore';
+import type { AdminPassportLogItem, AdminPassportLogsResponse } from '../../types/api';
 
-const entryTypeConfig = {
-  check_in: {
-    label: 'Check-in QR',
-    icon: QrCode,
-    tone: 'leaf' as const,
-  },
-  challenge_completed: {
-    label: 'Vượt qua thử thách',
-    icon: Trophy,
-    tone: 'teal' as const,
-  },
-  badge_awarded: {
-    label: 'Nhận huy hiệu',
-    icon: Award,
-    tone: 'lotus' as const,
-  },
-};
+function resolveEntryBadge(log: AdminPassportLogItem) {
+  if (log.entryType === 'check_in') {
+    if (log.source === 'gps') {
+      return { label: 'Check-in GPS thực địa', icon: MapPin, tone: 'teal' as const };
+    }
+    return { label: 'Check-in Quét QR', icon: QrCode, tone: 'leaf' as const };
+  }
+  if (log.entryType === 'challenge_completed') {
+    return { label: 'Vượt qua thử thách', icon: Trophy, tone: 'teal' as const };
+  }
+  if (log.entryType === 'badge_awarded') {
+    return { label: 'Nhận huy hiệu', icon: Award, tone: 'lotus' as const };
+  }
+  return { label: log.entryType, icon: CheckCircle2, tone: 'leaf' as const };
+}
+
+function renderSourceBadge(source: AdminPassportLogItem['source']) {
+  if (source === 'gps') return <Badge tone="teal">GPS thực địa</Badge>;
+  if (source === 'qr') return <Badge tone="leaf">Quét QR tại điểm</Badge>;
+  return <Badge tone="neutral">Hệ thống tự động</Badge>;
+}
 
 export function AdminPassportLogsPage() {
   useDocumentTitle('Nhật ký check-in & hộ chiếu số');
@@ -43,6 +50,7 @@ export function AdminPassportLogsPage() {
   const [search, setSearch] = useState('');
   const [entryTypeFilter, setEntryTypeFilter] = useState('all');
   const [page, setPage] = useState(1);
+  const [exporting, setExporting] = useState(false);
 
   const query = useApiQuery<AdminPassportLogsResponse>(
     (signal) =>
@@ -62,11 +70,44 @@ export function AdminPassportLogsPage() {
 
   const stats = query.data?.stats;
 
+  const handleExportCsv = async () => {
+    setExporting(true);
+    try {
+      const res = await api.get<Blob>('/admin/passport-logs/export', {
+        params: {
+          entryType: entryTypeFilter !== 'all' ? entryTypeFilter : undefined,
+        },
+        responseType: 'blob',
+      });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `nhat-ky-ho-chieu-so-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      toast.success('Đã xuất CSV hộ chiếu số (đã ẩn email du khách theo NĐ 13/2023).');
+    } catch (err) {
+      toast.error('Không thể xuất nhật ký hộ chiếu CSV', toApiError(err).message);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <>
       <AdminPageHeader
         title="Nhật ký check-in & hộ chiếu số"
-        description="Theo dõi lưu lượng du khách thực tế qua các lượt quét mã QR tại điểm, giải câu đố thử thách và cấp điểm thưởng số."
+        description="Theo dõi lưu lượng du khách thực tế qua check-in GPS thực địa, quét mã QR tại điểm, giải câu đố thử thách và cấp điểm thưởng số."
+        actions={
+          <Button
+            variant="secondary"
+            icon={<Download className="size-4" aria-hidden />}
+            loading={exporting}
+            onClick={handleExportCsv}
+          >
+            Xuất CSV (Ẩn danh NĐ 13)
+          </Button>
+        }
       />
 
       {/* Stats row */}
@@ -75,7 +116,7 @@ export function AdminPassportLogsPage() {
         <StatCard label="Thử thách hoàn thành" value={stats?.totalChallenges ?? '—'} icon={<Trophy className="size-5 text-teal-700" />} />
         <StatCard label="Huy hiệu đã cấp" value={stats?.totalBadges ?? '—'} icon={<Award className="size-5 text-lotus-700" />} />
         <StatCard label="Tổng điểm thưởng" value={stats?.totalPoints ? `+${stats.totalPoints}` : '—'} icon={<Sparkles className="size-5 text-leaf-600" />} />
-        <StatCard label="Hoạt động hôm nay" value={stats?.todayActivities ?? '—'} icon={<Clock className="size-5 text-river-700" />} />
+        <StatCard label="Hoạt động hôm nay (UTC+7)" value={stats?.todayActivities ?? '—'} icon={<Clock className="size-5 text-river-700" />} />
       </div>
 
       {/* Filter and search */}
@@ -104,7 +145,7 @@ export function AdminPassportLogsPage() {
               }}
             >
               <option value="all">Tất cả loại hoạt động</option>
-              <option value="check_in">Quét QR Check-in</option>
+              <option value="check_in">Check-in (QR / GPS)</option>
               <option value="challenge_completed">Hoàn thành thử thách</option>
               <option value="badge_awarded">Đạt huy hiệu</option>
             </Select>
@@ -141,11 +182,7 @@ export function AdminPassportLogsPage() {
               </thead>
               <tbody className="divide-y divide-sand-100">
                 {query.data.items.map((log) => {
-                  const cfg = entryTypeConfig[log.entryType] ?? {
-                    label: log.entryType,
-                    icon: CheckCircle2,
-                    tone: 'leaf' as const,
-                  };
+                  const cfg = resolveEntryBadge(log);
                   const Icon = cfg.icon;
 
                   return (
@@ -223,8 +260,8 @@ export function AdminPassportLogsPage() {
                         )}
                       </td>
 
-                      <td className="px-4 py-3.5 text-right whitespace-nowrap text-xs text-river-500">
-                        {log.source === 'qr' ? 'Mã QR tại điểm' : 'Hệ thống tự động'}
+                      <td className="px-4 py-3.5 text-right whitespace-nowrap">
+                        {renderSourceBadge(log.source)}
                       </td>
                     </tr>
                   );

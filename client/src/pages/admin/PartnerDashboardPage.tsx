@@ -42,6 +42,7 @@ import {
   Users,
 } from 'lucide-react';
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Area,
   AreaChart,
@@ -149,9 +150,10 @@ type ConfirmDeleteState =
 export function PartnerDashboardPage() {
   useDocumentTitle('Trung Tâm Điều Hành Khu Du Lịch (Partner Hub)');
   const currentUser = useAuthStore((s) => s.user);
+  const [searchParams] = useSearchParams();
 
   // Scope & Time window
-  const [selectedDestId, setSelectedDestId] = useState<string>('');
+  const [selectedDestId, setSelectedDestId] = useState<string>(() => searchParams.get('destinationId') ?? '');
   const [daysWindow, setDaysWindow] = useState<7 | 30 | 90>(7);
   const [exportingCsv, setExportingCsv] = useState(false);
 

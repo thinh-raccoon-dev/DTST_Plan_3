@@ -101,6 +101,10 @@ export async function listAdminDestinations(req: Request, res: Response) {
   const query = adminDestinationQuerySchema.parse(req.query);
   const filter: Record<string, unknown> = { ...partnerScope(req) };
   if (query.category) filter.category = query.category;
+  if (query.area) filter.area = query.area;
+  if (query.verificationStatus) filter.verificationStatus = query.verificationStatus;
+  if (query.assignment === 'assigned') filter.managedBy = { $exists: true, $ne: null };
+  if (query.assignment === 'unassigned') filter.$or = [{ managedBy: { $exists: false } }, { managedBy: null }];
   if (query.publicationStatus) filter.publicationStatus = query.publicationStatus;
   if (query.q) filter.searchText = { $regex: escapeRegex(normalizeText(query.q)) };
 

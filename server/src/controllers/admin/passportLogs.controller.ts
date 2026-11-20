@@ -2,6 +2,21 @@ import type { Request, Response } from 'express';
 import { DestinationModel } from '../../models/Destination.js';
 import { PassportEntryModel } from '../../models/PassportEntry.js';
 import { UserModel } from '../../models/User.js';
+import { logAuditEvent } from '../../services/audit.service.js';
+import { toUtf8BomCsv } from '../../utils/csv.js';
+
+const TIMEZONE = 'Asia/Ho_Chi_Minh';
+const TZ_OFFSET = '+07:00';
+
+function startOfVietnamToday(): Date {
+  const vnToday = new Intl.DateTimeFormat('en-CA', {
+    timeZone: TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+  return new Date(`${vnToday}T00:00:00${TZ_OFFSET}`);
+}
 
 function escapeRegex(text: string): string {
   return text.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
@@ -32,8 +47,7 @@ export async function listPassportLogs(req: Request, res: Response) {
     filter.$or = [{ userId: { $in: userIds } }, { destinationId: { $in: destIds } }, { badgeKey: rx }];
   }
 
-  const startOfToday = new Date();
-  startOfToday.setHours(0, 0, 0, 0);
+  const startOfToday = startOfVietnamToday();
 
   const [
     total,
@@ -133,4 +147,58 @@ export async function listPassportLogs(req: Request, res: Response) {
       todayActivities,
     },
   });
+}
+
+/** Export anonymized Passport / Check-in logs CSV (NĐ 13/2023 + OWASP formula-safe). */
+export async function exportPassportLogsCsv(req: Request, res: Response) {
+  const entryType = typeof req.query.entryType === 'string' ? req.query.entryType.trim() : '';
+  const filter: Record<string, unknown> = {};
+  if (entryType && entryType !== 'all') filter.entryType = entryType;
+
+  const logs = await PassportEntryModel.find(filter)
+    .sort({ completedAt: -1 })
+    .limit(3000)
+    .populate('userId', 'displayName')
+    .populate('destinationId', 'name area')
+    .populate('challengeId', 'title')
+    .populate('qrCodeId', 'code label')
+    .lean();
+
+  const rows: unknown[][] = [
+    ['NHAT KY HO CHIEU SO & CHECK-IN (AN DANH NĐ 13/2023/ND-CP) - SO VHTTDL'],
+    ['Thoi diem xuat', new Date().toLocaleString('vi-VN', { timeZone: TIMEZONE })],
+    ['Tong so dong', logs.length],
+    [''],
+    ['Thoi gian (VN)', 'Loai hoat dong', 'Phuong thuc', 'Du khach (an danh email)', 'Dia diem', 'Thu thach / Huy hieu', 'Ma QR', 'Diem EXP'],
+    ...logs.map((log) => {
+      const u = log.userId as { displayName?: string } | null;
+      const d = log.destinationId as { name?: string } | null;
+      const ch = log.challengeId as { title?: string } | null;
+      const qr = log.qrCodeId as { code?: string } | null;
+      return [
+        new Date(log.completedAt).toLocaleString('vi-VN', { timeZone: TIMEZONE }),
+        log.entryType,
+        log.source === 'gps' ? 'GPS Thuc dia' : log.source === 'qr' ? 'Quet QR' : log.source,
+        u?.displayName || `Khach #${String(log._id).slice(-4).toUpperCase()}`,
+        d?.name || '',
+        ch?.title || log.badgeKey || '',
+        qr?.code || '',
+        log.scoreAwarded ?? 0,
+      ];
+    }),
+  ];
+
+  await logAuditEvent({
+    req,
+    action: 'admin.passport_logs.export',
+    targetType: 'report',
+    targetId: 'passport-logs',
+    targetName: `Xuất ${logs.length} dòng Nhật ký Hộ chiếu`,
+    details: { rows: logs.length, entryType: entryType || 'all' },
+  });
+
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="nhat-ky-checkin-ho-chieu-dtst.csv"');
+  res.setHeader('Cache-Control', 'no-store');
+  res.send(toUtf8BomCsv(rows));
 }

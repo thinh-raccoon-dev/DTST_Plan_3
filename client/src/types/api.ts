@@ -719,6 +719,27 @@ export interface AnalyticsReport {
     uniqueVisitors: number;
     uniqueAccounts: number;
   };
+  growth?: {
+    destinationPageViewsPct: number | null;
+    qrLandingViewsPct: number | null;
+    checkInsPct: number | null;
+    challengeCompletionsPct: number | null;
+  };
+  areaBreakdown?: Array<{
+    area: string;
+    label: string;
+    destinations: number;
+    views: number;
+    checkIns: number;
+  }>;
+  verificationCoverage?: {
+    total: number;
+    verified: number;
+    partiallyVerified: number;
+    unverified: number;
+    assignedToPartner: number;
+    unassigned: number;
+  };
   daily: Array<{ date: string; pageViews: number; qrLandings: number; interactions: number; completions: number }>;
   topDestinations: Array<{ id: string; name: string; slug: string | null; count: number }>;
   topQrCodes: Array<{ id: string; code: string; label: string; count: number }>;
@@ -780,6 +801,7 @@ export interface AdminUserItem {
   role: UserRole;
   status: 'active' | 'disabled';
   preferences?: UserPreferences;
+  managedDestinations?: Array<{ id: string; name: string; slug: string; area: string }>;
   createdAt: string;
   updatedAt: string;
   stats: {
@@ -847,7 +869,7 @@ export interface AdminPassportLogItem {
   entryType: 'check_in' | 'challenge_completed' | 'badge_awarded';
   scoreAwarded: number;
   completedAt: string;
-  source: 'qr' | 'system';
+  source: 'qr' | 'system' | 'gps';
   badgeKey?: string;
   metadata?: {
     correctCount?: number;

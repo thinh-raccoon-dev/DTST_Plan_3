@@ -78,6 +78,9 @@ const router = createBrowserRouter([
             lazy: lazyPage(() => import('./components/layout/AdminLayout'), (m) => m.AdminLayout),
             children: [
               { index: true, lazy: lazyPage(() => import('./pages/admin/AdminDashboardPage'), (m) => m.AdminDashboardPage) },
+              { path: 'moderation', lazy: lazyPage(() => import('./pages/admin/AdminModerationPage'), (m) => m.AdminModerationPage) },
+              { path: 'safety-alerts', lazy: lazyPage(() => import('./pages/admin/AdminSafetyAlertsPage'), (m) => m.AdminSafetyAlertsPage) },
+              { path: 'commerce', lazy: lazyPage(() => import('./pages/admin/AdminCommercePage'), (m) => m.AdminCommercePage) },
               { path: 'partner', lazy: lazyPage(() => import('./pages/admin/PartnerDashboardPage'), (m) => m.PartnerDashboardPage) },
               { path: 'analytics', lazy: lazyPage(() => import('./pages/admin/AdminDashboardPage'), (m) => m.AdminDashboardPage) },
               { path: 'destinations', lazy: lazyPage(() => import('./pages/admin/AdminDestinationsPage'), (m) => m.AdminDestinationsPage) },

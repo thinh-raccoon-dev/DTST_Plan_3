@@ -10,6 +10,7 @@ import { anonymousSession } from './middleware/anonymousSession.js';
 import { attachUser } from './middleware/auth.js';
 import { CSRF_HEADER, csrfProtection } from './middleware/csrf.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
+import { enforceMaintenanceMode } from './middleware/maintenance.js';
 import { apiLimiter } from './middleware/rateLimit.js';
 import { buildApiRouter } from './routes/index.js';
 import { logger } from './utils/logger.js';
@@ -84,7 +85,7 @@ export function createApp(): Express {
   }
   app.use('/uploads', express.static(uploadsDir, { maxAge: '7d' }));
 
-  app.use('/api/v1', apiLimiter, anonymousSession, csrfProtection, attachUser, buildApiRouter());
+  app.use('/api/v1', apiLimiter, anonymousSession, csrfProtection, attachUser, enforceMaintenanceMode, buildApiRouter());
   app.use('/api', notFoundHandler);
 
   if (env.SERVE_CLIENT_DIR) {

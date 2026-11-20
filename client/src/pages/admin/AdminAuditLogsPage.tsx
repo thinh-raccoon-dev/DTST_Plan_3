@@ -1,6 +1,7 @@
 import {
   Activity,
   Clock,
+  Download,
   Eye,
   FileText,
   Search,
@@ -17,13 +18,17 @@ import { Modal } from '../../components/ui/Modal';
 import { EmptyState, ErrorState, PageLoader } from '../../components/ui/States';
 import { useApiQuery } from '../../hooks/useApiQuery';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
-import { api } from '../../lib/api';
+import { api, toApiError } from '../../lib/api';
+import { toast } from '../../stores/toastStore';
 import type { AuditLog, AuditLogStats, Paginated } from '../../types/api';
 
 const actionConfig: Record<string, { label: string; tone: 'leaf' | 'teal' | 'lotus' | 'neutral' | 'river' }> = {
   'destination.create': { label: 'Tạo KDL mới', tone: 'leaf' },
   'destination.update': { label: 'Sửa thông tin KDL', tone: 'neutral' },
   'destination.delete': { label: 'Xóa KDL', tone: 'lotus' },
+  'destination.approve': { label: 'Phê duyệt xuất bản KDL', tone: 'leaf' },
+  'destination.return_draft': { label: 'Trả KDL về nháp', tone: 'lotus' },
+  'destination.hide': { label: 'Ẩn khẩn cấp KDL', tone: 'lotus' },
   'destination.operational_status.toggle': { label: 'Đổi trạng thái vận hành', tone: 'teal' },
   'qr.create': { label: 'Tạo mã QR', tone: 'leaf' },
   'qr.update': { label: 'Cập nhật mã QR', tone: 'neutral' },
@@ -44,12 +49,36 @@ const actionConfig: Record<string, { label: string; tone: 'leaf' | 'teal' | 'lot
   'user.role.update': { label: 'Đổi phân quyền', tone: 'lotus' },
   'user.status.update': { label: 'Đổi trạng thái tài khoản', tone: 'neutral' },
   'user.password.reset': { label: 'Đặt lại mật khẩu', tone: 'lotus' },
-  'user.delete': { label: 'Xóa tài khoản', tone: 'lotus' },
+  'user.destinations.assign': { label: 'Phân công KDL cho đối tác', tone: 'teal' },
+  'user.delete': { label: 'Xóa tài khoản (NĐ 13)', tone: 'lotus' },
   'banner.create': { label: 'Tạo banner mới', tone: 'leaf' },
   'banner.update': { label: 'Cập nhật banner', tone: 'neutral' },
   'banner.delete': { label: 'Xóa banner', tone: 'lotus' },
+  'banner.submit': { label: 'Đối tác trình duyệt banner', tone: 'teal' },
+  'banner.approve': { label: 'Phê duyệt banner đối tác', tone: 'leaf' },
+  'banner.reject': { label: 'Từ chối banner đối tác', tone: 'lotus' },
+  'banner.pause': { label: 'Tạm dừng banner', tone: 'neutral' },
+  'banner.withdraw': { label: 'Rút đề xuất banner', tone: 'neutral' },
+  'voucher.create': { label: 'Tạo ưu đãi EXP', tone: 'leaf' },
+  'voucher.update': { label: 'Sửa ưu đãi EXP', tone: 'neutral' },
+  'voucher.pause': { label: 'Tạm dừng ưu đãi', tone: 'neutral' },
+  'voucher.delete': { label: 'Xóa ưu đãi EXP', tone: 'lotus' },
+  'voucher.redeem': { label: 'Xác thực đổi mã ưu đãi', tone: 'teal' },
+  'voucher.admin_suspend': { label: 'Sở đình chỉ ưu đãi', tone: 'lotus' },
+  'voucher.admin_resume': { label: 'Sở khôi phục ưu đãi', tone: 'leaf' },
+  'service.create': { label: 'Niêm yết dịch vụ/combo', tone: 'leaf' },
+  'service.update': { label: 'Cập nhật bảng giá dịch vụ', tone: 'neutral' },
+  'service.delete': { label: 'Xóa dịch vụ niêm yết', tone: 'lotus' },
+  'inquiry.update': { label: 'Xử lý yêu cầu đặt đoàn', tone: 'teal' },
+  'safety_alert.create': { label: 'Phát cảnh báo an toàn', tone: 'lotus' },
+  'safety_alert.deactivate': { label: 'Gỡ cảnh báo an toàn', tone: 'neutral' },
+  'media.upload': { label: 'Tải lên ảnh hệ thống', tone: 'river' },
   'itinerary.delete': { label: 'Xóa lịch trình', tone: 'lotus' },
   'system.settings.update': { label: 'Cập nhật cấu hình hệ thống', tone: 'teal' },
+  'partner.report.export': { label: 'Đối tác xuất báo cáo CSV', tone: 'river' },
+  'admin.analytics.export': { label: 'Xuất báo cáo thống kê CSV', tone: 'river' },
+  'admin.audit_logs.export': { label: 'Xuất nhật ký kiểm toán CSV', tone: 'river' },
+  'admin.passport_logs.export': { label: 'Xuất nhật ký check-in CSV', tone: 'river' },
 };
 
 function formatAction(action: string) {
@@ -62,8 +91,11 @@ export function AdminAuditLogsPage() {
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const [targetTypeFilter, setTargetTypeFilter] = useState('all');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
   const [page, setPage] = useState(1);
   const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   const logsQuery = useApiQuery<Paginated<AuditLog>>(
     (signal) =>
@@ -75,11 +107,13 @@ export function AdminAuditLogsPage() {
             q: search || undefined,
             role: roleFilter !== 'all' ? roleFilter : undefined,
             targetType: targetTypeFilter !== 'all' ? targetTypeFilter : undefined,
+            from: fromDate || undefined,
+            to: toDate || undefined,
           },
           signal,
         })
         .then((r) => r.data),
-    [page, search, roleFilter, targetTypeFilter],
+    [page, search, roleFilter, targetTypeFilter, fromDate, toDate],
   );
 
   const statsQuery = useApiQuery<AuditLogStats>(
@@ -89,11 +123,48 @@ export function AdminAuditLogsPage() {
 
   const stats = statsQuery.data;
 
+  const handleExportCsv = async () => {
+    setExporting(true);
+    try {
+      const res = await api.get<Blob>('/admin/audit-logs/export', {
+        params: {
+          q: search || undefined,
+          role: roleFilter !== 'all' ? roleFilter : undefined,
+          targetType: targetTypeFilter !== 'all' ? targetTypeFilter : undefined,
+          from: fromDate || undefined,
+          to: toDate || undefined,
+        },
+        responseType: 'blob',
+      });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `nhat-ky-kiem-toan-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      toast.success('Đã xuất file CSV nhật ký kiểm toán.');
+    } catch (err) {
+      toast.error('Không thể xuất nhật ký CSV', toApiError(err).message);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <>
       <AdminPageHeader
         title="Nhật ký hoạt động & Kiểm toán (Audit Logs)"
-        description="Ghi nhận bất biến toàn bộ hành động của Quản trị viên và Đối tác: cập nhật KDL, tạo QR, tạo thử thách, cấp huy hiệu và kiểm duyệt đánh giá."
+        description="Ghi nhận bất biến toàn bộ hành động của Quản trị viên và Đối tác: kiểm duyệt KDL/banner, quản lý ưu đãi, cảnh báo an toàn, phân quyền và cấu hình hệ thống."
+        actions={
+          <Button
+            variant="secondary"
+            icon={<Download className="size-4" aria-hidden />}
+            loading={exporting}
+            onClick={handleExportCsv}
+          >
+            Xuất CSV
+          </Button>
+        }
       />
 
       {/* KPI Stats */}
@@ -105,9 +176,9 @@ export function AdminAuditLogsPage() {
           icon={<Shield className="size-5 text-river-600" />}
         />
         <StatCard
-          label="Thao tác hôm nay"
+          label="Thao tác hôm nay (UTC+7)"
           value={stats?.todayLogs ?? '—'}
-          hint="Số hành động phát sinh trong 24h qua"
+          hint="Số hành động phát sinh trong ngày giờ VN"
           icon={<Clock className="size-5 text-teal-600" />}
         />
         <StatCard
@@ -126,8 +197,8 @@ export function AdminAuditLogsPage() {
 
       {/* Filter and Search Bar */}
       <Card className="mt-6 p-4">
-        <div className="grid gap-4 sm:grid-cols-3">
-          <div className="relative">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="relative lg:col-span-2">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-river-400" />
             <Input
               type="search"
@@ -142,6 +213,7 @@ export function AdminAuditLogsPage() {
           </div>
 
           <Select
+            aria-label="Lọc theo vai trò"
             value={roleFilter}
             onChange={(e) => {
               setRoleFilter(e.target.value);
@@ -155,6 +227,7 @@ export function AdminAuditLogsPage() {
           </Select>
 
           <Select
+            aria-label="Lọc theo đối tượng"
             value={targetTypeFilter}
             onChange={(e) => {
               setTargetTypeFilter(e.target.value);
@@ -167,11 +240,40 @@ export function AdminAuditLogsPage() {
             <option value="challenge">Thử thách & Trò chơi (Challenge)</option>
             <option value="badge">Huy hiệu & Thành tựu (Badge)</option>
             <option value="review">Đánh giá du khách (Review)</option>
-            <option value="user">Người dùng & Tài khoản (User)</option>
             <option value="banner">Banner & Quảng cáo (Banner)</option>
+            <option value="voucher">Ưu đãi EXP (Voucher)</option>
+            <option value="service">Dịch vụ niêm yết (Service)</option>
+            <option value="inquiry">Yêu cầu đặt đoàn (Inquiry)</option>
+            <option value="safety_alert">Cảnh báo an toàn (Safety Alert)</option>
+            <option value="user">Người dùng & Tài khoản (User)</option>
+            <option value="media">Ảnh tải lên (Media)</option>
+            <option value="report">Báo cáo xuất file (Report)</option>
             <option value="itinerary">Lịch trình du khách (Itinerary)</option>
             <option value="system">Cấu hình hệ thống (System)</option>
           </Select>
+
+          <div className="flex items-center gap-2">
+            <Input
+              type="date"
+              aria-label="Từ ngày"
+              value={fromDate}
+              max={toDate || undefined}
+              onChange={(e) => {
+                setFromDate(e.target.value);
+                setPage(1);
+              }}
+            />
+            <Input
+              type="date"
+              aria-label="Đến ngày"
+              value={toDate}
+              min={fromDate || undefined}
+              onChange={(e) => {
+                setToDate(e.target.value);
+                setPage(1);
+              }}
+            />
+          </div>
         </div>
       </Card>
 
