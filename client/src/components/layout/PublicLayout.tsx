@@ -4,6 +4,7 @@ import { Link, Outlet, ScrollRestoration } from 'react-router-dom';
 import { AiCopilotWidget } from '../ai/AiCopilotWidget';
 import { Header } from './Header';
 import { LogoFull } from './Logo';
+import { MobileBottomNav } from './MobileBottomNav';
 import { PetalBackdrop } from './PetalBackdrop';
 
 const CONTACT = {
@@ -26,7 +27,7 @@ function FacebookIcon({ className }: { className?: string }) {
 
 function Footer() {
   return (
-    <footer className="mt-16 border-t border-sand-200 bg-white/80 backdrop-blur-sm">
+    <footer className="mt-12 border-t border-sand-200 bg-white/80 pb-20 backdrop-blur-sm sm:mt-16 lg:pb-0">
       <div className="mx-auto grid max-w-6xl gap-10 px-4 py-12 sm:px-6 md:grid-cols-[1.6fr_1fr_1fr_1.2fr]">
         <div className="space-y-4">
           <Link to="/" className="inline-block rounded-2xl" aria-label="Trang chủ Hộ chiếu Trải nghiệm Đồng Tháp">
@@ -120,14 +121,15 @@ export function PublicLayout() {
         <Outlet />
       </main>
       <Footer />
+      <MobileBottomNav />
       <AiCopilotWidget />
       <ScrollRestoration />
     </div>
   );
 }
 
-const containerWidths = { wide: 'max-w-6xl', medium: 'max-w-3xl', narrow: 'max-w-2xl' };
+const containerWidths = { cinema: 'max-w-[1400px]', wide: 'max-w-6xl', medium: 'max-w-3xl', narrow: 'max-w-2xl' };
 
 export function PageContainer({ children, width = 'wide' }: { children: ReactNode; width?: keyof typeof containerWidths }) {
-  return <div className={`mx-auto w-full ${containerWidths[width]} px-4 py-8 sm:px-6 sm:py-10`}>{children}</div>;
+  return <div className={`mx-auto w-full ${containerWidths[width]} px-3.5 py-5 sm:px-6 sm:py-8`}>{children}</div>;
 }

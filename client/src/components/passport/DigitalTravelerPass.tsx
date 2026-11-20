@@ -423,7 +423,7 @@ export function DigitalTravelerPass({ user, passport }: TravelerPassProps) {
           </h2>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             size="sm"
             variant="secondary"
@@ -467,7 +467,7 @@ export function DigitalTravelerPass({ user, passport }: TravelerPassProps) {
               e.preventDefault();
               setFlipped((f) => !f)}
           }}
-          className="group relative aspect-[1.586/1] w-full cursor-pointer select-none transition-transform duration-700 ease-out"
+          className="group relative min-h-[242px] w-full cursor-pointer select-none transition-transform duration-700 ease-out sm:min-h-0 sm:aspect-[1.586/1]"
           style={{
             transformStyle: 'preserve-3d',
             transform: flipped ? 'rotateY(180deg)' : 'rotateY(0deg)',
@@ -477,7 +477,7 @@ export function DigitalTravelerPass({ user, passport }: TravelerPassProps) {
           {/* ==================== FRONT OF CARD ==================== */}
           <div
             className={clsx(
-              'absolute inset-0 overflow-hidden rounded-[24px] p-5 sm:p-6 text-white shadow-2xl transition-all duration-300',
+              'absolute inset-0 flex flex-col justify-between overflow-hidden rounded-[22px] p-4 text-white shadow-2xl transition-all duration-300 sm:rounded-[24px] sm:p-6',
               'ring-1 ring-white/20 group-hover:shadow-[0_20px_50px_rgba(23,107,80,0.35)]',
               'bg-gradient-to-br',
               tier.gradient,
@@ -527,11 +527,11 @@ export function DigitalTravelerPass({ user, passport }: TravelerPassProps) {
             </div>
 
             {/* Middle row: Gold EMV Chip & NFC */}
-            <div className="relative z-10 mt-3 flex items-center gap-3">
-              <div className="relative flex h-8 w-11 items-center justify-center rounded-md bg-gradient-to-br from-amber-200 via-amber-400 to-amber-600 shadow-md ring-1 ring-amber-700/50">
+            <div className="relative z-10 mt-2.5 flex items-center gap-3 sm:mt-3">
+              <div className="relative flex h-7 w-10 items-center justify-center rounded-md bg-gradient-to-br from-amber-200 via-amber-400 to-amber-600 shadow-md ring-1 ring-amber-700/50 sm:h-8 sm:w-11">
                 <div className="h-full w-px bg-amber-800/40" />
                 <div className="absolute inset-x-0 h-px bg-amber-800/40" />
-                <div className="size-4 rounded-full border border-amber-800/30" />
+                <div className="size-3.5 rounded-full border border-amber-800/30 sm:size-4" />
               </div>
 
               {/* NFC icon */}
@@ -543,31 +543,31 @@ export function DigitalTravelerPass({ user, passport }: TravelerPassProps) {
             </div>
 
             {/* Pass ID (Embossed style) */}
-            <div className="relative z-10 mt-3 font-mono text-sm sm:text-base font-bold tracking-widest text-white/95 drop-shadow">
+            <div className="relative z-10 mt-2 font-mono text-xs font-bold tracking-widest text-white/95 drop-shadow sm:mt-3 sm:text-base">
               {passId}
             </div>
 
             {/* Bottom row: Name & Key Stats */}
-            <div className="relative z-10 mt-auto pt-2 flex items-end justify-between border-t border-white/10">
-              <div>
-                <p className="text-[9px] font-semibold tracking-wider uppercase text-white/50">
+            <div className="relative z-10 mt-auto flex items-end justify-between gap-2 border-t border-white/10 pt-2">
+              <div className="min-w-0">
+                <p className="text-[9px] font-semibold uppercase tracking-wider text-white/50">
                   DU KHÁCH / TRAVELER
                 </p>
-                <p className="text-sm sm:text-base font-bold tracking-wide text-white uppercase drop-shadow truncate max-w-[220px]">
+                <p className="max-w-[135px] truncate text-xs font-bold uppercase tracking-wide text-white drop-shadow sm:max-w-[220px] sm:text-base">
                   {displayName}
                 </p>
               </div>
 
-              <div className="flex items-center gap-4 text-right">
+              <div className="flex shrink-0 items-center gap-3 text-right sm:gap-4">
                 <div>
-                  <p className="text-[9px] font-medium text-white/50 uppercase">ĐÃ KHÁM PHÁ</p>
-                  <p className="text-xs sm:text-sm font-extrabold text-teal-300">
+                  <p className="text-[8px] font-medium uppercase text-white/50 sm:text-[9px]">ĐÃ KHÁM PHÁ</p>
+                  <p className="text-xs font-extrabold text-teal-300 sm:text-sm">
                     {exploredCount} điểm
                   </p>
                 </div>
                 <div>
-                  <p className="text-[9px] font-medium text-white/50 uppercase">ĐIỂM KINH NGHIỆM</p>
-                  <p className="text-xs sm:text-sm font-extrabold text-amber-300">
+                  <p className="text-[8px] font-medium uppercase text-white/50 sm:text-[9px]">ĐIỂM KINH NGHIỆM</p>
+                  <p className="text-xs font-extrabold text-amber-300 sm:text-sm">
                     +{formatNumber(points)} EXP
                   </p>
                 </div>
@@ -585,7 +585,7 @@ export function DigitalTravelerPass({ user, passport }: TravelerPassProps) {
           {/* ==================== BACK OF CARD (Synchronized Color Theme & Glow) ==================== */}
           <div
             className={clsx(
-              'absolute inset-0 flex flex-col justify-between overflow-hidden rounded-[24px] p-5 sm:p-6 text-white shadow-2xl transition-all duration-300',
+              'absolute inset-0 flex flex-col justify-between overflow-hidden rounded-[22px] p-4 text-white shadow-2xl transition-all duration-300 sm:rounded-[24px] sm:p-6',
               'ring-1 ring-white/20 group-hover:shadow-[0_20px_50px_rgba(23,107,80,0.35)]',
               'bg-gradient-to-br',
               tier.gradient,
@@ -609,32 +609,32 @@ export function DigitalTravelerPass({ user, passport }: TravelerPassProps) {
             <div className="pointer-events-none absolute -left-16 -bottom-16 size-64 rounded-full border border-white/5" />
 
             {/* Magnetic Stripe */}
-            <div className="relative z-10 -mx-6 -mt-1 h-9 bg-gradient-to-r from-neutral-950 via-neutral-900 to-neutral-950 shadow-inner opacity-95" />
+            <div className="relative z-10 -mx-6 -mt-1 h-7 bg-gradient-to-r from-neutral-950 via-neutral-900 to-neutral-950 opacity-95 shadow-inner sm:h-9" />
 
             {/* Signature Panel */}
-            <div className="relative z-10 mt-2 flex items-center justify-between rounded-lg bg-sand-100/90 px-3 py-1.5 text-river-900 shadow-sm backdrop-blur-xs">
-              <span className="font-mono text-[9px] font-semibold text-river-600">CHỮ KÝ ĐIỆN TỬ:</span>
-              <span className="font-sans font-extrabold italic text-xs tracking-normal text-leaf-900">
+            <div className="relative z-10 mt-1.5 flex items-center justify-between gap-1 rounded-lg bg-sand-100/90 px-2.5 py-1 text-river-900 shadow-sm backdrop-blur-xs sm:mt-2 sm:px-3 sm:py-1.5">
+              <span className="shrink-0 font-mono text-[8px] font-semibold text-river-600 sm:text-[9px]">CHỮ KÝ:</span>
+              <span className="truncate pr-1 font-sans text-[11px] font-extrabold italic tracking-normal text-leaf-900 sm:text-xs">
                 Đồng Tháp Smart Travel
               </span>
-              <span className="font-mono text-[9px] font-bold text-river-700">CVV: 868</span>
+              <span className="shrink-0 font-mono text-[8px] font-bold text-river-700 sm:text-[9px]">CVV: 868</span>
             </div>
 
             {/* QR Code and Badges Summary */}
-            <div className="relative z-10 mt-2 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2.5">
-                <div className="flex size-14 shrink-0 items-center justify-center rounded-xl bg-white/95 p-1.5 shadow-md">
+            <div className="relative z-10 mt-1.5 flex items-center justify-between gap-2 sm:mt-2 sm:gap-3">
+              <div className="flex min-w-0 items-center gap-2 sm:gap-2.5">
+                <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-white/95 p-1 shadow-md sm:size-14 sm:p-1.5">
                   {/* Decorative stylized QR icon */}
                   <div className="grid size-full place-items-center rounded bg-sand-50 text-river-900">
-                    <QrCode className="size-10 text-river-900" />
+                    <QrCode className="size-8 text-river-900 sm:size-10" />
                   </div>
                 </div>
-                <div className="text-[10px] text-white/80 leading-tight">
+                <div className="min-w-0 text-[10px] leading-tight text-white/80">
                   <p className="font-bold text-white">Xác thực điện tử</p>
-                  <p className="text-[9px] font-medium" style={{ color: tier.accentColor }}>
-                    Quét để đối chiếu Hộ chiếu
+                  <p className="text-[8.5px] font-medium sm:text-[9px]" style={{ color: tier.accentColor }}>
+                    Quét đối chiếu Hộ chiếu
                   </p>
-                  <p className="text-[8px] text-white/50 mt-1">Cấp bởi Sở VHTTDL Đồng Tháp</p>
+                  <p className="mt-0.5 text-[8px] text-white/50 sm:mt-1">Sở VHTTDL Đồng Tháp</p>
                 </div>
               </div>
 

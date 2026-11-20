@@ -3,6 +3,7 @@ import {
   BookMarked,
   ChevronDown,
   Compass,
+  Footprints,
   Heart,
   LayoutDashboard,
   LogIn,
@@ -26,6 +27,7 @@ const mainNav = [
   { to: '/destinations', label: 'Khám phá', icon: Compass },
   { to: '/itinerary/create', label: 'Lập lịch trình', icon: Route },
   { to: '/check-in', label: 'Điểm danh GPS', icon: MapPinCheck },
+  { to: '/footprints', label: 'Dấu chân', icon: Footprints },
   { to: '/passport', label: 'Hộ chiếu', icon: Stamp },
 ];
 

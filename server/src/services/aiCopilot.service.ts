@@ -1387,6 +1387,37 @@ function handleSmartIntent(
     };
   }
 
+  // Feature: Footprint Map & Offline Journey Tracker (Bump / Jagat style)
+  if (
+    normalized.includes('dau chan') ||
+    normalized.includes('ban do dau chan') ||
+    normalized.includes('ve hanh trinh') ||
+    normalized.includes('suong mu') ||
+    normalized.includes('bump') ||
+    normalized.includes('jagat') ||
+    normalized.includes('ghi hanh trinh') ||
+    (normalized.includes('mat mang') && normalized.includes('hanh trinh')) ||
+    (normalized.includes('mat wifi') && normalized.includes('hanh trinh'))
+  ) {
+    return {
+      reply:
+        `🗺️ **Bản đồ Dấu chân Khám phá (Bump / Jagat Style + Offline-First)** đã sẵn sàng cho bạn! 🦊✨\n\n` +
+        `• 🌫️ **Xóa Sương mù Bản đồ (Fog-of-War)**: Đi tới đâu hoặc Check-in ở đâu, vùng sương mù trên bản đồ sẽ tự động sáng bừng lên và tính **% khám phá Đồng Tháp**.\n` +
+        `• ⚡ **Vẽ Vệt Hành trình Neon & Tua lại (Replay)**: Vẽ đường đi phát sáng thời gian thực, thả ghim kỷ niệm cảm xúc và phát lại toàn bộ chuyến đi.\n` +
+        `• 🛰️ **Chống mất dữ liệu khi mất Wi-Fi (Offline-First IndexedDB)**: Kể cả khi mất mạng giữa đường, tọa độ GPS và ghim kỷ niệm vẫn được lưu an toàn trong bộ nhớ máy và **tự động đồng bộ lên Cloud** ngay khi có Wi-Fi lại!\n\n` +
+        `Pé Meko đang mở ngay **Bản đồ Dấu chân** cho bạn trải nghiệm nhé!`,
+      action: {
+        type: 'OPEN_PAGE',
+        payload: { path: '/footprints', label: 'Mở Bản đồ Dấu chân Khám phá' },
+      },
+      suggestions: [
+        'Xem Hộ chiếu số (/passport)',
+        'Điểm danh GPS (/check-in)',
+        'Lập lịch trình đi 2 ngày cho 2 người với chi phí 2 tr',
+      ],
+    };
+  }
+
   // ============================================================================
   // 5. ALL SYSTEM PAGES NAVIGATION (Account, Favorites, My Itineraries, Passport, QR)
   // ============================================================================

@@ -160,10 +160,10 @@ export function DestinationsPage() {
       </details>
 
       <div className="mt-6 grid gap-8 lg:grid-cols-[280px_1fr]">
-        <aside className="hidden lg:block" aria-label="Bộ lọc">
+        <aside className="hidden min-w-0 lg:block" aria-label="Bộ lọc">
           <Card className="sticky top-24 p-5">{panel}</Card>
         </aside>
-        <section aria-live="polite" aria-busy={query.loading}>
+        <section className="min-w-0" aria-live="polite" aria-busy={query.loading}>
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
             {query.data && !query.loading ? (
               <p className="text-sm text-river-600">

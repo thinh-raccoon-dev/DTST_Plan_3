@@ -81,7 +81,7 @@ export function SearchBar({
       <label className="sr-only" htmlFor={inputId}>
         {label}
       </label>
-      <Search className="pointer-events-none absolute left-3.5 top-1/2 size-5 -translate-y-1/2 text-river-400" aria-hidden />
+      <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-river-400 sm:left-3.5 sm:size-5" aria-hidden />
       <input
         id={inputId}
         type="search"
@@ -89,10 +89,10 @@ export function SearchBar({
         onChange={(event) => setDraft(event.target.value)}
         placeholder={placeholder}
         maxLength={100}
-        className={`w-full rounded-full border border-sand-300 bg-white pl-11 pr-28 text-river-950 shadow-card placeholder:text-river-400 focus:border-leaf-500 focus:outline-none focus:ring-2 focus:ring-leaf-100 ${size === 'lg' ? 'min-h-14 text-base' : 'min-h-12 text-sm'}`}
+        className={`w-full rounded-full border border-sand-300 bg-white pl-9 pr-24 text-base text-river-950 shadow-card placeholder:text-river-400 focus:border-leaf-500 focus:outline-none focus:ring-2 focus:ring-leaf-100 sm:pl-11 sm:pr-28 ${size === 'lg' ? 'min-h-13 sm:min-h-14 sm:text-base' : 'min-h-12 sm:text-sm'}`}
       />
-      <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center">
-        <Button type="submit" size="sm" className="rounded-full">
+      <div className="absolute right-1.5 top-1/2 flex -translate-y-1/2 items-center">
+        <Button type="submit" size="sm" className="rounded-full px-3 sm:px-4">
           Tìm kiếm
         </Button>
       </div>

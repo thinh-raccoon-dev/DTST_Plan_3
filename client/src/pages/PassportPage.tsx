@@ -61,22 +61,25 @@ export function PassportPage() {
   return (
     <PageContainer>
       {/* Digital Passport Cover Hero */}
-      <section className="tp-fade-up relative overflow-hidden rounded-panel bg-gradient-to-br from-leaf-900 via-leaf-800 to-leaf-600 p-6 text-white shadow-raised sm:p-8">
+      <section className="tp-fade-up relative overflow-hidden rounded-panel bg-gradient-to-br from-leaf-900 via-leaf-800 to-leaf-600 p-5 text-white shadow-raised sm:p-8">
         <div className="pointer-events-none absolute -right-12 -top-16 size-64 rounded-full bg-teal-300/20 blur-3xl" aria-hidden />
         <div className="pointer-events-none absolute -bottom-20 left-1/4 size-72 rounded-full bg-lotus-300/20 blur-3xl" aria-hidden />
         <div className="relative flex flex-col justify-between gap-6 lg:flex-row lg:items-center">
-          <div>
+          <div className="min-w-0">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold ring-1 ring-white/20">
               <Stamp className="size-3.5 text-teal-200" aria-hidden />
               {user ? `Hộ chiếu của ${user.displayName}` : 'Hộ chiếu trên thiết bị này'}
             </span>
-            <h1 className="mt-3 text-3xl text-white sm:text-4xl">Hộ chiếu trải nghiệm số</h1>
+            <h1 className="mt-3 text-2xl text-white sm:text-4xl">Hộ chiếu trải nghiệm số</h1>
             <p className="mt-2 max-w-xl text-sm leading-relaxed text-leaf-100 sm:text-base">
               Điểm đã khám phá = điểm bạn đã điểm danh GPS hoặc hoàn thành thử thách. Có mặt trong phạm vi 1.000m tại điểm đến để nhận điểm EXP và mở khóa huy hiệu.
             </p>
-            <div className="mt-5 flex flex-wrap gap-3">
+            <div className="mt-5 flex flex-wrap gap-2.5 sm:gap-3">
               <ButtonLink to="/check-in" variant="inverted" icon={<MapPinCheck className="size-4" aria-hidden />}>
                 Điểm danh GPS ngay
+              </ButtonLink>
+              <ButtonLink to="/footprints" variant="outlineInverted" icon={<Footprints className="size-4" aria-hidden />}>
+                Bản đồ Dấu chân & Sương mù
               </ButtonLink>
               <ButtonLink to="/destinations?hasActivity=true" variant="outlineInverted" icon={<Compass className="size-4" aria-hidden />}>
                 Xem điểm có thử thách
@@ -132,7 +135,7 @@ export function PassportPage() {
       </div>
 
       {/* Digital Traveler Pass (Thẻ Du Hành Số 3D Sen Hồng) */}
-      <section className="tp-fade-up mt-8 rounded-panel border border-sand-200 bg-white/95 p-5 shadow-raised backdrop-blur-sm sm:p-8">
+      <section className="tp-fade-up mt-6 rounded-panel border border-sand-200 bg-white/95 p-4 shadow-raised backdrop-blur-sm sm:mt-8 sm:p-8">
         <DigitalTravelerPass user={user} passport={p} />
       </section>
 
@@ -180,7 +183,7 @@ export function PassportPage() {
             <h2 id="badges-heading" className="mt-1 text-2xl">Huy hiệu ({p.totals.badges}/{p.badges.length})</h2>
           </div>
         </div>
-        <ul className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+        <ul className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-5">
           {p.badges.map((badge, idx) => {
             const Icon = badgeIcons[badge.icon];
             return (
@@ -188,7 +191,7 @@ export function PassportPage() {
                 key={badge.key}
                 style={{ animationDelay: `${idx * 60}ms` }}
                 className={clsx(
-                  'tp-fade-up group relative flex flex-col items-center rounded-card border p-5 text-center transition-all duration-300',
+                  'tp-fade-up group relative flex min-w-0 flex-col items-center rounded-card border p-3.5 text-center transition-all duration-300 sm:p-5',
                   badge.earned
                     ? 'border-teal-300 bg-gradient-to-b from-teal-50 via-white to-white shadow-raised hover:-translate-y-1'
                     : 'border-dashed border-sand-300 bg-white/70 opacity-85 hover:opacity-100',

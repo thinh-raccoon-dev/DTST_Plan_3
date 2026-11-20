@@ -58,6 +58,7 @@ const router = createBrowserRouter([
           { path: '/privacy', element: <PrivacyPage /> },
           { path: '/terms', element: <TermsPage /> },
           { path: '/passport', element: <PassportPage /> },
+          { path: '/footprints', lazy: lazyPage(() => import('./pages/FootprintMapPage'), (m) => m.FootprintMapPage) },
           { path: '/favorites', element: <RequireAuth><FavoritesPage /></RequireAuth> },
           { path: '/my-itineraries', element: <RequireAuth><MyItinerariesPage /></RequireAuth> },
           { path: '/account', element: <RequireAuth><ProfilePage /></RequireAuth> },

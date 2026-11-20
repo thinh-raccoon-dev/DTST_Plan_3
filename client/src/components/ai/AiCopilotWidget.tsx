@@ -783,20 +783,23 @@ export function AiCopilotWidget() {
   // Floating trigger button when closed
   if (!isOpen) {
     return (
-      <div data-meko-widget="true" className="fixed bottom-5 right-5 z-50 flex items-center gap-2.5">
+      <div
+        data-meko-widget="true"
+        className="fixed bottom-[5.15rem] right-3.5 z-[1000] flex items-center gap-2.5 lg:bottom-5 lg:right-5"
+      >
         <button
           onClick={() => {
             setIsOpen(true);
             setIsMinimized(false);
           }}
-          className="group relative flex items-center gap-2.5 rounded-full bg-gradient-to-tr from-leaf-800 via-leaf-700 to-teal-600 pl-3.5 pr-4 py-2.5 text-white shadow-xl transition-all duration-200 hover:scale-105 hover:shadow-2xl focus:outline-none focus:ring-4 focus:ring-leaf-300"
+          className="group relative flex items-center gap-2.5 rounded-full bg-gradient-to-tr from-leaf-800 via-leaf-700 to-teal-600 p-1.5 text-white shadow-xl ring-2 ring-white/80 transition-all duration-200 hover:scale-105 hover:shadow-2xl focus:outline-none focus:ring-4 focus:ring-leaf-300 sm:pl-3.5 sm:pr-4 sm:py-2.5 sm:ring-0"
           aria-label="Mở trợ lý Pé Meko"
         >
-          <span className="relative flex h-9 w-9 items-center justify-center rounded-full bg-white/15 text-xl shadow-inner">
+          <span className="relative flex h-10 w-10 items-center justify-center rounded-full bg-white/15 text-xl shadow-inner sm:h-9 sm:w-9">
             🦊
             <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-leaf-800 bg-emerald-400" />
           </span>
-          <div className="text-left">
+          <div className="hidden text-left sm:block">
             <div className="text-xs font-extrabold leading-tight tracking-tight text-white">
               Pé Meko
             </div>
@@ -812,7 +815,11 @@ export function AiCopilotWidget() {
   return (
     <div
       data-meko-widget="true"
-      className="fixed bottom-4 right-4 z-50 flex flex-col items-end sm:bottom-6 sm:right-6"
+      className={
+        isMinimized
+          ? 'fixed bottom-[5.15rem] right-3.5 z-[1000] flex flex-col items-end lg:bottom-6 lg:right-6'
+          : 'fixed inset-x-2 bottom-[4.85rem] top-16 z-[1000] flex flex-col items-end sm:inset-auto sm:bottom-[5.15rem] sm:right-4 lg:bottom-6 lg:right-6'
+      }
     >
       {/* Minimized Pill */}
       {isMinimized ? (
@@ -843,8 +850,8 @@ export function AiCopilotWidget() {
           </div>
         </div>
       ) : (
-        /* Main Clean & User-Friendly Pé Meko Window */
-        <div className="flex h-[560px] max-h-[82vh] w-[360px] sm:w-[395px] flex-col rounded-3xl bg-white shadow-2xl border border-sand-200/90 overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-200">
+        /* Main Clean & User-Friendly Pé Meko Window (Full-width bottom sheet on mobile!) */
+        <div className="flex h-full w-full flex-col overflow-hidden rounded-3xl border border-sand-200/90 bg-white shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-200 sm:h-[560px] sm:max-h-[82vh] sm:w-[395px]">
           {/* Clean, Minimal Header */}
           <div className="flex items-center justify-between bg-gradient-to-r from-leaf-900 via-leaf-800 to-teal-800 px-4 py-3.5 text-white">
             <div className="flex items-center gap-3 min-w-0">
@@ -1163,7 +1170,7 @@ export function AiCopilotWidget() {
                       : 'Nhắn hoặc dán ảnh cho Pé Meko...'
                 }
                 disabled={isLoading}
-                className="flex-1 min-w-0 rounded-full bg-sand-50 px-3.5 py-2 text-xs text-river-900 placeholder:text-river-400 border border-sand-200 focus:border-leaf-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-leaf-100 transition-all"
+                className="flex-1 min-w-0 rounded-full bg-sand-50 px-3.5 py-2 text-base text-river-900 placeholder:text-river-400 border border-sand-200 focus:border-leaf-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-leaf-100 transition-all sm:text-xs"
               />
 
               <button

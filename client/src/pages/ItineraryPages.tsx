@@ -351,7 +351,7 @@ export function ItineraryDetailPage() {
   };
 
   return (
-    <PageContainer>
+    <PageContainer width={isV9 ? 'cinema' : 'wide'}>
       <Breadcrumb
         items={[{ label: 'Lịch trình đã lưu', to: '/my-itineraries' }, { label: itinerary.title }]}
       />

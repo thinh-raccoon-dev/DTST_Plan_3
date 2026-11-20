@@ -104,9 +104,21 @@
       radial-gradient(ellipse 50% 35% at 100% 75%, rgb(244 248 239 / 0.8), transparent 55%),
       radial-gradient(circle at 1px 1px, rgb(21 63 50 / 0.04) 1px, transparent 0);
     background-size: auto, auto, auto, 22px 22px;
-    background-attachment: fixed;
+    background-attachment: scroll;
+    -webkit-tap-highlight-color: transparent;
   }
-  /* Thang chữ tiêu đề thống nhất (có thể ghi đè bằng utility khi cần) */
+  @media (min-width: 768px) {
+    body {
+      background-attachment: fixed;
+    }
+  }
+  button,
+  a,
+  [role='button'],
+  [role='tab'] {
+    touch-action: manipulation;
+  }
+  /* Thang chữ tiêu đề thống nhất (tối ưu mobile không tràn dòng) */
   h1,
   h2,
   h3 {
@@ -114,10 +126,10 @@
     text-wrap: balance;
   }
   h1 {
-    @apply text-[1.875rem] leading-tight sm:text-4xl;
+    @apply text-2xl leading-tight sm:text-4xl;
   }
   h2 {
-    @apply text-2xl leading-tight sm:text-[2rem];
+    @apply text-xl leading-tight sm:text-[2rem];
   }
   h3 {
     @apply text-lg leading-snug sm:text-xl;
@@ -246,4 +258,17 @@
   border-radius: 9999px;
   background: var(--color-lotus-400);
   flex-shrink: 0;
+}
+
+/* Mobile-first utilities: clean hidden scrollbars for swipeable pill bars & iOS safe area */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }

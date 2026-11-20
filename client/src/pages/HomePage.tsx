@@ -30,10 +30,10 @@ function Hero() {
         <div className="absolute right-[12%] top-12 size-52 rounded-full bg-lotus-100/50 blur-3xl" />
       </div>
 
-      <div className="relative mx-auto max-w-6xl px-4 pb-16 pt-10 sm:px-6 md:pb-20 md:pt-14">
+      <div className="relative mx-auto max-w-6xl px-4 pb-10 pt-6 sm:px-6 md:pb-20 md:pt-14">
         <div className="tp-fade-up mx-auto max-w-3xl text-center">
           <p className="eyebrow mx-auto">Mỗi chuyến đi, một câu chuyện</p>
-          <h1 className="mt-5 text-balance text-[2.25rem] font-extrabold leading-[1.1] tracking-tight text-river-900 sm:text-[3rem] lg:text-[3.5rem]">
+          <h1 className="mt-4 text-balance text-[1.9rem] font-extrabold leading-[1.12] tracking-tight text-river-900 sm:mt-5 sm:text-[3rem] lg:text-[3.5rem]">
             Khám phá Đồng Tháp{' '}
             <span className="relative inline-block text-leaf-700">
               theo cách của bạn
@@ -152,10 +152,10 @@ export function HomePage() {
       </section>
 
       <section className="mx-auto mt-10 max-w-6xl px-4 sm:px-6">
-        <div className="relative overflow-hidden rounded-panel bg-gradient-to-br from-leaf-900 via-leaf-800 to-leaf-700 p-6 text-white shadow-raised sm:p-10">
+        <div className="relative overflow-hidden rounded-panel bg-gradient-to-br from-leaf-900 via-leaf-800 to-leaf-700 p-5 text-white shadow-raised sm:p-10">
           <div className="pointer-events-none absolute -right-16 -top-16 size-72 rounded-full bg-lotus-300/20 blur-3xl" aria-hidden />
           <div className="relative grid gap-8 lg:grid-cols-2">
-            <div>
+            <div className="min-w-0">
               <p className="text-[0.7rem] font-semibold uppercase tracking-[0.22em] text-leaf-300">Hộ chiếu trải nghiệm số</p>
               <h2 className="mt-3 text-white">Mỗi dấu chân, một huy hiệu</h2>
               <p className="mt-3 leading-relaxed text-leaf-100">
@@ -167,7 +167,7 @@ export function HomePage() {
                   { icon: MapPinCheck, title: 'Điểm danh 1 chạm', text: 'Nhận ngay +10 điểm EXP' },
                   { icon: Award, title: 'Thăng hạng Sen Hồng', text: 'Mở khóa huy hiệu danh giá' },
                 ].map(({ icon: Icon, title, text }, i) => (
-                  <li key={title} className="rounded-2xl bg-white/10 p-4 ring-1 ring-white/15 backdrop-blur-sm transition hover:bg-white/15">
+                  <li key={title} className="min-w-0 rounded-2xl bg-white/10 p-4 ring-1 ring-white/15 backdrop-blur-sm transition hover:bg-white/15">
                     <span className="inline-block rounded-full bg-lotus-300/25 px-2 py-0.5 text-[11px] font-semibold text-lotus-100">
                       Bước {i + 1}
                     </span>
@@ -186,7 +186,7 @@ export function HomePage() {
                 </ButtonLink>
               </div>
             </div>
-            <div>
+            <div className="min-w-0">
               <h3 className="text-lg text-white">Điểm có QR / thử thách đang hoạt động</h3>
               <div className="mt-4 space-y-3">
                 {active.loading && <p className="text-sm text-leaf-200">Đang tải…</p>}

@@ -4,6 +4,7 @@ import {
   Award,
   CheckCircle2,
   ExternalLink,
+  Footprints,
   Info,
   MapPinCheck,
   Navigation,
@@ -12,7 +13,7 @@ import {
   Search,
   Sparkles,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { announceBadges } from '../components/challenge/ChallengeQuiz';
 import { PageContainer } from '../components/layout/PublicLayout';
@@ -21,6 +22,7 @@ import { Card } from '../components/ui/Card';
 import { EmptyState, PageLoader } from '../components/ui/States';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { api, toApiError } from '../lib/api';
+import { saveLocalTrack } from '../lib/footprintOfflineStore';
 import { useAuthStore } from '../stores/authStore';
 import { toast } from '../stores/toastStore';
 import type { BadgeInfo } from '../types/api';
@@ -86,6 +88,8 @@ export function GpsCheckInPage() {
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [isDemoMode, setIsDemoMode] = useState(false);
   const [selectedDemoIndex, setSelectedDemoIndex] = useState(0);
+  const [autoCheckInMode, setAutoCheckInMode] = useState(true);
+  const autoCheckedSlugsRef = useRef<Set<string>>(new Set());
 
   // Data state
   const [data, setData] = useState<NearbyResponse | null>(null);
@@ -136,25 +140,133 @@ export function GpsCheckInPage() {
     );
   }, []);
 
-  // Initialize GPS on load
+  // Initialize GPS on load & continuously watch position when not in Demo Mode
   useEffect(() => {
     requestRealLocation();
   }, [requestRealLocation]);
 
-  // 2. Fetch nearby destinations based on current coordinates
-  const fetchNearby = useCallback(async (currentCoords: { lat: number; lng: number }) => {
-    setLoading(true);
-    try {
-      const res = await api.get<NearbyResponse>(
-        `/destinations/nearby?lat=${currentCoords.lat}&lng=${currentCoords.lng}&limit=60`,
-      );
-      setData(res.data);
-    } catch (err) {
-      toast.error('Lỗi tải danh sách địa điểm', toApiError(err).message);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  useEffect(() => {
+    if (isDemoMode || !navigator.geolocation) return;
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        setCoords((prev) => {
+          const next = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+          if (
+            prev &&
+            Math.abs(prev.lat - next.lat) < 0.00025 &&
+            Math.abs(prev.lng - next.lng) < 0.00025
+          ) {
+            return prev;
+          }
+          return next;
+        });
+      },
+      () => {
+        // ignore background watch errors
+      },
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 },
+    );
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, [isDemoMode]);
+
+  // 2. Fetch nearby destinations based on current coordinates & trigger Hands-Free Auto Check-in
+  const fetchNearby = useCallback(
+    async (currentCoords: { lat: number; lng: number }) => {
+      setLoading(true);
+      try {
+        const res = await api.get<NearbyResponse>(
+          `/destinations/nearby?lat=${currentCoords.lat}&lng=${currentCoords.lng}&limit=60`,
+        );
+        setData(res.data);
+
+        // Hands-Free Automatic GPS Check-In for any destination within 1,000m that hasn't been checked into yet
+        if (autoCheckInMode && res.data?.items?.length) {
+          const candidates = res.data.items.filter(
+            (item) =>
+              item.canCheckIn &&
+              !item.isCheckedIn &&
+              !autoCheckedSlugsRef.current.has(item.slug),
+          );
+
+          if (candidates.length > 0) {
+            for (const candidate of candidates) {
+              autoCheckedSlugsRef.current.add(candidate.slug);
+              setCheckingInId(candidate.id);
+              try {
+                const chkRes = await api.post<CheckInResult>(
+                  `/destinations/${candidate.slug}/check-in`,
+                  {
+                    lat: currentCoords.lat,
+                    lng: currentCoords.lng,
+                    isSimulated: isDemoMode,
+                  },
+                );
+                if (chkRes.data.created) {
+                  toast.success(
+                    `🛂 Tự động Điểm danh GPS (+${chkRes.data.pointsAwarded} EXP)!`,
+                    `Hệ thống phát hiện bạn đã đến "${candidate.name}" (${chkRes.data.distanceMeters}m) và tự động đóng dấu Hộ chiếu số!`,
+                  );
+                  if (chkRes.data.newBadges?.length) {
+                    announceBadges(chkRes.data.newBadges);
+                  }
+                  // Also record footprint point into Offline-First store so /footprints map lights up!
+                  await saveLocalTrack({
+                    clientId: `checkin-${candidate.slug}`,
+                    title: `Check-in: ${candidate.name}`,
+                    color: '#10b981',
+                    distanceKm: 0.25,
+                    durationSeconds: 60,
+                    startedAt: Date.now(),
+                    endedAt: Date.now(),
+                    points: [
+                      {
+                        lat: candidate.coordinates.lat,
+                        lng: candidate.coordinates.lng,
+                        timestamp: Date.now(),
+                      },
+                      {
+                        lat: candidate.coordinates.lat + 0.0005,
+                        lng: candidate.coordinates.lng + 0.0005,
+                        timestamp: Date.now() + 1000,
+                      },
+                    ],
+                    memories: [
+                      {
+                        clientId: `mem-chk-${candidate.slug}`,
+                        lat: candidate.coordinates.lat,
+                        lng: candidate.coordinates.lng,
+                        emoji: '🛂',
+                        moodLabel: 'Đã tự động điểm danh GPS',
+                        placeName: candidate.name,
+                        note: `Tự động điểm danh cách ${chkRes.data.distanceMeters}m`,
+                        createdAt: Date.now(),
+                      },
+                    ],
+                    syncStatus: 'pending',
+                  });
+                }
+              } catch {
+                // ignore auto check-in error
+              } finally {
+                setCheckingInId(null);
+              }
+            }
+
+            // Refresh list so checked-in state updates immediately on screen
+            const refreshed = await api.get<NearbyResponse>(
+              `/destinations/nearby?lat=${currentCoords.lat}&lng=${currentCoords.lng}&limit=60`,
+            );
+            setData(refreshed.data);
+          }
+        }
+      } catch (err) {
+        toast.error('Lỗi tải danh sách địa điểm', toApiError(err).message);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [autoCheckInMode, isDemoMode],
+  );
 
   useEffect(() => {
     if (coords) {
@@ -252,14 +364,14 @@ export function GpsCheckInPage() {
                 <span className="absolute inline-flex size-full animate-ping rounded-full bg-teal-300 opacity-75" />
                 <span className="relative inline-flex size-2 rounded-full bg-teal-400" />
               </span>
-              <span>ĐỊNH VỊ VỆ TINH GEOFENCING · BÁN KÍNH 1.000M</span>
+              <span>TỰ ĐỘNG ĐỊNH VỊ VỆ TINH GEOFENCING · BÁN KÍNH 1.000M</span>
             </div>
 
             <h1 className="mt-3 text-2xl font-bold text-white sm:text-4xl">
-              Điểm Danh Thực Địa GPS
+              Điểm Danh Thực Địa GPS (Tự Động)
             </h1>
             <p className="mt-2 max-w-2xl text-sm leading-relaxed text-leaf-100 sm:text-base">
-              Không cần dán hay quét mã QR phức tạp! Khi bạn có mặt thực tế tại các điểm đến di tích & sinh thái Đất Sen Hồng, hệ thống sẽ tự động đối chiếu tọa độ vệ tinh và mở khóa điểm danh nhận điểm <strong>EXP</strong> ngay trên thiết bị.
+              Không cần bấm tay hay quét mã QR! Chỉ cần bạn di chuyển đến trong bán kính <strong>1.000m</strong> của bất kỳ điểm tham quan nào tại Đất Sen Hồng, hệ thống sẽ <strong>tự động điểm danh nhận EXP</strong>, đóng dấu Hộ chiếu số và xóa sương mù trên <strong>Bản đồ Dấu chân</strong>!
             </p>
 
             {/* Quick stats on banner */}
@@ -275,21 +387,27 @@ export function GpsCheckInPage() {
             </div>
           </div>
 
-          {/* Quick link to 3D Passport */}
-          <div className="rounded-3xl bg-white/10 p-5 ring-1 ring-white/20 backdrop-blur-md lg:min-w-64">
-            <p className="text-xs font-semibold uppercase tracking-wider text-leaf-200">HỘ CHIẾU TRẢI NGHIỆM SỐ</p>
-            <p className="mt-1 text-lg font-bold text-white">
+          {/* Quick link to 3D Passport & Footprint Map */}
+          <div className="rounded-3xl bg-white/10 p-5 ring-1 ring-white/20 backdrop-blur-md lg:min-w-64 space-y-2.5">
+            <p className="text-xs font-semibold uppercase tracking-wider text-leaf-200">HỘ CHIẾU & BẢN ĐỒ DẤU CHÂN</p>
+            <p className="text-lg font-bold text-white">
               {user?.displayName || 'Du khách Khám phá'}
             </p>
-            <p className="text-xs text-leaf-100 mt-0.5">
-              Tích lũy EXP để thăng hạng Thẻ Sen Hồng 3D
-            </p>
             <ButtonLink
-              to="/passport"
+              to="/footprints"
               variant="inverted"
               size="sm"
-              className="mt-4 w-full justify-center"
-              icon={<Award className="size-4 text-leaf-800" />}
+              className="w-full justify-center"
+              icon={<Footprints className="size-4 text-leaf-800" />}
+            >
+              Bản đồ Dấu chân & Sương mù
+            </ButtonLink>
+            <ButtonLink
+              to="/passport"
+              variant="outlineInverted"
+              size="sm"
+              className="w-full justify-center"
+              icon={<Award className="size-4" />}
             >
               Xem Thẻ Du Hành 3D
             </ButtonLink>
@@ -329,6 +447,29 @@ export function GpsCheckInPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                const next = !autoCheckInMode;
+                setAutoCheckInMode(next);
+                toast.info(
+                  next ? 'Đã BẬT Tự động Điểm danh GPS' : 'Đã TẮT Tự động Điểm danh GPS',
+                  next
+                    ? 'Khi bạn di chuyển vào bán kính 1.000m của điểm đến, hệ thống sẽ tự động điểm danh ngay lập tức!'
+                    : 'Chuyển về chế độ bấm nút điểm danh thủ công.',
+                );
+              }}
+              className={clsx(
+                'inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-extrabold transition-all shadow-sm ring-1',
+                autoCheckInMode
+                  ? 'bg-emerald-600 text-white ring-emerald-700 hover:bg-emerald-700'
+                  : 'bg-sand-100 text-river-700 ring-sand-300 hover:bg-sand-200',
+              )}
+            >
+              <MapPinCheck className="size-3.5" />
+              {autoCheckInMode ? 'Tự động Điểm danh (<1km): BẬT' : 'Tự động Điểm danh: TẮT'}
+            </button>
+
             <Button
               size="sm"
               variant="secondary"
@@ -511,10 +652,10 @@ export function GpsCheckInPage() {
       )}
 
       {/* Filter Tabs & Search Bar */}
-      <section className="tp-fade-up mt-8">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          {/* Filter Pills */}
-          <div className="flex flex-wrap items-center gap-1.5 rounded-2xl bg-sand-100 p-1 ring-1 ring-sand-200">
+      <section className="tp-fade-up mt-6 sm:mt-8">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+          {/* Filter Pills (Single-row swipeable on mobile!) */}
+          <div className="flex flex-nowrap items-center gap-1.5 overflow-x-auto rounded-2xl bg-sand-100 p-1 ring-1 ring-sand-200 no-scrollbar sm:flex-wrap sm:overflow-visible">
             {[
               { id: 'all', label: 'Tất cả' },
               { id: 'inRange', label: `Trong bán kính (${data?.inRangeCount ?? 0})` },
@@ -526,7 +667,7 @@ export function GpsCheckInPage() {
                 type="button"
                 onClick={() => setActiveTab(tab.id as typeof activeTab)}
                 className={clsx(
-                  'rounded-xl px-3 py-1.5 text-xs font-semibold transition-all',
+                  'shrink-0 whitespace-nowrap rounded-xl px-3 py-1.5 text-xs font-semibold transition-all',
                   activeTab === tab.id
                     ? 'bg-white text-river-900 shadow-sm'
                     : 'text-river-600 hover:text-river-900',
@@ -538,14 +679,14 @@ export function GpsCheckInPage() {
           </div>
 
           {/* Search Box */}
-          <div className="relative min-w-64">
+          <div className="relative w-full sm:w-auto sm:min-w-64">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-river-400" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Tìm theo tên hoặc khu vực..."
-              className="w-full rounded-xl border border-sand-300 bg-white py-1.5 pl-9 pr-3 text-sm text-river-900 placeholder:text-river-400 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20"
+              className="w-full rounded-xl border border-sand-300 bg-white py-2 pl-9 pr-3 text-base text-river-900 placeholder:text-river-400 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 sm:py-1.5 sm:text-sm"
             />
           </div>
         </div>

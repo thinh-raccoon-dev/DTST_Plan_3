@@ -131,7 +131,7 @@ export function DestinationDetailPage() {
       </div>
 
       <div className="mt-8 grid gap-6 lg:grid-cols-[1.5fr_1fr]">
-        <div className="space-y-6">
+        <div className="min-w-0 space-y-6">
           <Card className="p-5 sm:p-6">
             <h2 className="flex items-center gap-2 text-lg">
               <Sparkles className="size-5 text-leaf-600" aria-hidden />

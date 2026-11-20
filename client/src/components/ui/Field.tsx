@@ -13,7 +13,7 @@ import {
 } from 'react';
 
 const controlBase =
-  'block w-full rounded-control border bg-sand-50 px-4 text-sm text-river-700 placeholder:text-river-500 transition-colors focus:outline-none focus:ring-2 disabled:bg-sand-100 disabled:text-river-500';
+  'block w-full rounded-control border bg-sand-50 px-4 text-base text-river-700 placeholder:text-river-500 transition-colors focus:outline-none focus:ring-2 disabled:bg-sand-100 disabled:text-river-500 sm:text-sm';
 
 function controlClasses(invalid?: boolean, extra?: string) {
   return clsx(
@@ -39,7 +39,7 @@ export function FormField({ label, error, hint, required, className, children }:
   const errorId = error ? `${id}-error` : undefined;
   const describedBy = [hintId, errorId].filter(Boolean).join(' ') || undefined;
   return (
-    <div className={clsx('space-y-1.5', className)}>
+    <div className={clsx('min-w-0 space-y-1.5', className)}>
       <label htmlFor={id} className="block text-sm font-medium text-river-800">
         {label}
         {required && <span className="ml-0.5 text-red-600" aria-hidden>*</span>}
@@ -79,7 +79,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSel
   ref,
 ) {
   return (
-    <select ref={ref} className={controlClasses(Boolean(rest['aria-invalid']), clsx('min-h-11 pr-8', className))} {...rest}>
+    <select ref={ref} className={controlClasses(Boolean(rest['aria-invalid']), clsx('min-h-11 truncate pr-8', className))} {...rest}>
       {children}
     </select>
   );

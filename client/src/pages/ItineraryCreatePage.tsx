@@ -704,18 +704,18 @@ export function ItineraryCreatePage() {
   const serviceOnline = placesQuery.data?.serviceOnline;
 
   return (
-    <PageContainer>
+    <PageContainer width={hasV9Plan ? 'cinema' : 'wide'}>
       {/* ── Hero ─────────────────────────────────────────────────── */}
-      <section className="tp-fade-up relative overflow-hidden rounded-panel bg-gradient-to-br from-leaf-900 via-leaf-800 to-leaf-600 px-6 py-8 text-white shadow-raised sm:px-10 sm:py-10">
+      <section className="tp-fade-up relative overflow-hidden rounded-panel bg-gradient-to-br from-leaf-900 via-leaf-800 to-leaf-600 px-5 py-6 text-white shadow-raised sm:px-10 sm:py-10">
         <div className="pointer-events-none absolute -right-10 -top-24 size-72 rounded-full bg-lotus-300/25 blur-3xl" aria-hidden />
         <div className="pointer-events-none absolute -bottom-24 left-10 size-72 rounded-full bg-leaf-300/25 blur-3xl" aria-hidden />
         <div className="relative grid items-center gap-6 lg:grid-cols-[1.5fr_1fr]">
-          <div>
+          <div className="min-w-0">
             <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold ring-1 ring-white/20">
               <Sparkles className="size-3.5 text-teal-200" aria-hidden />
               Trip Planner V9 · AI du lịch
             </span>
-            <h1 className="mt-4 text-3xl text-white sm:text-[2.6rem] sm:leading-[1.1]">
+            <h1 className="mt-3 text-2xl text-white sm:mt-4 sm:text-[2.6rem] sm:leading-[1.1]">
               Lập lịch trình Mỹ Tho – Thới Sơn chỉ trong vài giây
             </h1>
             <p className="mt-3 max-w-xl text-sm leading-relaxed text-leaf-100 sm:text-base">
@@ -762,10 +762,10 @@ export function ItineraryCreatePage() {
       </section>
 
       {/* ── Planner form ─────────────────────────────────────────── */}
-      <form id="itinerary-form" onSubmit={handleGenerateItinerary} noValidate className="mt-8 grid gap-6 lg:grid-cols-[1fr_340px]">
-        <div className="space-y-6">
+      <form id="itinerary-form" onSubmit={handleGenerateItinerary} noValidate className="mt-6 grid gap-5 sm:mt-8 sm:gap-6 lg:grid-cols-[1fr_340px]">
+        <div className="min-w-0 space-y-5 sm:space-y-6">
           {/* Step 1 */}
-          <section className="tp-fade-up rounded-panel bg-white p-5 shadow-card ring-1 ring-sand-200 sm:p-7">
+          <section className="tp-fade-up rounded-panel bg-white p-4 shadow-card ring-1 ring-sand-200 sm:p-7">
             <StepHeader step={1} title="Bạn muốn lập lịch thế nào?" description="Để AI tự gợi ý hoặc tự chọn các điểm muốn đến." />
             <div className="grid gap-3 sm:grid-cols-2">
               <OptionCard
@@ -911,7 +911,7 @@ export function ItineraryCreatePage() {
           </section>
 
           {/* Step 2 */}
-          <section className="tp-fade-up rounded-panel bg-white p-5 shadow-card ring-1 ring-sand-200 sm:p-7" style={{ animationDelay: '80ms' }}>
+          <section className="tp-fade-up rounded-panel bg-white p-4 shadow-card ring-1 ring-sand-200 sm:p-7" style={{ animationDelay: '80ms' }}>
             <StepHeader step={2} title="Thời gian, nhóm & ngân sách" description="Thông tin cơ bản để AI tính lịch phù hợp." />
             <div className="grid gap-4 sm:grid-cols-2">
               <FormField label="Điểm xuất phát" required>
@@ -1020,7 +1020,7 @@ export function ItineraryCreatePage() {
           </section>
 
           {/* Step 3 */}
-          <section className="tp-fade-up rounded-panel bg-white p-5 shadow-card ring-1 ring-sand-200 sm:p-7" style={{ animationDelay: '160ms' }}>
+          <section className="tp-fade-up rounded-panel bg-white p-4 shadow-card ring-1 ring-sand-200 sm:p-7" style={{ animationDelay: '160ms' }}>
             <StepHeader
               step={3}
               title="Sở thích của bạn"
@@ -1103,7 +1103,7 @@ export function ItineraryCreatePage() {
         </div>
 
         {/* ── Sticky summary sidebar ─────────────────────────────── */}
-        <aside className="lg:sticky lg:top-24 lg:self-start">
+        <aside className="min-w-0 lg:sticky lg:top-24 lg:self-start">
           <div className="tp-fade-up overflow-hidden rounded-panel bg-white shadow-raised ring-1 ring-sand-200" style={{ animationDelay: '120ms' }}>
             <div className="bg-gradient-to-br from-leaf-50 to-white px-5 pb-4 pt-5">
               <p className="eyebrow">Tóm tắt chuyến đi</p>

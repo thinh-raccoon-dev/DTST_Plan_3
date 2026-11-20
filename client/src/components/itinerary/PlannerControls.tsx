@@ -60,8 +60,10 @@ export function OptionCard({
       onClick={onClick}
       aria-pressed={selected}
       className={clsx(
-        'group relative flex w-full items-start gap-3 rounded-2xl border-2 text-left transition-all duration-200',
-        compact ? 'p-3' : 'p-4',
+        'group relative flex w-full rounded-2xl border-2 text-left transition-all duration-200',
+        compact
+          ? 'flex-col items-start gap-2 p-3 sm:flex-row sm:gap-3'
+          : 'items-start gap-3 p-3.5 sm:p-4',
         selected
           ? 'border-leaf-600 bg-gradient-to-br from-leaf-50 to-white shadow-raised'
           : 'border-sand-200 bg-white hover:-translate-y-0.5 hover:border-leaf-300 hover:shadow-card',
@@ -70,14 +72,14 @@ export function OptionCard({
       <span
         className={clsx(
           'grid shrink-0 place-items-center rounded-xl transition-transform duration-200 group-hover:scale-110',
-          compact ? 'size-9' : 'size-11',
+          compact ? 'size-8 sm:size-9' : 'size-10 sm:size-11',
           selected ? 'bg-leaf-600 text-white' : accentBg,
         )}
       >
         {icon}
       </span>
-      <span className="min-w-0 flex-1">
-        <span className={clsx('block font-semibold text-river-900', compact ? 'text-sm' : 'text-[0.95rem]')}>{title}</span>
+      <span className="min-w-0 flex-1 pr-5 sm:pr-0">
+        <span className={clsx('block font-semibold text-river-900', compact ? 'text-xs sm:text-sm' : 'text-sm sm:text-[0.95rem]')}>{title}</span>
         {description && (
           <span className={clsx('mt-0.5 block text-river-500', compact ? 'text-[11px] leading-snug' : 'text-xs leading-relaxed')}>
             {description}
@@ -162,7 +164,7 @@ export function Segmented<T extends string>({
   ariaLabel: string;
 }) {
   return (
-    <div role="radiogroup" aria-label={ariaLabel} className="flex gap-1 rounded-full bg-sand-100 p-1 ring-1 ring-sand-200">
+    <div role="radiogroup" aria-label={ariaLabel} className="flex min-w-0 gap-1 rounded-full bg-sand-100 p-1 ring-1 ring-sand-200">
       {options.map((opt) => {
         const active = opt.value === value;
         return (
@@ -174,12 +176,12 @@ export function Segmented<T extends string>({
             title={opt.hint}
             onClick={() => onChange(opt.value)}
             className={clsx(
-              'inline-flex min-h-9 flex-1 items-center justify-center gap-1.5 rounded-full px-3 text-sm font-semibold transition-all duration-200',
+              'inline-flex min-h-9 min-w-0 flex-1 items-center justify-center gap-1 rounded-full px-2 text-xs font-semibold transition-all duration-200 sm:gap-1.5 sm:px-3 sm:text-sm',
               active ? 'bg-white text-leaf-700 shadow-card ring-1 ring-leaf-200' : 'text-river-500 hover:text-river-800',
             )}
           >
             {opt.icon}
-            {opt.label}
+            <span className="truncate">{opt.label}</span>
           </button>
         );
       })}

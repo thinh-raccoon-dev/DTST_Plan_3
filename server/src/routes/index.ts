@@ -17,6 +17,7 @@ import * as aiController from '../controllers/ai.controller.js';
 import * as auth from '../controllers/auth.controller.js';
 import * as banners from '../controllers/banner.controller.js';
 import * as destinations from '../controllers/destination.controller.js';
+import * as footprints from '../controllers/footprint.controller.js';
 import * as itineraries from '../controllers/itinerary.controller.js';
 import * as passport from '../controllers/passport.controller.js';
 import * as qr from '../controllers/qr.controller.js';
@@ -105,6 +106,9 @@ export function buildApiRouter(): Router {
   // Passport & favorites
   api.get('/passport/me', passport.getMyPassport);
   api.post('/passport/claim', requireAuth, passport.claimDevicePassport);
+  api.get('/footprints', footprints.listFootprintsHandler);
+  api.post('/footprints/sync', eventLimiter, footprints.syncFootprintsHandler);
+  api.delete('/footprints/:clientId', footprints.deleteFootprintHandler);
   api.get('/favorites', requireAuth, passport.listFavorites);
   api.post('/favorites/:destinationId', requireAuth, passport.addFavorite);
   api.delete('/favorites/:destinationId', requireAuth, passport.removeFavorite);

@@ -35,7 +35,7 @@ import {
   Wallet,
   Zap,
 } from 'lucide-react';
-import { useMemo, useState, type CSSProperties, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import type {
   V9ActivityStep,
   V9Day,
@@ -60,6 +60,7 @@ import {
   type SafeAlternativeSuggestion,
   type StopSafetyReport,
 } from './SafetyGuardianPanel';
+import { V9Cinematic3DMap } from './V9Cinematic3DMap';
 import { toast } from '../../stores/toastStore';
 
 // Re-exported for backwards compatibility with existing imports.
@@ -162,15 +163,15 @@ function StatTile({
 }) {
   return (
     <div
-      className="tp-fade-up rounded-2xl bg-white/10 p-4 ring-1 ring-white/15 backdrop-blur-sm transition-colors hover:bg-white/15"
+      className="tp-fade-up rounded-2xl bg-white/10 p-3 ring-1 ring-white/15 backdrop-blur-sm transition-colors hover:bg-white/15 sm:p-4"
       style={style}
     >
-      <p className="flex items-center gap-2 text-xs font-medium text-leaf-100">
-        <span className="grid size-7 place-items-center rounded-lg bg-white/15 text-white">{icon}</span>
-        {label}
+      <p className="flex items-center gap-1.5 text-[11px] font-medium text-leaf-100 sm:gap-2 sm:text-xs">
+        <span className="grid size-6 shrink-0 place-items-center rounded-lg bg-white/15 text-white sm:size-7">{icon}</span>
+        <span className="truncate">{label}</span>
       </p>
-      <p className="mt-2 text-xl font-extrabold tracking-tight text-white sm:text-2xl">{value}</p>
-      {hint && <p className="mt-0.5 text-xs text-leaf-100/90">{hint}</p>}
+      <p className="mt-1.5 text-lg font-extrabold tracking-tight text-white sm:mt-2 sm:text-2xl">{value}</p>
+      {hint && <p className="mt-0.5 line-clamp-1 text-[11px] text-leaf-100/90 sm:text-xs">{hint}</p>}
       {children}
     </div>
   );
@@ -249,6 +250,11 @@ export function V9ItineraryView({
     step: V9ActivityStep;
   } | null>(null);
   const [safetyReport, setSafetyReport] = useState<ItinerarySafetyReport | null>(null);
+  const [show3DSplit, setShow3DSplit] = useState(true);
+  const [mobilePane, setMobilePane] = useState<'3d' | 'list'>('3d');
+  const [focusedStopId, setFocusedStopId] = useState<string | null>(null);
+  const timelineContainerRef = useRef<HTMLDivElement | null>(null);
+  const suppressScrollSpyRef = useRef(false);
 
   const safetyByStopKey = useMemo(() => {
     const map = new Map<string, StopSafetyReport>();
@@ -298,6 +304,47 @@ export function V9ItineraryView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const [activeDay, setActiveDay] = useState<number>(initialDayIndex); // -1 = show all days
+
+  // Scroll-Spy: automatically fly the 3D Map camera as the user scrolls through itinerary cards on the left!
+  useEffect(() => {
+    if (!show3DSplit || !timelineContainerRef.current) return;
+    const container = timelineContainerRef.current;
+    const nodes = Array.from(container.querySelectorAll<HTMLElement>('[data-stop-id]'));
+    if (nodes.length === 0) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (suppressScrollSpyRef.current) return;
+        const visible = entries
+          .filter((e) => e.isIntersecting)
+          .sort((a, b) => Math.abs(a.boundingClientRect.top - 180) - Math.abs(b.boundingClientRect.top - 180));
+        const topEntry = visible[0];
+        const sid = topEntry?.target.getAttribute('data-stop-id');
+        if (sid) {
+          setFocusedStopId(sid);
+        }
+      },
+      { rootMargin: '-18% 0px -52% 0px', threshold: [0.1, 0.5] },
+    );
+
+    nodes.forEach((n) => observer.observe(n));
+    return () => observer.disconnect();
+  }, [activeDay, itinerary.days, show3DSplit]);
+
+  // Clicking a 3D pin or Fly-Through step smoothly scrolls the matching card on the left into view
+  const handleSelectStopFromMap = useCallback((stopId: string) => {
+    setFocusedStopId(stopId);
+    const el = timelineContainerRef.current?.querySelector<HTMLElement>(
+      `[data-stop-id="${CSS.escape(stopId)}"]`,
+    );
+    if (el) {
+      suppressScrollSpyRef.current = true;
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      window.setTimeout(() => {
+        suppressScrollSpyRef.current = false;
+      }, 850);
+    }
+  }, []);
 
   const requestGps = () => {
     if (!('geolocation' in navigator)) return;
@@ -476,7 +523,7 @@ export function V9ItineraryView({
   return (
     <div className="space-y-6">
       {/* ── Header banner ────────────────────────────────────────── */}
-      <section className="relative overflow-hidden rounded-panel bg-gradient-to-br from-leaf-700 via-leaf-800 to-river-900 p-6 text-white shadow-raised sm:p-8">
+      <section className="relative overflow-hidden rounded-panel bg-gradient-to-br from-leaf-700 via-leaf-800 to-river-900 p-4 text-white shadow-raised sm:p-8">
         <div className="relative z-10 flex flex-col justify-between gap-4 md:flex-row md:items-center">
           <div>
             <div className="flex flex-wrap items-center gap-2">
@@ -535,7 +582,7 @@ export function V9ItineraryView({
           )}
         </div>
 
-        <div className="relative mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="relative mt-4 grid grid-cols-2 gap-2.5 sm:mt-6 sm:gap-3 lg:grid-cols-4">
           <StatTile
             icon={<CalendarDays className="size-4" aria-hidden />}
             label="Thời gian & nhóm"
@@ -597,14 +644,16 @@ export function V9ItineraryView({
         )}
       </section>
 
-      {/* ── Real-Time Weather, Accident & Landslide Safety Guardian ─ */}
-      <SafetyGuardianPanel
-        itinerary={itinerary}
-        placesById={placesById}
-        onReportChange={setSafetyReport}
-        onApplyAlternative={onUpdateItinerary ? handleApplySafeAlternative : undefined}
-        editable={editable && Boolean(onUpdateItinerary)}
-      />
+      {/* ── Real-Time Weather, Accident & Landslide Safety Guardian (Full-Width Mode) ─ */}
+      {!show3DSplit && (
+        <SafetyGuardianPanel
+          itinerary={itinerary}
+          placesById={placesById}
+          onReportChange={setSafetyReport}
+          onApplyAlternative={onUpdateItinerary ? handleApplySafeAlternative : undefined}
+          editable={editable && Boolean(onUpdateItinerary)}
+        />
+      )}
 
       {/* ── Next stop after replan ───────────────────────────────── */}
       {highlightedNextStop && (
@@ -697,7 +746,7 @@ export function V9ItineraryView({
               return (
                 <article
                   key={place.id}
-                  className="tp-fade-up group relative flex flex-col justify-between overflow-hidden rounded-card bg-white p-4 shadow-card ring-1 ring-sand-200 transition-all duration-200 hover:-translate-y-1 hover:shadow-raised hover:ring-leaf-300"
+                  className="tp-fade-up group relative flex min-w-0 flex-col justify-between overflow-hidden rounded-card bg-white p-4 shadow-card ring-1 ring-sand-200 transition-all duration-200 hover:-translate-y-1 hover:shadow-raised hover:ring-leaf-300"
                   style={{ animationDelay: `${idx * 70}ms` }}
                 >
                   <span className="absolute right-3 top-3 text-4xl font-black text-sand-100 transition-colors group-hover:text-leaf-100" aria-hidden>
@@ -726,17 +775,17 @@ export function V9ItineraryView({
                       <span className={clsx('grid size-11 shrink-0 place-items-center rounded-xl', meta.bubble)}>
                         <meta.Icon className="size-5" aria-hidden />
                       </span>
-                      <div className="min-w-0">
+                      <div className="min-w-0 flex-1">
                         <p className="text-[11px] font-semibold uppercase tracking-wide text-river-500">{meta.label}</p>
                         {place.slug ? (
                           <a
                             href={`/destinations/${place.slug}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 truncate font-bold text-river-900 transition hover:text-leaf-700 hover:underline"
+                            className="flex max-w-full items-center gap-1 font-bold text-river-900 transition hover:text-leaf-700 hover:underline"
                             title={place.name}
                           >
-                            <span>{place.name}</span>
+                            <span className="truncate">{place.name}</span>
                             <ExternalLink className="size-3 shrink-0 opacity-60" />
                           </a>
                         ) : (
@@ -825,10 +874,14 @@ export function V9ItineraryView({
         </Notice>
       )}
 
-      {/* ── Day tabs ─────────────────────────────────────────────── */}
+      {/* ── Day tabs + Split-Screen 3D Fly-Through Stage ─────────── */}
       <section>
-        <div className="sticky top-[4.75rem] z-20 -mx-1 mb-4 overflow-x-auto rounded-full bg-white/85 p-1 shadow-card ring-1 ring-sand-200 backdrop-blur">
-          <div role="tablist" aria-label="Chọn ngày" className="flex min-w-max gap-1">
+        <div className="sticky top-[4.5rem] z-20 -mx-1 mb-4 flex flex-col gap-2 rounded-2xl bg-white/95 p-1.5 shadow-card ring-1 ring-sand-200 backdrop-blur-md md:flex-row md:items-center md:justify-between md:rounded-full">
+          <div
+            role="tablist"
+            aria-label="Chọn ngày"
+            className="flex flex-nowrap items-center gap-1 overflow-x-auto no-scrollbar"
+          >
             {itinerary.days.map((d, i) => {
               const active = activeDay === i;
               return (
@@ -837,9 +890,12 @@ export function V9ItineraryView({
                   type="button"
                   role="tab"
                   aria-selected={active}
-                  onClick={() => setActiveDay(i)}
+                  onClick={() => {
+                    setActiveDay(i);
+                    setFocusedStopId(null);
+                  }}
                   className={clsx(
-                    'inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition-all duration-200',
+                    'inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-2 text-xs font-semibold transition-all duration-200 sm:gap-2 sm:px-4 sm:text-sm',
                     active ? 'bg-leaf-600 text-white shadow-cta' : 'text-river-600 hover:bg-leaf-50 hover:text-river-900',
                   )}
                 >
@@ -851,7 +907,7 @@ export function V9ItineraryView({
                     aria-hidden
                   />
                   Ngày {d.day}
-                  <span className={clsx('text-xs font-medium', active ? 'text-leaf-100' : 'text-river-400')}>
+                  <span className={clsx('text-[11px] font-medium sm:text-xs', active ? 'text-leaf-100' : 'text-river-400')}>
                     {d.date.slice(8, 10)}/{d.date.slice(5, 7)}
                   </span>
                 </button>
@@ -862,9 +918,12 @@ export function V9ItineraryView({
                 type="button"
                 role="tab"
                 aria-selected={activeDay === -1}
-                onClick={() => setActiveDay(-1)}
+                onClick={() => {
+                  setActiveDay(-1);
+                  setFocusedStopId(null);
+                }}
                 className={clsx(
-                  'rounded-full px-4 py-2 text-sm font-semibold transition-all duration-200',
+                  'shrink-0 whitespace-nowrap rounded-full px-3.5 py-2 text-xs font-semibold transition-all duration-200 sm:px-4 sm:text-sm',
                   activeDay === -1 ? 'bg-leaf-600 text-white shadow-cta' : 'text-river-600 hover:bg-leaf-50',
                 )}
               >
@@ -872,29 +931,112 @@ export function V9ItineraryView({
               </button>
             )}
           </div>
+
+          {/* Mobile (< md): Crisp 2-tab native toggle between 3D Map & Itinerary List */}
+          <div className="grid grid-cols-2 gap-1 rounded-xl bg-sand-100 p-1 md:hidden">
+            <button
+              type="button"
+              onClick={() => {
+                setShow3DSplit(true);
+                setMobilePane('3d');
+              }}
+              className={clsx(
+                'inline-flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-extrabold transition',
+                mobilePane === '3d'
+                  ? 'bg-gradient-to-r from-river-900 to-teal-800 text-emerald-200 shadow-xs'
+                  : 'text-river-600',
+              )}
+            >
+              <Compass className="size-3.5" /> 🕶️ Bản đồ 3D
+            </button>
+            <button
+              type="button"
+              onClick={() => setMobilePane('list')}
+              className={clsx(
+                'inline-flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-extrabold transition',
+                mobilePane === 'list'
+                  ? 'bg-white text-leaf-900 shadow-xs ring-1 ring-sand-200'
+                  : 'text-river-600',
+              )}
+            >
+              📋 Chi tiết Lịch trình
+            </button>
+          </div>
+
+          {/* Tablet / Desktop (md+): Split-Screen 3D Toggle */}
+          <button
+            type="button"
+            onClick={() => setShow3DSplit((v) => !v)}
+            className={clsx(
+              'hidden shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 text-xs font-extrabold transition md:inline-flex',
+              show3DSplit
+                ? 'bg-gradient-to-r from-river-900 to-teal-800 text-emerald-200 shadow-sm ring-1 ring-emerald-400/40'
+                : 'bg-sand-100 text-river-700 hover:bg-sand-200',
+            )}
+          >
+            <Compass className="size-3.5" />
+            {show3DSplit ? '🕶️ Split-Screen 3D Bay Lượn: BẬT' : '🕶️ Bật Bản đồ 3D Bay Lượn'}
+          </button>
         </div>
 
-        <div className="space-y-6">
-          {daysToRender.map((day) => (
-            <DayTimeline
-              key={`${day.day}-${activeDay}`}
-              day={day}
-              placesById={placesById}
-              onReplan={onReplan}
-              replanningStopId={replanningStopId}
-              customTimeByStop={customTimeByStop}
-              setCustomTimeByStop={setCustomTimeByStop}
-              userGps={userGps}
-              editable={editable && Boolean(onUpdateItinerary)}
-              onMoveStop={(stopId, dir) => handleMoveStop(day.day, stopId, dir)}
-              onRemoveStop={(stopId) => handleRemoveStop(day.day, stopId)}
-              onRequestSwapStop={onRequestSwapStop ? (step) => onRequestSwapStop(day.day, step) : undefined}
-              onQuickSituation={(step, situation) => handleQuickSituation(day, step, situation)}
-              onOpenSituationModal={(step) => setSituationModalStop({ dayNumber: day.day, step })}
-              safetyByStopKey={safetyByStopKey}
-              onApplySafeAlternative={onUpdateItinerary ? handleApplySafeAlternative : undefined}
-            />
-          ))}
+        <div
+          className={clsx(
+            show3DSplit
+              ? 'grid gap-6 md:grid-cols-[minmax(340px,45%)_1fr] xl:grid-cols-[minmax(440px,45%)_1fr] md:items-start'
+              : 'space-y-6',
+          )}
+        >
+          {/* Left Column: Clean Scrollable Editorial Itinerary Cards (Scroll-Synced to 3D Camera on md+!) */}
+          <div
+            ref={timelineContainerRef}
+            className={clsx('min-w-0 space-y-6', show3DSplit && mobilePane === '3d' && 'hidden md:block')}
+          >
+            {daysToRender.map((day) => (
+              <DayTimeline
+                key={`${day.day}-${activeDay}`}
+                day={day}
+                placesById={placesById}
+                onReplan={onReplan}
+                replanningStopId={replanningStopId}
+                customTimeByStop={customTimeByStop}
+                setCustomTimeByStop={setCustomTimeByStop}
+                userGps={userGps}
+                editable={editable && Boolean(onUpdateItinerary)}
+                onMoveStop={(stopId, dir) => handleMoveStop(day.day, stopId, dir)}
+                onRemoveStop={(stopId) => handleRemoveStop(day.day, stopId)}
+                onRequestSwapStop={onRequestSwapStop ? (step) => onRequestSwapStop(day.day, step) : undefined}
+                onQuickSituation={(step, situation) => handleQuickSituation(day, step, situation)}
+                onOpenSituationModal={(step) => setSituationModalStop({ dayNumber: day.day, step })}
+                safetyByStopKey={safetyByStopKey}
+                onApplySafeAlternative={onUpdateItinerary ? handleApplySafeAlternative : undefined}
+                focusedStopId={show3DSplit ? focusedStopId : null}
+                onFocusStop={show3DSplit ? setFocusedStopId : undefined}
+                compactLayout={show3DSplit}
+              />
+            ))}
+          </div>
+
+          {/* Right Column: Sticky Full-Height 3D WebGL Fly-Through Canvas */}
+          {show3DSplit && (
+            <div
+              className={clsx(
+                'min-w-0 order-first md:order-last md:sticky md:top-[8.5rem]',
+                mobilePane === 'list' && 'hidden md:block',
+              )}
+            >
+              <V9Cinematic3DMap
+                itinerary={itinerary}
+                activeDayIndex={activeDay}
+                activeStopId={focusedStopId}
+                onSelectStop={handleSelectStopFromMap}
+                placesById={placesById}
+                safetyReport={safetyReport}
+                onSafetyReportChange={setSafetyReport}
+                onApplySafeAlternative={onUpdateItinerary ? handleApplySafeAlternative : undefined}
+                editable={editable && Boolean(onUpdateItinerary)}
+              />
+            </div>
+          )}
         </div>
       </section>
 
@@ -1052,14 +1194,14 @@ function BudgetAllocation({
           ) : null,
         )}
       </div>
-      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-5">
+      <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-5 sm:gap-3">
         {ALLOC_META.map((m) => (
-          <div key={m.key} className="rounded-xl bg-sand-50 p-3 transition hover:bg-leaf-50">
+          <div key={m.key} className="min-w-0 rounded-xl bg-sand-50 p-3 transition hover:bg-leaf-50">
             <p className="flex items-center gap-1.5 text-xs text-river-500">
-              <span className={clsx('size-2.5 rounded-full', m.color)} aria-hidden />
-              {m.label}
+              <span className={clsx('size-2.5 shrink-0 rounded-full', m.color)} aria-hidden />
+              <span className="truncate">{m.label}</span>
             </p>
-            <p className="mt-1 font-bold text-river-900">{formatVnd(alloc[m.key])}</p>
+            <p className="mt-1 truncate text-sm font-bold text-river-900 sm:text-base">{formatVnd(alloc[m.key])}</p>
             <p className="text-[11px] text-river-400">{Math.round((alloc[m.key] / total) * 100)}%</p>
           </div>
         ))}
@@ -1084,6 +1226,9 @@ interface DayTimelineProps {
   onOpenSituationModal: (step: V9ActivityStep) => void;
   safetyByStopKey?: Map<string, StopSafetyReport>;
   onApplySafeAlternative?: (rep: StopSafetyReport, alt: SafeAlternativeSuggestion) => void;
+  focusedStopId?: string | null;
+  onFocusStop?: (stopId: string) => void;
+  compactLayout?: boolean;
 }
 
 function DayTimeline({
@@ -1102,6 +1247,9 @@ function DayTimeline({
   onOpenSituationModal,
   safetyByStopKey,
   onApplySafeAlternative,
+  focusedStopId,
+  onFocusStop,
+  compactLayout,
 }: DayTimelineProps) {
   const firstIncompleteStop = day.activities.find((s) => Boolean(s.stop_id) && s.status !== 'completed');
   const dayIssues: V9StopIssue[] = day.replan_state?.issues ?? [];
@@ -1114,7 +1262,7 @@ function DayTimeline({
   const travelKm = day.activities.reduce((n, s) => n + (s.type === 'travel' && typeof s.distance_km === 'number' ? s.distance_km : 0), 0);
 
   return (
-    <article className="tp-fade-up rounded-panel bg-white p-5 shadow-card ring-1 ring-sand-200 sm:p-7">
+    <article className="tp-fade-up min-w-0 overflow-hidden rounded-panel bg-white p-3.5 shadow-card ring-1 ring-sand-200 sm:p-6">
       <header className="flex flex-wrap items-start justify-between gap-3 border-b border-sand-200 pb-5">
         <div className="flex items-center gap-4">
           <div className="grid size-14 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-leaf-600 to-leaf-800 text-white shadow-cta">
@@ -1259,6 +1407,9 @@ function DayTimeline({
                 safetyByStopKey?.get(`${day.day}:name:${step.name}`)
               }
               onApplySafeAlternative={onApplySafeAlternative}
+              isFocusedOn3D={Boolean(step.stop_id && focusedStopId === step.stop_id)}
+              onFocusOn3D={step.stop_id && onFocusStop ? () => onFocusStop(step.stop_id!) : undefined}
+              compactLayout={compactLayout}
             />
           );
         })}
@@ -1323,6 +1474,9 @@ interface StopCardProps {
   onOpenSituationModal?: () => void;
   safetyReport?: StopSafetyReport;
   onApplySafeAlternative?: (rep: StopSafetyReport, alt: SafeAlternativeSuggestion) => void;
+  isFocusedOn3D?: boolean;
+  onFocusOn3D?: () => void;
+  compactLayout?: boolean;
 }
 
 function StopCard({
@@ -1348,6 +1502,9 @@ function StopCard({
   onOpenSituationModal,
   safetyReport,
   onApplySafeAlternative,
+  isFocusedOn3D,
+  onFocusOn3D,
+  compactLayout,
 }: StopCardProps) {
   const isStop = Boolean(step.stop_id);
   const isMeal = step.type === 'meal' || step.type === 'meal_unassigned' || step.type === 'meal_unscheduled';
@@ -1383,32 +1540,44 @@ function StopCard({
           : 'bg-leaf-600 text-white';
 
   return (
-    <li className="tp-fade-up relative flex gap-3 py-2" style={style}>
+    <li
+      data-stop-id={step.stop_id ?? undefined}
+      onClick={onFocusOn3D}
+      className={clsx('tp-fade-up relative flex min-w-0 gap-2 py-2 sm:gap-3', onFocusOn3D && 'cursor-pointer')}
+      style={style}
+    >
       <span
         className={clsx(
-          'relative z-10 mt-3 grid size-10 shrink-0 place-items-center rounded-full shadow-card ring-4 ring-white',
+          'relative z-10 mt-3 grid size-8 shrink-0 place-items-center rounded-full shadow-card ring-4 ring-white sm:size-10',
           railClass,
-          (step.status === 'arrived' || isCurrentActionable) && 'tp-pulse-ring',
+          (step.status === 'arrived' || isCurrentActionable || isFocusedOn3D) && 'tp-pulse-ring',
         )}
       >
-        <RailIcon className="size-4.5" aria-hidden />
+        <RailIcon className="size-4 sm:size-4.5" aria-hidden />
       </span>
 
       <div
         className={clsx(
-          'flex-1 rounded-2xl border p-4 transition-all duration-200',
-          stepIssue
-            ? 'border-lotus-300 bg-lotus-50/50'
-            : step.status === 'completed'
-              ? 'border-leaf-200 bg-leaf-50/40 opacity-80'
-              : step.status === 'arrived'
-                ? 'border-leaf-500 bg-leaf-50/70 shadow-raised'
-                : isCurrentActionable
-                  ? 'border-leaf-400 bg-white shadow-raised'
-                  : 'border-sand-200 bg-white hover:-translate-y-0.5 hover:border-leaf-300 hover:shadow-raised',
+          'min-w-0 flex-1 rounded-2xl border p-3 transition-all duration-200 sm:p-4',
+          isFocusedOn3D
+            ? 'border-emerald-500 bg-emerald-50/35 shadow-raised ring-2 ring-emerald-400/60'
+            : stepIssue
+              ? 'border-lotus-300 bg-lotus-50/50'
+              : step.status === 'completed'
+                ? 'border-leaf-200 bg-leaf-50/40 opacity-80'
+                : step.status === 'arrived'
+                  ? 'border-leaf-500 bg-leaf-50/70 shadow-raised'
+                  : isCurrentActionable
+                    ? 'border-leaf-400 bg-white shadow-raised'
+                    : 'border-sand-200 bg-white hover:-translate-y-0.5 hover:border-leaf-300 hover:shadow-raised',
         )}
       >
-        <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
+        <div
+          className={clsx(
+            'flex flex-col justify-between gap-3',
+            !compactLayout && 'sm:flex-row sm:items-start',
+          )}
+        >
           <div className="min-w-0 space-y-1.5">
             <div className="flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center gap-1 rounded-full bg-river-900 px-2.5 py-0.5 text-xs font-semibold tabular-nums text-white">
@@ -1434,6 +1603,11 @@ function StopCard({
                       ? 'Tự chọn quán'
                       : 'Cần lưu ý'}
               </span>
+              {isFocusedOn3D && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-600 px-2.5 py-0.5 text-[11px] font-extrabold text-white shadow-xs">
+                  <Sparkles className="size-3" /> Đang bay 3D
+                </span>
+              )}
               {isStop && step.status !== 'pending' && (
                 <span
                   className={clsx(
@@ -1575,7 +1749,14 @@ function StopCard({
             )}
           </div>
 
-          <div className="flex shrink-0 flex-col items-stretch gap-2 sm:items-end">
+          <div
+            className={clsx(
+              'flex shrink-0 gap-2',
+              compactLayout
+                ? 'flex-row flex-wrap items-center justify-between border-t border-sand-100 pt-2.5'
+                : 'flex-col items-stretch sm:items-end',
+            )}
+          >
             {/* Stop Reordering & Delete Controls (Backlog 8) */}
             {editable && isStop && (
               <div className="flex items-center gap-1.5 rounded-2xl bg-white p-1 shadow-2xs ring-1 ring-sand-200/90 backdrop-blur-xs">
