@@ -2,18 +2,29 @@ import type { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import { isDatabaseReady } from '../../config/db.js';
 import { AnalyticsEventModel } from '../../models/AnalyticsEvent.js';
+import { AuditLogModel } from '../../models/AuditLog.js';
 import { BadgeModel } from '../../models/Badge.js';
 import { BannerModel } from '../../models/Banner.js';
 import { ChallengeModel } from '../../models/Challenge.js';
 import { DestinationModel } from '../../models/Destination.js';
 import { FavoriteModel } from '../../models/Favorite.js';
+import { GroupInquiryModel } from '../../models/GroupInquiry.js';
 import { ItineraryModel } from '../../models/Itinerary.js';
+import { PartnerVoucherModel } from '../../models/PartnerVoucher.js';
 import { PassportEntryModel } from '../../models/PassportEntry.js';
 import { QrCodeModel } from '../../models/QrCode.js';
+import { ReviewModel } from '../../models/Review.js';
+import { SafetyAlertModel } from '../../models/SafetyAlert.js';
 import { SystemSettingModel } from '../../models/SystemSetting.js';
+import { TravelFootprintModel } from '../../models/TravelFootprint.js';
 import { UserModel } from '../../models/User.js';
+import { VoucherClaimModel } from '../../models/VoucherClaim.js';
 import { logAuditEvent } from '../../services/audit.service.js';
 import { updateSystemSettingsSchema } from '../../schemas/system.schemas.js';
+import {
+  getEffectiveSystemSettings,
+  invalidateSystemSettingsCache,
+} from '../../services/systemSettings.service.js';
 import { getPlannerHealth } from '../../services/tripPlannerV9.service.js';
 
 export async function getSystemStatus(_req: Request, res: Response) {
@@ -32,6 +43,13 @@ export async function getSystemStatus(_req: Request, res: Response) {
     bannersCount,
     favoritesCount,
     analyticsCount,
+    reviewsCount,
+    safetyAlertsCount,
+    vouchersCount,
+    voucherClaimsCount,
+    groupInquiriesCount,
+    footprintsCount,
+    auditLogsCount,
   ] = await Promise.all([
     getPlannerHealth(),
     UserModel.countDocuments().catch(() => 0),
@@ -44,6 +62,13 @@ export async function getSystemStatus(_req: Request, res: Response) {
     BannerModel.countDocuments().catch(() => 0),
     FavoriteModel.countDocuments().catch(() => 0),
     AnalyticsEventModel.countDocuments().catch(() => 0),
+    ReviewModel.countDocuments().catch(() => 0),
+    SafetyAlertModel.countDocuments().catch(() => 0),
+    PartnerVoucherModel.countDocuments().catch(() => 0),
+    VoucherClaimModel.countDocuments().catch(() => 0),
+    GroupInquiryModel.countDocuments().catch(() => 0),
+    TravelFootprintModel.countDocuments().catch(() => 0),
+    AuditLogModel.countDocuments().catch(() => 0),
   ]);
 
   res.json({
@@ -75,6 +100,13 @@ export async function getSystemStatus(_req: Request, res: Response) {
           banners: bannersCount,
           favorites: favoritesCount,
           analyticsEvents: analyticsCount,
+          reviews: reviewsCount,
+          safetyAlerts: safetyAlertsCount,
+          vouchers: vouchersCount,
+          voucherClaims: voucherClaimsCount,
+          groupInquiries: groupInquiriesCount,
+          footprints: footprintsCount,
+          auditLogs: auditLogsCount,
         },
       },
       aiEngine: {
@@ -111,6 +143,8 @@ export async function updateSystemSettings(req: Request, res: Response) {
     { upsert: true, new: true },
   ).lean();
 
+  invalidateSystemSettingsCache();
+
   await logAuditEvent({
     req,
     action: 'system.settings.update',
@@ -124,13 +158,16 @@ export async function updateSystemSettings(req: Request, res: Response) {
 }
 
 export async function getPublicAnnouncement(_req: Request, res: Response) {
-  const settings = await SystemSettingModel.findOne({ key: 'global' }).select('announcement contact').lean();
-  if (!settings || !settings.announcement?.enabled) {
-    return res.json({ announcement: null, contact: settings?.contact ?? null });
-  }
-
+  const settings = await getEffectiveSystemSettings();
+  res.set('Cache-Control', 'no-store');
   res.json({
-    announcement: settings.announcement,
+    announcement:
+      settings.announcement.enabled && settings.announcement.message.trim()
+        ? settings.announcement
+        : null,
     contact: settings.contact,
+    maintenanceMode: settings.general.maintenanceMode,
+    enablePublicRegistration: settings.general.enablePublicRegistration,
+    enableAiPlanner: settings.general.enableAiPlanner,
   });
 }

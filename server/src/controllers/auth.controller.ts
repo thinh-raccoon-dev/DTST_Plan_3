@@ -3,6 +3,7 @@ import type { Request, Response } from 'express';
 import { signAccessToken } from '../middleware/auth.js';
 import { UserModel } from '../models/User.js';
 import { loginSchema, registerSchema, updateProfileSchema } from '../schemas/auth.schemas.js';
+import { getEffectiveSystemSettings } from '../services/systemSettings.service.js';
 import { AUTH_COOKIE, baseCookieOptions } from '../utils/cookies.js';
 import { AppError, conflict, unauthorized } from '../utils/errors.js';
 
@@ -11,10 +12,9 @@ const SESSION_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 7;
 // Compared against when the email does not exist, so response time does not reveal accounts.
 const DUMMY_HASH = bcrypt.hashSync('dtst-timing-equalizer', BCRYPT_ROUNDS);
 
-function setSessionCookie(res: Response, userId: string): string {
-  const token = signAccessToken(userId);
+function setSessionCookie(res: Response, userId: string, tokenVersion = 0): void {
+  const token = signAccessToken(userId, tokenVersion);
   res.cookie(AUTH_COOKIE, token, { ...baseCookieOptions(), maxAge: SESSION_MAX_AGE_MS });
-  return token;
 }
 
 function defaultPreferences(prefs?: {
@@ -53,6 +53,15 @@ function toAuthUser(user: {
 }
 
 export async function register(req: Request, res: Response) {
+  const settings = await getEffectiveSystemSettings();
+  if (!settings.general.enablePublicRegistration) {
+    throw new AppError(
+      403,
+      'REGISTRATION_DISABLED',
+      'Đăng ký tài khoản công khai hiện đang tạm đóng theo cấu hình quản trị.',
+    );
+  }
+
   const input = registerSchema.parse(req.body);
   if (await UserModel.exists({ email: input.email })) throw conflict('Email này đã được sử dụng.', 'EMAIL_TAKEN');
 
@@ -63,8 +72,8 @@ export async function register(req: Request, res: Response) {
     passwordHash: await bcrypt.hash(input.password, BCRYPT_ROUNDS),
     role: 'tourist',
   });
-  const token = setSessionCookie(res, String(user._id));
-  res.status(201).json({ user: toAuthUser(user), token });
+  setSessionCookie(res, String(user._id), user.tokenVersion ?? 0);
+  res.status(201).json({ user: toAuthUser(user) });
 }
 
 export async function login(req: Request, res: Response) {
@@ -74,8 +83,8 @@ export async function login(req: Request, res: Response) {
   if (!user || !passwordOk) throw new AppError(401, 'INVALID_CREDENTIALS', 'Email hoặc mật khẩu không đúng.');
   if (user.status !== 'active') throw new AppError(403, 'ACCOUNT_DISABLED', 'Tài khoản đã bị vô hiệu hóa.');
 
-  const token = setSessionCookie(res, String(user._id));
-  res.json({ user: toAuthUser(user), token });
+  setSessionCookie(res, String(user._id), user.tokenVersion ?? 0);
+  res.json({ user: toAuthUser(user) });
 }
 
 export function logout(_req: Request, res: Response) {
@@ -95,13 +104,19 @@ export async function updateProfile(req: Request, res: Response) {
 
   if (input.displayName) user.displayName = input.displayName;
   if (input.preferences) user.preferences = input.preferences;
+  let passwordChanged = false;
   if (input.newPassword) {
     const currentOk = await bcrypt.compare(input.currentPassword ?? '', user.passwordHash);
     if (!currentOk) throw new AppError(400, 'INVALID_PASSWORD', 'Mật khẩu hiện tại không đúng.');
     user.passwordHash = await bcrypt.hash(input.newPassword, BCRYPT_ROUNDS);
+    user.tokenVersion = (user.tokenVersion ?? 0) + 1;
+    passwordChanged = true;
   }
 
   await user.save();
+  if (passwordChanged) {
+    setSessionCookie(res, String(user._id), user.tokenVersion ?? 0);
+  }
   const payload = toAuthUser(user);
   req.user = { ...payload, role: user.role };
   res.json({ user: payload });

@@ -8,7 +8,7 @@ import {
   Settings,
   Sparkles,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AdminPageHeader } from '../../components/layout/AdminLayout';
 import { StatusBadge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
@@ -16,7 +16,7 @@ import { Card } from '../../components/ui/Card';
 import { FormField, Input, Select, Textarea } from '../../components/ui/Field';
 import { useApiQuery } from '../../hooks/useApiQuery';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
-import { api } from '../../lib/api';
+import { api, toApiError } from '../../lib/api';
 import { toast } from '../../stores/toastStore';
 import type { SystemSettings, SystemStatusResponse } from '../../types/api';
 
@@ -55,12 +55,15 @@ export function AdminSystemPage() {
     [],
   );
 
+  const reloadStatusRef = useRef(statusQuery.reload);
+  reloadStatusRef.current = statusQuery.reload;
+
   useEffect(() => {
     const timer = setInterval(() => {
-      statusQuery.reload();
+      reloadStatusRef.current();
     }, 15000);
     return () => clearInterval(timer);
-  }, [statusQuery]);
+  }, []);
 
   useEffect(() => {
     if (settingsQuery.data?.settings) {
@@ -73,11 +76,10 @@ export function AdminSystemPage() {
     setSaving(true);
     try {
       await api.put('/admin/system/settings', formData);
-      toast.success('Đã lưu cấu hình hệ thống thành công.');
+      toast.success('Đã lưu cấu hình hệ thống và áp dụng tức thì toàn nền tảng.');
       settingsQuery.reload();
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Không thể lưu cấu hình.';
-      toast.error(msg);
+      toast.error('Không thể lưu cấu hình', toApiError(err).message);
     } finally {
       setSaving(false);
     }
@@ -226,6 +228,34 @@ export function AdminSystemPage() {
           <div className="rounded-control bg-sand-50 p-2.5">
             <div className="font-bold text-base text-river-800">{services?.database?.counts?.analyticsEvents ?? 0}</div>
             <div className="text-river-600">Sự kiện tương tác</div>
+          </div>
+          <div className="rounded-control bg-sand-50 p-2.5">
+            <div className="font-bold text-base text-amber-700">{services?.database?.counts?.reviews ?? 0}</div>
+            <div className="text-river-600">Đánh giá</div>
+          </div>
+          <div className="rounded-control bg-sand-50 p-2.5">
+            <div className="font-bold text-base text-lotus-700">{services?.database?.counts?.vouchers ?? 0}</div>
+            <div className="text-river-600">Voucher KDL</div>
+          </div>
+          <div className="rounded-control bg-sand-50 p-2.5">
+            <div className="font-bold text-base text-teal-700">{services?.database?.counts?.voucherClaims ?? 0}</div>
+            <div className="text-river-600">Lượt đổi mã</div>
+          </div>
+          <div className="rounded-control bg-sand-50 p-2.5">
+            <div className="font-bold text-base text-leaf-700">{services?.database?.counts?.groupInquiries ?? 0}</div>
+            <div className="text-river-600">Đơn đặt đoàn</div>
+          </div>
+          <div className="rounded-control bg-sand-50 p-2.5">
+            <div className="font-bold text-base text-red-700">{services?.database?.counts?.safetyAlerts ?? 0}</div>
+            <div className="text-river-600">Cảnh báo an toàn</div>
+          </div>
+          <div className="rounded-control bg-sand-50 p-2.5">
+            <div className="font-bold text-base text-indigo-700">{services?.database?.counts?.footprints ?? 0}</div>
+            <div className="text-river-600">Dấu chân 3D</div>
+          </div>
+          <div className="rounded-control bg-sand-50 p-2.5">
+            <div className="font-bold text-base text-river-800">{services?.database?.counts?.auditLogs ?? 0}</div>
+            <div className="text-river-600">Audit Logs</div>
           </div>
         </div>
       </Card>

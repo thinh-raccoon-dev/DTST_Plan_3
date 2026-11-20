@@ -1,5 +1,6 @@
 import {
   Award,
+  Building2,
   Compass,
   KeyRound,
   Lock,
@@ -12,7 +13,7 @@ import {
   UserPlus,
   Users,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AdminPageHeader } from '../../components/layout/AdminLayout';
 import { Badge, StatusBadge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
@@ -22,11 +23,12 @@ import { ConfirmDialog, Modal } from '../../components/ui/Modal';
 import { EmptyState, ErrorState, PageLoader } from '../../components/ui/States';
 import { useApiQuery } from '../../hooks/useApiQuery';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
-import { api } from '../../lib/api';
+import { api, toApiError } from '../../lib/api';
+import { areaLabel } from '../../lib/catalog';
 import { formatDate } from '../../lib/format';
 import { useAuthStore } from '../../stores/authStore';
 import { toast } from '../../stores/toastStore';
-import type { AdminUserItem, AdminUsersResponse, UserRole } from '../../types/api';
+import type { AdminDestination, AdminUserItem, AdminUsersResponse, Paginated, UserRole } from '../../types/api';
 
 const roleLabels: Record<UserRole, string> = {
   admin: 'Quản trị viên',
@@ -57,7 +59,53 @@ export function AdminUsersPage() {
   const [newPassword, setNewPassword] = useState('');
   const [toggleStatusUser, setToggleStatusUser] = useState<AdminUserItem | null>(null);
   const [deleteUserTarget, setDeleteUserTarget] = useState<AdminUserItem | null>(null);
+  const [assignModalUser, setAssignModalUser] = useState<AdminUserItem | null>(null);
+  const [allDestinations, setAllDestinations] = useState<AdminDestination[]>([]);
+  const [loadingDestinations, setLoadingDestinations] = useState(false);
+  const [selectedDestIds, setSelectedDestIds] = useState<string[]>([]);
+  const [destSearch, setDestSearch] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!assignModalUser) return;
+    setSelectedDestIds((assignModalUser.managedDestinations ?? []).map((d) => d.id));
+    setDestSearch('');
+    if (allDestinations.length > 0) return;
+    let cancelled = false;
+    setLoadingDestinations(true);
+    api
+      .get<Paginated<AdminDestination>>('/admin/destinations', { params: { limit: 100 } })
+      .then((res) => {
+        if (!cancelled) setAllDestinations(res.data.items);
+      })
+      .catch((err) => {
+        if (!cancelled) toast.error('Không tải được danh sách địa điểm', toApiError(err).message);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingDestinations(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [assignModalUser, allDestinations.length]);
+
+  const handleSaveAssignedDestinations = async () => {
+    if (!assignModalUser) return;
+    setSubmitting(true);
+    try {
+      await api.put(`/admin/users/${assignModalUser.id}/destinations`, {
+        destinationIds: selectedDestIds,
+      });
+      toast.success(`Đã phân công ${selectedDestIds.length} điểm đến cho đối tác ${assignModalUser.displayName}.`);
+      setAssignModalUser(null);
+      setAllDestinations([]);
+      query.reload();
+    } catch (err: unknown) {
+      toast.error('Không thể phân công địa điểm', toApiError(err).message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   // New user form state
   const [newUser, setNewUser] = useState({
@@ -98,8 +146,7 @@ export function AdminUsersPage() {
       setNewUser({ email: '', displayName: '', password: '', role: 'tourist' });
       query.reload();
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Không thể tạo tài khoản.';
-      toast.error(msg);
+      toast.error('Không thể tạo tài khoản', toApiError(err).message);
     } finally {
       setSubmitting(false);
     }
@@ -114,8 +161,7 @@ export function AdminUsersPage() {
       setRoleModalUser(null);
       query.reload();
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Không thể cập nhật vai trò.';
-      toast.error(msg);
+      toast.error('Không thể cập nhật vai trò', toApiError(err).message);
     } finally {
       setSubmitting(false);
     }
@@ -130,12 +176,11 @@ export function AdminUsersPage() {
     setSubmitting(true);
     try {
       await api.post(`/admin/users/${passwordModalUser.id}/reset-password`, { password: newPassword });
-      toast.success(`Đã đặt lại mật khẩu cho tài khoản ${passwordModalUser.email}.`);
+      toast.success(`Đã đặt lại mật khẩu và thu hồi toàn bộ phiên cũ của ${passwordModalUser.email}.`);
       setPasswordModalUser(null);
       setNewPassword('');
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Không thể đặt lại mật khẩu.';
-      toast.error(msg);
+      toast.error('Không thể đặt lại mật khẩu', toApiError(err).message);
     } finally {
       setSubmitting(false);
     }
@@ -147,12 +192,11 @@ export function AdminUsersPage() {
     setSubmitting(true);
     try {
       await api.patch(`/admin/users/${toggleStatusUser.id}/status`, { status: targetStatus });
-      toast.success(targetStatus === 'active' ? 'Đã kích hoạt lại tài khoản.' : 'Đã khóa tài khoản.');
+      toast.success(targetStatus === 'active' ? 'Đã kích hoạt lại tài khoản.' : 'Đã khóa tài khoản & thu hồi phiên đăng nhập.');
       setToggleStatusUser(null);
       query.reload();
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Không thể thay đổi trạng thái.';
-      toast.error(msg);
+      toast.error('Không thể thay đổi trạng thái', toApiError(err).message);
     } finally {
       setSubmitting(false);
     }
@@ -163,12 +207,11 @@ export function AdminUsersPage() {
     setSubmitting(true);
     try {
       await api.delete(`/admin/users/${deleteUserTarget.id}`);
-      toast.success(`Đã xóa tài khoản ${deleteUserTarget.email}.`);
+      toast.success(`Đã xóa tài khoản ${deleteUserTarget.email} & dọn sạch dữ liệu cá nhân theo NĐ 13/2023.`);
       setDeleteUserTarget(null);
       query.reload();
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Không thể xóa người dùng.';
-      toast.error(msg);
+      toast.error('Không thể xóa người dùng', toApiError(err).message);
     } finally {
       setSubmitting(false);
     }
@@ -303,6 +346,24 @@ export function AdminUsersPage() {
                           <Shield className="size-3" />
                           {roleLabels[user.role]}
                         </Badge>
+                        {user.role === 'partner' && (
+                          <div className="mt-1.5 flex flex-wrap gap-1 max-w-[220px]">
+                            {user.managedDestinations && user.managedDestinations.length > 0 ? (
+                              user.managedDestinations.map((dest) => (
+                                <span
+                                  key={dest.id}
+                                  className="inline-flex items-center gap-1 rounded bg-teal-50 px-1.5 py-0.5 text-[10px] font-medium text-teal-800 ring-1 ring-teal-200 truncate max-w-[200px]"
+                                  title={`${dest.name} (${dest.area})`}
+                                >
+                                  <Building2 className="size-2.5 shrink-0" />
+                                  <span className="truncate">{dest.name}</span>
+                                </span>
+                              ))
+                            ) : (
+                              <span className="text-[10px] text-amber-700 font-medium">Chưa gán KDL</span>
+                            )}
+                          </div>
+                        )}
                       </td>
 
                       <td className="px-4 py-3.5">
@@ -332,6 +393,18 @@ export function AdminUsersPage() {
 
                       <td className="px-4 py-3.5 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-1">
+                          {user.role === 'partner' && (
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              className="text-xs text-teal-800"
+                              onClick={() => setAssignModalUser(user)}
+                              title="Phân công Khu du lịch cho đối tác"
+                            >
+                              <Building2 className="size-3.5" /> Gán KDL
+                            </Button>
+                          )}
+
                           <Button
                             size="sm"
                             variant="secondary"
@@ -546,6 +619,98 @@ export function AdminUsersPage() {
         onConfirm={handleToggleStatus}
         onCancel={() => setToggleStatusUser(null)}
       />
+
+      {/* Modal: Phân công KDL cho Đối tác */}
+      <Modal
+        open={Boolean(assignModalUser)}
+        title={`Phân công địa điểm cho Đối tác`}
+        size="md"
+        onClose={() => setAssignModalUser(null)}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setAssignModalUser(null)} disabled={submitting}>
+              Hủy
+            </Button>
+            <Button onClick={handleSaveAssignedDestinations} loading={submitting} disabled={loadingDestinations}>
+              Lưu phân công ({selectedDestIds.length})
+            </Button>
+          </>
+        }
+      >
+        {assignModalUser && (
+          <div className="space-y-4">
+            <div className="rounded-lg bg-teal-50 border border-teal-200 p-3 text-xs text-teal-900">
+              Đối tác: <strong>{assignModalUser.displayName}</strong> ({assignModalUser.email}). Chọn các điểm đến mà tài khoản này được quyền vận hành trong Partner Hub (Zero-IDOR).
+            </div>
+
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-river-400" />
+              <Input
+                type="search"
+                value={destSearch}
+                onChange={(e) => setDestSearch(e.target.value)}
+                placeholder="Tìm nhanh theo tên điểm đến hoặc địa bàn..."
+                className="pl-9"
+              />
+            </div>
+
+            {loadingDestinations ? (
+              <p className="py-6 text-center text-sm text-river-500">Đang tải danh sách điểm đến...</p>
+            ) : (
+              <div className="max-h-72 space-y-1.5 overflow-y-auto rounded-lg border border-sand-200 p-2">
+                {allDestinations
+                  .filter((d) => {
+                    if (!destSearch.trim()) return true;
+                    const q = destSearch.toLowerCase();
+                    return (
+                      d.name.toLowerCase().includes(q) ||
+                      areaLabel(d.area).toLowerCase().includes(q)
+                    );
+                  })
+                  .map((dest) => {
+                    const checked = selectedDestIds.includes(dest.id);
+                    const assignedToOther =
+                      Boolean(dest.managedById) && dest.managedById !== assignModalUser.id;
+                    return (
+                      <label
+                        key={dest.id}
+                        className={`flex cursor-pointer items-center justify-between gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
+                          checked ? 'bg-leaf-50 ring-1 ring-leaf-300' : 'hover:bg-sand-50'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedDestIds((prev) => [...prev, dest.id]);
+                              } else {
+                                setSelectedDestIds((prev) => prev.filter((id) => id !== dest.id));
+                              }
+                            }}
+                            className="size-4 rounded border-sand-400 text-leaf-700 focus:ring-leaf-600"
+                          />
+                          <div className="min-w-0">
+                            <p className="font-medium text-river-900 truncate">{dest.name}</p>
+                            <p className="text-xs text-river-500">
+                              {areaLabel(dest.area)}
+                            </p>
+                          </div>
+                        </div>
+                        {assignedToOther && (
+                          <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
+                            Đang gán đối tác khác
+                          </span>
+                        )}
+                      </label>
+                    );
+                  })}
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
 
       {/* Confirm: Xóa người dùng */}
       <ConfirmDialog

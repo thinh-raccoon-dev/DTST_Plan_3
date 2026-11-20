@@ -203,3 +203,91 @@ export async function deactivateSafetyAlertHandler(req: Request, res: Response):
 
   res.json({ success: true, alert: existing });
 }
+
+/** Admin provincial oversight: list ALL safety alerts (active, expired, deactivated, partner + admin). */
+export async function listAllAlertsAdminHandler(req: Request, res: Response): Promise<void> {
+  const source = typeof req.query.source === 'string' ? req.query.source.trim() : '';
+  const status = typeof req.query.status === 'string' ? req.query.status.trim() : '';
+  const now = new Date();
+
+  const filter: Record<string, unknown> = {};
+  if (source && source !== 'all') filter.source = source;
+  if (status === 'active') {
+    filter.isActive = true;
+    filter.$or = [{ expiresAt: { $gt: now } }, { expiresAt: null }];
+  } else if (status === 'inactive') {
+    filter.$or = [{ isActive: false }, { expiresAt: { $lte: now } }];
+  }
+
+  const [alerts, activeCount, partnerActiveCount] = await Promise.all([
+    SafetyAlertModel.find(filter)
+      .populate('destinationId', 'name slug area')
+      .populate('createdBy', 'displayName email role')
+      .sort({ isActive: -1, createdAt: -1 })
+      .limit(100)
+      .lean(),
+    SafetyAlertModel.countDocuments({
+      isActive: true,
+      $or: [{ expiresAt: { $gt: now } }, { expiresAt: null }],
+    }),
+    SafetyAlertModel.countDocuments({
+      source: 'partner',
+      isActive: true,
+      $or: [{ expiresAt: { $gt: now } }, { expiresAt: null }],
+    }),
+  ]);
+
+  res.set('Cache-Control', 'no-store');
+  res.json({
+    success: true,
+    stats: {
+      total: alerts.length,
+      activeCount,
+      partnerActiveCount,
+      adminActiveCount: Math.max(0, activeCount - partnerActiveCount),
+    },
+    items: alerts.map((a) => {
+      const dest = a.destinationId as unknown as {
+        _id?: unknown;
+        name?: string;
+        slug?: string;
+        area?: string;
+      } | null;
+      const author = a.createdBy as unknown as {
+        _id?: unknown;
+        displayName?: string;
+        email?: string;
+        role?: string;
+      } | null;
+      const isExpired = Boolean(a.expiresAt && new Date(a.expiresAt) <= now);
+      return {
+        id: String(a._id),
+        type: a.type,
+        severity: a.severity,
+        title: a.title,
+        description: a.description,
+        areaLabel: a.areaLabel,
+        coordinates: a.coordinates,
+        radiusKm: a.radiusKm,
+        terrainImpact: a.terrainImpact,
+        source: a.source,
+        isActive: a.isActive,
+        isLive: Boolean(a.isActive && !isExpired),
+        isExpired,
+        expiresAt: a.expiresAt ?? null,
+        createdAt: a.createdAt,
+        destination: dest?.name
+          ? { id: String(dest._id), name: dest.name, slug: dest.slug ?? '', area: dest.area ?? '' }
+          : null,
+        createdBy: author?.displayName
+          ? {
+              id: String(author._id),
+              displayName: author.displayName,
+              email: author.email ?? '',
+              role: author.role ?? 'admin',
+            }
+          : null,
+      };
+    }),
+  });
+}

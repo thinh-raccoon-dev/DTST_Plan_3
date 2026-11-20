@@ -15,6 +15,7 @@ export const AUDIT_TARGET_TYPES = [
   'voucher',
   'service',
   'inquiry',
+  'media',
 ] as const;
 export type AuditTargetType = (typeof AUDIT_TARGET_TYPES)[number];
 

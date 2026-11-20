@@ -1,5 +1,6 @@
-import { BarChart3, Eye, Info, MousePointerClick, QrCode, Route, Trophy, Users } from 'lucide-react';
+import { BarChart3, Building2, CheckCircle2, Download, Eye, Info, MapPin, MousePointerClick, QrCode, Route, Trophy, Users } from 'lucide-react';
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { AdminPageHeader } from '../../components/layout/AdminLayout';
 import { Button } from '../../components/ui/Button';
@@ -8,11 +9,10 @@ import { FormField, Input } from '../../components/ui/Field';
 import { EmptyState, ErrorState, PageLoader } from '../../components/ui/States';
 import { useApiQuery } from '../../hooks/useApiQuery';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
-import { api } from '../../lib/api';
+import { api, toApiError } from '../../lib/api';
 import { formatDate, formatNumber, vnDateString } from '../../lib/format';
+import { toast } from '../../stores/toastStore';
 import type { AnalyticsReport } from '../../types/api';
-
-import { useAuthStore } from '../../stores/authStore';
 
 const DAY = 24 * 60 * 60 * 1000;
 const presets = [
@@ -24,6 +24,13 @@ const presets = [
 function rangeFor(days: number) {
   const now = new Date();
   return { from: vnDateString(new Date(now.getTime() - (days - 1) * DAY)), to: vnDateString(now) };
+}
+
+function formatGrowthHint(pct: number | null | undefined, fallback?: string): string | undefined {
+  if (pct === null || pct === undefined) return fallback;
+  const sign = pct > 0 ? '+' : '';
+  const delta = `${sign}${pct}% so với kỳ trước`;
+  return fallback ? `${delta} · ${fallback}` : delta;
 }
 
 function TopList({ title, items, unit }: { title: string; items: Array<{ id: string; label: string; sub?: string; count: number }>; unit: string }) {
@@ -50,11 +57,11 @@ function TopList({ title, items, unit }: { title: string; items: Array<{ id: str
 }
 
 export function AdminDashboardPage() {
-  const user = useAuthStore((s) => s.user);
-  const isPartner = user?.role === 'partner';
-  useDocumentTitle(isPartner ? 'Tổng quan đối tác' : 'Tổng quan quản trị');
+  useDocumentTitle('Tổng quan quản trị Sở VHTTDL');
   const [range, setRange] = useState(() => rangeFor(30));
   const [draft, setDraft] = useState(range);
+  const [exporting, setExporting] = useState(false);
+
   const query = useApiQuery(
     (signal) => api.get<AnalyticsReport>('/admin/analytics', { params: range, signal }).then((r) => r.data),
     [range.from, range.to],
@@ -62,16 +69,48 @@ export function AdminDashboardPage() {
   const report = query.data;
   const hasActivity = report ? report.daily.some((d) => d.pageViews + d.qrLandings + d.interactions + d.completions > 0) : false;
 
+  const handleExportCsv = async () => {
+    setExporting(true);
+    try {
+      const res = await api.get<Blob>('/admin/analytics/export', {
+        params: range,
+        responseType: 'blob',
+      });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `bao-cao-thong-ke-dong-thap-${range.from}-${range.to}.csv`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      toast.success('Đã xuất báo cáo thống kê CSV (chuẩn UTF-8 cho Excel).');
+    } catch (error) {
+      toast.error('Không thể xuất báo cáo CSV', toApiError(error).message);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const cov = report?.verificationCoverage;
+  const covTotal = cov && cov.total > 0 ? cov.total : 1;
+
   return (
     <>
       <AdminPageHeader
-        title={isPartner ? 'Tổng quan hoạt động đối tác' : 'Tổng quan hoạt động'}
+        title="Tổng quan hoạt động toàn tỉnh"
         description={
           report
-            ? isPartner
-              ? `Thống kê các địa điểm do bạn phụ trách từ ${formatDate(report.range.from)} đến ${formatDate(report.range.to)} (${report.range.days} ngày).`
-              : `Thống kê từ ${formatDate(report.range.from)} đến ${formatDate(report.range.to)} (giờ Việt Nam, ${report.range.days} ngày).`
+            ? `Thống kê Sở VHTTDL từ ${formatDate(report.range.from)} đến ${formatDate(report.range.to)} (giờ Việt Nam, ${report.range.days} ngày).`
             : 'Số liệu lấy trực tiếp từ cơ sở dữ liệu.'
+        }
+        actions={
+          <Button
+            variant="secondary"
+            icon={<Download className="size-4" aria-hidden />}
+            loading={exporting}
+            onClick={handleExportCsv}
+          >
+            Xuất báo cáo CSV
+          </Button>
         }
       />
 
@@ -120,18 +159,140 @@ export function AdminDashboardPage() {
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
             <StatCard label="Địa điểm đã xuất bản" value={report.current.publishedDestinations} hint="Hiện tại" />
             <StatCard label="QR đang hoạt động" value={report.current.activeQrCodes} hint="Hiện tại" icon={<QrCode className="size-5" aria-hidden />} />
-            <StatCard label="Lượt xem trang địa điểm" value={formatNumber(report.totals.destinationPageViews)} icon={<Eye className="size-5" aria-hidden />} />
-            <StatCard label="Lượt mở trang từ QR" value={formatNumber(report.totals.qrLandingViews)} hint="Không phải số khách thực tế" icon={<QrCode className="size-5" aria-hidden />} />
+            <StatCard
+              label="Lượt xem trang địa điểm"
+              value={formatNumber(report.totals.destinationPageViews)}
+              hint={formatGrowthHint(report.growth?.destinationPageViewsPct)}
+              icon={<Eye className="size-5" aria-hidden />}
+            />
+            <StatCard
+              label="Lượt mở trang từ QR"
+              value={formatNumber(report.totals.qrLandingViews)}
+              hint={formatGrowthHint(report.growth?.qrLandingViewsPct, 'Không phải số khách thực tế')}
+              icon={<QrCode className="size-5" aria-hidden />}
+            />
             <StatCard
               label="Lượt tương tác"
               value={formatNumber(report.totals.interactions)}
-              hint={`${report.totals.challengeAttempts} lượt gửi đáp án · ${report.totals.checkIns} check-in`}
+              hint={formatGrowthHint(report.growth?.checkInsPct, `${report.totals.challengeAttempts} đáp án · ${report.totals.checkIns} check-in`)}
               icon={<MousePointerClick className="size-5" aria-hidden />}
             />
-            <StatCard label="Hoàn thành thử thách" value={formatNumber(report.totals.challengeCompletions)} hint={`${report.totals.badgesAwarded} huy hiệu được cấp`} icon={<Trophy className="size-5" aria-hidden />} />
+            <StatCard
+              label="Hoàn thành thử thách"
+              value={formatNumber(report.totals.challengeCompletions)}
+              hint={formatGrowthHint(report.growth?.challengeCompletionsPct, `${report.totals.badgesAwarded} huy hiệu được cấp`)}
+              icon={<Trophy className="size-5" aria-hidden />}
+            />
             <StatCard label="Lịch trình được tạo" value={formatNumber(report.totals.itinerariesGenerated)} hint={`${report.totals.itinerariesSaved} đã lưu vào tài khoản`} icon={<Route className="size-5" aria-hidden />} />
             <StatCard label="Người dùng duy nhất (ước tính)" value={formatNumber(report.totals.uniqueVisitors)} hint={`${report.totals.uniqueAccounts} tài khoản đăng nhập`} icon={<Users className="size-5" aria-hidden />} />
           </div>
+
+          {(cov || (report.areaBreakdown && report.areaBreakdown.length > 0)) && (
+            <div className="grid gap-6 lg:grid-cols-2">
+              {cov && (
+                <Card className="p-5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <h2 className="flex items-center gap-2 text-base font-semibold text-river-900">
+                        <CheckCircle2 className="size-4 text-leaf-700" aria-hidden />
+                        Độ phủ xác thực & Bàn giao Đối tác
+                      </h2>
+                      <p className="mt-1 text-xs text-river-600">
+                        Tổng {formatNumber(cov.total)} điểm đến đang quản lý trong cơ sở dữ liệu tỉnh.
+                      </p>
+                    </div>
+                    <Link
+                      to="/admin/destinations?assignment=unassigned"
+                      className="text-xs font-semibold text-leaf-700 hover:underline shrink-0"
+                    >
+                      Xem điểm chưa gán →
+                    </Link>
+                  </div>
+
+                  <div className="mt-4 space-y-3 text-sm">
+                    {[
+                      { label: 'Đã xác thực thực địa', value: cov.verified, color: 'bg-leaf-600' },
+                      { label: 'Xác thực một phần', value: cov.partiallyVerified, color: 'bg-teal-500' },
+                      { label: 'Chưa xác thực', value: cov.unverified, color: 'bg-amber-500' },
+                    ].map((row) => {
+                      const pct = Math.round((row.value / covTotal) * 100);
+                      return (
+                        <div key={row.label}>
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-medium text-river-800">{row.label}</span>
+                            <span className="text-river-600">
+                              <strong>{row.value}</strong> ({pct}%)
+                            </span>
+                          </div>
+                          <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-sand-200">
+                            <div className={`h-full rounded-full ${row.color}`} style={{ width: `${pct}%` }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-2 gap-3 border-t border-sand-200 pt-4 text-xs">
+                    <div className="rounded-lg bg-leaf-50/80 p-3 ring-1 ring-leaf-200">
+                      <p className="flex items-center gap-1.5 font-semibold text-leaf-800">
+                        <Building2 className="size-3.5" aria-hidden /> Đã bàn giao Đối tác
+                      </p>
+                      <p className="mt-1 text-xl font-bold text-leaf-900">
+                        {cov.assignedToPartner}{' '}
+                        <span className="text-xs font-normal text-leaf-700">
+                          ({Math.round((cov.assignedToPartner / covTotal) * 100)}%)
+                        </span>
+                      </p>
+                    </div>
+                    <div className="rounded-lg bg-sand-100 p-3 ring-1 ring-sand-300">
+                      <p className="font-semibold text-river-700">Chưa gán Đối tác</p>
+                      <p className="mt-1 text-xl font-bold text-river-900">
+                        {cov.unassigned}{' '}
+                        <span className="text-xs font-normal text-river-600">
+                          ({Math.round((cov.unassigned / covTotal) * 100)}%)
+                        </span>
+                      </p>
+                    </div>
+                  </div>
+                </Card>
+              )}
+
+              {report.areaBreakdown && report.areaBreakdown.length > 0 && (
+                <Card className="p-5">
+                  <h2 className="flex items-center gap-2 text-base font-semibold text-river-900">
+                    <MapPin className="size-4 text-teal-700" aria-hidden />
+                    Phân bố hoạt động theo địa bàn
+                  </h2>
+                  <p className="mt-1 text-xs text-river-600">
+                    So sánh lượt xem trang và check-in giữa các cụm khu vực du lịch trọng điểm.
+                  </p>
+                  <div className="mt-3 h-64">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={report.areaBreakdown.slice(0, 8)}
+                        layout="vertical"
+                        margin={{ left: 4, right: 16, top: 4, bottom: 4 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e9e4d6" />
+                        <XAxis type="number" allowDecimals={false} fontSize={12} />
+                        <YAxis
+                          type="category"
+                          dataKey="label"
+                          width={116}
+                          fontSize={11}
+                          tickFormatter={(v: string) => (v.length > 16 ? `${v.slice(0, 15)}…` : v)}
+                        />
+                        <Tooltip />
+                        <Legend />
+                        <Bar dataKey="views" name="Lượt xem" fill="#176b50" radius={[0, 4, 4, 0]} maxBarSize={14} />
+                        <Bar dataKey="checkIns" name="Check-in" fill="#d97706" radius={[0, 4, 4, 0]} maxBarSize={14} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </Card>
+              )}
+            </div>
+          )}
 
           {report.funnel && (
             <Card className="p-5">

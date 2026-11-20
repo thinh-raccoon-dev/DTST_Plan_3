@@ -4,8 +4,10 @@ import * as adminAuditLogs from '../controllers/admin/auditLogs.controller.js';
 import * as adminBadges from '../controllers/admin/badges.controller.js';
 import * as adminBanners from '../controllers/admin/banners.controller.js';
 import * as adminChallenges from '../controllers/admin/challenges.controller.js';
+import * as adminCommerce from '../controllers/admin/adminCommerce.controller.js';
 import * as adminDestinations from '../controllers/admin/destinations.controller.js';
 import * as adminItineraries from '../controllers/admin/itineraries.controller.js';
+import * as adminModeration from '../controllers/admin/moderation.controller.js';
 import * as adminPartner from '../controllers/admin/partner.controller.js';
 import * as adminPartnerCommerce from '../controllers/admin/partnerCommerce.controller.js';
 import * as adminPassportLogs from '../controllers/admin/passportLogs.controller.js';
@@ -27,6 +29,7 @@ import * as reviews from '../controllers/review.controller.js';
 import * as safety from '../controllers/safety.controller.js';
 import { requireAdmin, requireAuth, requireStaff } from '../middleware/auth.js';
 import { issueCsrfToken } from '../middleware/csrf.js';
+import { requireAiPlannerEnabled } from '../middleware/maintenance.js';
 import { challengeLimiter, eventLimiter, loginLimiter, registerLimiter } from '../middleware/rateLimit.js';
 import { isDatabaseReady } from '../config/db.js';
 
@@ -50,7 +53,7 @@ export function buildApiRouter(): Router {
   api.patch('/auth/profile', requireAuth, auth.updateProfile);
 
   // AI Copilot, Voice Assistant & Visual Scene Search
-  api.post('/ai/copilot', eventLimiter, aiController.handleCopilotChat);
+  api.post('/ai/copilot', eventLimiter, requireAiPlannerEnabled, aiController.handleCopilotChat);
   api.post(
     '/ai/visual-search',
     eventLimiter,
@@ -89,11 +92,11 @@ export function buildApiRouter(): Router {
   // Trip Planner V9 (AI & Manual + Valhalla routing + Replan)
   api.get('/trip-planner/health', itineraries.getTripPlannerHealth);
   api.get('/trip-planner/places', itineraries.listTripPlannerPlaces);
-  api.post('/trip-planner/recommend', eventLimiter, itineraries.recommendTripPlanner);
-  api.post('/trip-planner/itinerary', eventLimiter, itineraries.planTripV9);
+  api.post('/trip-planner/recommend', eventLimiter, requireAiPlannerEnabled, itineraries.recommendTripPlanner);
+  api.post('/trip-planner/itinerary', eventLimiter, requireAiPlannerEnabled, itineraries.planTripV9);
 
   // Itineraries
-  api.post('/itineraries/generate', eventLimiter, itineraries.generateItinerary);
+  api.post('/itineraries/generate', eventLimiter, requireAiPlannerEnabled, itineraries.generateItinerary);
   api.post('/itineraries', requireAuth, itineraries.createItinerary);
   api.get('/itineraries/my', requireAuth, itineraries.listMyItineraries);
   api.get('/itineraries/:id', requireAuth, itineraries.getItinerary);
@@ -125,10 +128,18 @@ export function buildApiRouter(): Router {
 
   // Analytics: Admin views overall system
   admin.get('/analytics', requireAdmin, adminAnalytics.getAnalytics);
+  admin.get('/analytics/export', requireAdmin, adminAnalytics.exportAdminAnalyticsCsv);
 
-  // Media Upload (Staff: Admin & Partner)
-  admin.post('/upload', adminUpload.uploadMiddleware.single('file'), adminUpload.handleSingleUpload);
-  admin.post('/upload/multiple', adminUpload.uploadMiddleware.array('files', 10), adminUpload.handleMultipleUpload);
+  // Centralized Moderation Queue, Safety Oversight & Commerce Oversight (Admin only)
+  admin.get('/moderation/summary', requireAdmin, adminModeration.getModerationSummary);
+  admin.patch('/destinations/:id/review', requireAdmin, adminModeration.reviewDestination);
+  admin.get('/safety-alerts', requireAdmin, safety.listAllAlertsAdminHandler);
+  admin.get('/commerce/overview', requireAdmin, adminCommerce.getAdminCommerceOverview);
+  admin.patch('/commerce/vouchers/:id/status', requireAdmin, adminCommerce.adminTogglePartnerVoucher);
+
+  // Media Upload (Staff: Admin & Partner, rate-limited + magic-bytes verified)
+  admin.post('/upload', eventLimiter, adminUpload.uploadMiddleware.single('file'), adminUpload.handleSingleUpload);
+  admin.post('/upload/multiple', eventLimiter, adminUpload.uploadMiddleware.array('files', 10), adminUpload.handleMultipleUpload);
 
   // Destinations management (Staff)
   admin.get('/destinations', adminDestinations.listAdminDestinations);
@@ -188,6 +199,7 @@ export function buildApiRouter(): Router {
   // Audit Logs (Admin only)
   admin.get('/audit-logs', requireAdmin, adminAuditLogs.listAuditLogs);
   admin.get('/audit-logs/stats', requireAdmin, adminAuditLogs.getAuditLogStats);
+  admin.get('/audit-logs/export', requireAdmin, adminAuditLogs.exportAuditLogsCsv);
 
   // Badges & Achievements management (Admin only)
   admin.get('/badges', requireAdmin, adminBadges.listBadges);
@@ -226,6 +238,7 @@ export function buildApiRouter(): Router {
   admin.patch('/users/:id/role', requireAdmin, adminUsers.updateUserRole);
   admin.patch('/users/:id/status', requireAdmin, adminUsers.updateUserStatus);
   admin.post('/users/:id/reset-password', requireAdmin, adminUsers.resetUserPassword);
+  admin.put('/users/:id/destinations', requireAdmin, adminUsers.assignPartnerDestinations);
   admin.delete('/users/:id', requireAdmin, adminUsers.deleteUser);
 
   // Tourist Itineraries management (Admin only)
@@ -235,6 +248,7 @@ export function buildApiRouter(): Router {
 
   // Passport & Activity logs (Admin only)
   admin.get('/passport-logs', requireAdmin, adminPassportLogs.listPassportLogs);
+  admin.get('/passport-logs/export', requireAdmin, adminPassportLogs.exportPassportLogsCsv);
 
   // System Health & Settings (Admin only)
   admin.get('/system/status', requireAdmin, adminSystem.getSystemStatus);

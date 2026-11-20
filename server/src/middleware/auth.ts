@@ -8,20 +8,22 @@ import { forbidden, unauthorized } from '../utils/errors.js';
 
 interface TokenPayload {
   sub: string;
+  tv?: number;
 }
 
-export function signAccessToken(userId: string): string {
-  return jwt.sign({ sub: userId } satisfies TokenPayload, env.JWT_SECRET, {
+export function signAccessToken(userId: string, tokenVersion = 0): string {
+  return jwt.sign({ sub: userId, tv: tokenVersion } satisfies TokenPayload, env.JWT_SECRET, {
     expiresIn: env.JWT_EXPIRES_IN as jwt.SignOptions['expiresIn'],
     algorithm: 'HS256',
   });
 }
 
-function readUserId(token: string): string | null {
+function readTokenClaims(token: string): { userId: string; tokenVersion: number } | null {
   try {
     const payload = jwt.verify(token, env.JWT_SECRET, { algorithms: ['HS256'] });
     if (typeof payload === 'object' && typeof payload.sub === 'string' && isValidObjectId(payload.sub)) {
-      return payload.sub;
+      const tv = typeof payload.tv === 'number' ? payload.tv : 0;
+      return { userId: payload.sub, tokenVersion: tv };
     }
     return null;
   } catch {
@@ -30,7 +32,7 @@ function readUserId(token: string): string | null {
   }
 }
 
-/** Resolves the current user from the HttpOnly cookie. Role and status always come from the DB. */
+/** Resolves the current user from the HttpOnly cookie. Role, status and tokenVersion always come from the DB. */
 export async function attachUser(req: Request, res: Response, next: NextFunction): Promise<void> {
   let token: string | undefined = typeof req.cookies?.[AUTH_COOKIE] === 'string' ? req.cookies[AUTH_COOKIE] : undefined;
   if (!token && req.headers.authorization?.startsWith('Bearer ')) {
@@ -38,14 +40,16 @@ export async function attachUser(req: Request, res: Response, next: NextFunction
   }
   if (!token || token.length === 0) return next();
 
-  const userId = readUserId(token);
-  if (!userId) {
+  const claims = readTokenClaims(token);
+  if (!claims) {
     res.clearCookie(AUTH_COOKIE, baseCookieOptions());
     return next();
   }
 
-  const user = await UserModel.findById(userId).select('email displayName role status preferences').lean();
-  if (!user || user.status !== 'active') {
+  const user = await UserModel.findById(claims.userId)
+    .select('email displayName role status tokenVersion preferences')
+    .lean();
+  if (!user || user.status !== 'active' || (user.tokenVersion ?? 0) !== claims.tokenVersion) {
     res.clearCookie(AUTH_COOKIE, baseCookieOptions());
     return next();
   }

@@ -34,14 +34,26 @@ export function AdminBannersPage() {
   useDocumentTitle('Quản lý banner');
   const [params, setParams] = useSearchParams();
   const status = params.get('status') ?? '';
+  const approvalStatus = params.get('approvalStatus') ?? '';
   const page = Math.max(1, Number(params.get('page')) || 1);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [toDelete, setToDelete] = useState<AdminBanner | null>(null);
   const [rejectTarget, setRejectTarget] = useState<AdminBanner | null>(null);
   const [rejectFeedback, setRejectFeedback] = useState('');
   const query = useApiQuery(
-    (signal) => api.get<Paginated<AdminBanner>>('/admin/banners', { params: { status: status || undefined, page, limit: 20 }, signal }).then((r) => r.data),
-    [status, page],
+    (signal) =>
+      api
+        .get<Paginated<AdminBanner>>('/admin/banners', {
+          params: {
+            status: status || undefined,
+            approvalStatus: approvalStatus || undefined,
+            page,
+            limit: 20,
+          },
+          signal,
+        })
+        .then((r) => r.data),
+    [status, approvalStatus, page],
   );
   const update = (key: string, value: string) => {
     const next = new URLSearchParams(params);
@@ -105,11 +117,17 @@ export function AdminBannersPage() {
         description="Ảnh bìa, sự kiện hoặc quảng cáo hiển thị ở đầu trang chủ. Banner quảng cáo luôn được gắn nhãn “Quảng cáo” và tên đơn vị tài trợ cho du khách."
         actions={<ButtonLink to="/admin/banners/new" icon={<Plus className="size-4" aria-hidden />}>Tạo banner</ButtonLink>}
       />
-      <Card className="mb-4 grid gap-3 p-4 md:grid-cols-[220px_1fr] md:items-center">
+      <Card className="mb-4 grid gap-3 p-4 md:grid-cols-[200px_220px_1fr] md:items-center">
         <Select aria-label="Lọc theo trạng thái" value={status} onChange={(e) => update('status', e.target.value)}>
-          <option value="">Tất cả trạng thái</option>
+          <option value="">Tất cả trạng thái hiển thị</option>
           <option value="active">{STATUS_LABELS.active}</option>
           <option value="inactive">{STATUS_LABELS.inactive}</option>
+        </Select>
+        <Select aria-label="Lọc theo trạng thái kiểm duyệt" value={approvalStatus} onChange={(e) => update('approvalStatus', e.target.value)}>
+          <option value="">Tất cả trạng thái duyệt</option>
+          <option value="pending_review">⏳ Chờ Sở VHTTDL duyệt</option>
+          <option value="approved">✓ Đã phê duyệt</option>
+          <option value="rejected">✕ Đã từ chối</option>
         </Select>
         <p className="text-sm text-river-600">Banner hiển thị theo thứ tự tăng dần; tối đa 6 banner đang bật được đưa lên trang chủ.</p>
       </Card>

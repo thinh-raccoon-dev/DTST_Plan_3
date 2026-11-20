@@ -1,10 +1,11 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { ArrowLeft, Copy, Download, ExternalLink, Plus, Power, Printer, QrCode, Save } from 'lucide-react';
+import { ArrowLeft, Copy, Download, ExternalLink, Plus, Power, Printer, QrCode, Save, Sparkles } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { z } from 'zod';
 import { AdminPageHeader } from '../../components/layout/AdminLayout';
+import { PartnerStandeeModal, type StandeeQrTarget } from '../../components/partner/PartnerStandeeModal';
 import { StatusBadge } from '../../components/ui/Badge';
 import { Button, ButtonLink } from '../../components/ui/Button';
 import { Card, StatCard } from '../../components/ui/Card';
@@ -123,6 +124,7 @@ export function AdminQrListPage() {
   const page = Math.max(1, Number(params.get('page')) || 1);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [toDisable, setToDisable] = useState<AdminQr | null>(null);
+  const [standeeTarget, setStandeeTarget] = useState<{ qr: StandeeQrTarget; destinationName: string } | null>(null);
   const query = useApiQuery(
     (signal) =>
       api.get<Paginated<AdminQr>>('/admin/qr', { params: { q: q || undefined, status: status || undefined, page }, signal }).then((r) => r.data),
@@ -192,6 +194,25 @@ export function AdminQrListPage() {
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <ButtonLink to={`/admin/qr/${qr.id}`} size="sm" variant="secondary">Chi tiết</ButtonLink>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      icon={<Sparkles className="size-4 text-leaf-700" aria-hidden />}
+                      onClick={() =>
+                        setStandeeTarget({
+                          qr: {
+                            id: qr.id,
+                            code: qr.code,
+                            label: qr.label,
+                            targetType: qr.targetType,
+                            url: qr.url,
+                          },
+                          destinationName: qr.target.destinationName || qr.target.label,
+                        })
+                      }
+                    >
+                      Standee HD
+                    </Button>
                     <a href={`/qr/${qr.code}?preview=1`} target="_blank" rel="noopener" className="inline-flex min-h-9 items-center gap-1 rounded-control px-3 text-sm font-medium text-river-700 hover:bg-sand-100">
                       <ExternalLink className="size-4" aria-hidden /> Xem trước
                     </a>
@@ -220,6 +241,12 @@ export function AdminQrListPage() {
         loading={Boolean(toDisable && busyId === toDisable.id)}
         onConfirm={() => toDisable && setStatus(toDisable, 'inactive')}
         onCancel={() => setToDisable(null)}
+      />
+
+      <PartnerStandeeModal
+        qr={standeeTarget?.qr ?? null}
+        destinationName={standeeTarget?.destinationName ?? 'Đồng Tháp Smart Travel'}
+        onClose={() => setStandeeTarget(null)}
       />
     </>
   );
@@ -378,6 +405,7 @@ export function AdminQrDetailPage() {
   const query = useApiQuery((signal) => api.get<QrDetailResponse>(`/admin/qr/${id}`, { signal }).then((r) => r.data), [id]);
   useDocumentTitle(query.data ? `QR ${query.data.qr.code}` : 'Mã QR');
   const image = useQrImage(id, query.data?.qr.code);
+  const [standeeOpen, setStandeeOpen] = useState(false);
 
   if (query.loading && !query.data) return <PageLoader />;
   if (query.error || !query.data) return <ErrorState error={query.error} onRetry={query.reload} />;
@@ -416,9 +444,18 @@ export function AdminQrDetailPage() {
             <div className="mt-4 grid grid-cols-2 gap-2">
               <Button size="sm" variant="secondary" icon={<Download className="size-4" aria-hidden />} onClick={() => downloadQr(qr, 'png')}>PNG</Button>
               <Button size="sm" variant="secondary" icon={<Download className="size-4" aria-hidden />} onClick={() => downloadQr(qr, 'svg')}>SVG</Button>
-              <Button size="sm" variant="secondary" icon={<Printer className="size-4" aria-hidden />} onClick={() => printQr(qr)}>In</Button>
+              <Button size="sm" variant="secondary" icon={<Printer className="size-4" aria-hidden />} onClick={() => printQr(qr)}>In QR</Button>
               <Button size="sm" variant="secondary" icon={<Copy className="size-4" aria-hidden />} onClick={() => copyUrl(qr.url)}>Sao chép</Button>
             </div>
+            <Button
+              size="sm"
+              variant="primary"
+              className="mt-2 w-full"
+              icon={<Sparkles className="size-4" aria-hidden />}
+              onClick={() => setStandeeOpen(true)}
+            >
+              Tải / In Standee HD (1240×1754)
+            </Button>
             <a
               href={`/qr/${qr.code}?preview=1`}
               target="_blank"
@@ -450,6 +487,22 @@ export function AdminQrDetailPage() {
           />
         </Card>
       </div>
+
+      <PartnerStandeeModal
+        qr={
+          standeeOpen
+            ? {
+                id: qr.id,
+                code: qr.code,
+                label: qr.label,
+                targetType: qr.targetType,
+                url: qr.url,
+              }
+            : null
+        }
+        destinationName={qr.target.destinationName || qr.target.label}
+        onClose={() => setStandeeOpen(false)}
+      />
     </>
   );
 }

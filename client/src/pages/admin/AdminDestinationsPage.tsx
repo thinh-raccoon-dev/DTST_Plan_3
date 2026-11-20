@@ -1,4 +1,4 @@
-import { Eye, EyeOff, ExternalLink, MapPinned, Pencil, Plus, Send, Trash2 } from 'lucide-react';
+import { Eye, EyeOff, ExternalLink, LayoutDashboard, MapPinned, Pencil, Plus, Send, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { IllustrativeBadge, VerificationStatusBadge } from '../../components/destination/DataBadges';
@@ -6,14 +6,14 @@ import { AdminPageHeader } from '../../components/layout/AdminLayout';
 import { StatusBadge } from '../../components/ui/Badge';
 import { Button, ButtonLink } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
-import { Select } from '../../components/ui/Field';
-import { ConfirmDialog } from '../../components/ui/Modal';
+import { Select, Textarea } from '../../components/ui/Field';
+import { ConfirmDialog, Modal } from '../../components/ui/Modal';
 import { Pagination, SearchBar } from '../../components/ui/Navigation';
 import { EmptyState, ErrorState, PageLoader } from '../../components/ui/States';
 import { useApiQuery } from '../../hooks/useApiQuery';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { api, toApiError } from '../../lib/api';
-import { CATEGORY_OPTIONS, OPERATIONAL_LABELS, PUBLICATION_LABELS, areaLabel, categoryLabel } from '../../lib/catalog';
+import { AREA_OPTIONS, CATEGORY_OPTIONS, OPERATIONAL_LABELS, PUBLICATION_LABELS, areaLabel, categoryLabel } from '../../lib/catalog';
 import { formatDateTime } from '../../lib/format';
 import { useAuthStore } from '../../stores/authStore';
 import { toast } from '../../stores/toastStore';
@@ -24,21 +24,35 @@ export function AdminDestinationsPage() {
   const [params, setParams] = useSearchParams();
   const q = params.get('q') ?? '';
   const category = params.get('category') ?? '';
+  const area = params.get('area') ?? '';
+  const verificationStatus = params.get('verificationStatus') ?? '';
+  const assignment = params.get('assignment') ?? '';
   const status = params.get('status') ?? '';
   const page = Math.max(1, Number(params.get('page')) || 1);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [toDelete, setToDelete] = useState<AdminDestination | null>(null);
+  const [returnTarget, setReturnTarget] = useState<AdminDestination | null>(null);
+  const [returnNote, setReturnNote] = useState('');
   const isPartner = useAuthStore((s) => s.user?.role === 'partner');
 
   const query = useApiQuery(
     (signal) =>
       api
         .get<Paginated<AdminDestination>>('/admin/destinations', {
-          params: { q: q || undefined, category: category || undefined, publicationStatus: status || undefined, page, limit: 20 },
+          params: {
+            q: q || undefined,
+            category: category || undefined,
+            area: area || undefined,
+            verificationStatus: verificationStatus || undefined,
+            assignment: assignment || undefined,
+            publicationStatus: status || undefined,
+            page,
+            limit: 20,
+          },
           signal,
         })
         .then((r) => r.data),
-    [q, category, status, page],
+    [q, category, area, verificationStatus, assignment, status, page],
   );
 
   const update = (key: string, value: string) => {
@@ -60,6 +74,26 @@ export function AdminDestinationsPage() {
       query.reload();
     } catch (error) {
       toast.error('Không cập nhật được', toApiError(error).message);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleReturnDraft = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!returnTarget) return;
+    setBusyId(returnTarget.id);
+    try {
+      const res = await api.patch<{ message?: string }>(`/admin/destinations/${returnTarget.id}/review`, {
+        decision: 'return_draft',
+        reviewNote: returnNote.trim(),
+      });
+      toast.success(res.data?.message || `Đã trả hồ sơ “${returnTarget.name}” về bản nháp.`);
+      setReturnTarget(null);
+      setReturnNote('');
+      query.reload();
+    } catch (error) {
+      toast.error('Không thể trả về sửa', toApiError(error).message);
     } finally {
       setBusyId(null);
     }
@@ -93,7 +127,7 @@ export function AdminDestinationsPage() {
         }
         actions={<ButtonLink to="/admin/destinations/new" icon={<Plus className="size-4" aria-hidden />}>Thêm địa điểm</ButtonLink>}
       />
-      <Card className="mb-4 grid gap-3 p-4 md:grid-cols-[1fr_200px_200px]">
+      <Card className="mb-4 grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-5">
         <SearchBar value={q} onSearch={(v) => update('q', v)} placeholder="Tìm theo tên, tag, khu vực…" label="Tìm địa điểm" />
         <Select aria-label="Lọc theo loại hình" value={category} onChange={(e) => update('category', e.target.value)}>
           <option value="">Tất cả loại hình</option>
@@ -101,12 +135,48 @@ export function AdminDestinationsPage() {
             <option key={o.value} value={o.value}>{o.label}</option>
           ))}
         </Select>
+        <Select aria-label="Lọc theo khu vực" value={area} onChange={(e) => update('area', e.target.value)}>
+          <option value="">Tất cả địa bàn</option>
+          {AREA_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </Select>
         <Select aria-label="Lọc theo trạng thái" value={status} onChange={(e) => update('status', e.target.value)}>
-          <option value="">Tất cả trạng thái</option>
+          <option value="">Tất cả xuất bản</option>
           {Object.entries(PUBLICATION_LABELS).map(([value, label]) => (
             <option key={value} value={value}>{label}</option>
           ))}
         </Select>
+        {!isPartner ? (
+          <Select
+            aria-label="Lọc theo xác minh / đối tác"
+            value={verificationStatus ? `v:${verificationStatus}` : assignment ? `a:${assignment}` : ''}
+            onChange={(e) => {
+              const val = e.target.value;
+              const next = new URLSearchParams(params);
+              next.delete('verificationStatus');
+              next.delete('assignment');
+              next.delete('page');
+              if (val.startsWith('v:')) next.set('verificationStatus', val.slice(2));
+              if (val.startsWith('a:')) next.set('assignment', val.slice(2));
+              setParams(next, { replace: true });
+            }}
+          >
+            <option value="">Tất cả xác minh & Đối tác</option>
+            <option value="v:verified">✓ Đã xác minh đầy đủ</option>
+            <option value="v:partially_verified">◐ Xác minh một phần</option>
+            <option value="v:unverified">○ Chưa xác minh</option>
+            <option value="a:assigned">🏢 Đã gán Đối tác KDL</option>
+            <option value="a:unassigned">⚠️ Chưa gán Đối tác</option>
+          </Select>
+        ) : (
+          <Select aria-label="Lọc theo xác minh" value={verificationStatus} onChange={(e) => update('verificationStatus', e.target.value)}>
+            <option value="">Tất cả mức xác minh</option>
+            <option value="verified">Đã xác minh</option>
+            <option value="partially_verified">Xác minh một phần</option>
+            <option value="unverified">Chưa xác minh</option>
+          </Select>
+        )}
       </Card>
 
       {query.loading && !data ? (
@@ -150,6 +220,16 @@ export function AdminDestinationsPage() {
                     <ButtonLink to={`/admin/destinations/${d.id}/edit`} size="sm" variant="secondary" icon={<Pencil className="size-4" aria-hidden />}>
                       Sửa
                     </ButtonLink>
+                    {!isPartner && (
+                      <ButtonLink
+                        to={`/admin/partner?destinationId=${d.id}`}
+                        size="sm"
+                        variant="ghost"
+                        icon={<LayoutDashboard className="size-4 text-leaf-700" aria-hidden />}
+                      >
+                        Partner Hub
+                      </ButtonLink>
+                    )}
                     {d.publicationStatus === 'published' ? (
                       <>
                         <a href={`/destinations/${d.slug}`} target="_blank" rel="noopener" className="inline-flex min-h-9 items-center gap-1 rounded-control px-3 text-sm font-medium text-river-700 hover:bg-sand-100">
@@ -167,7 +247,15 @@ export function AdminDestinationsPage() {
                           <Button size="sm" variant="accent" icon={<Send className="size-4" aria-hidden />} loading={busyId === d.id} onClick={() => setPublication(d, 'published')}>
                             Duyệt xuất bản
                           </Button>
-                          <Button size="sm" variant="ghost" icon={<Pencil className="size-4" aria-hidden />} loading={busyId === d.id} onClick={() => setPublication(d, 'draft')}>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            icon={<Pencil className="size-4" aria-hidden />}
+                            onClick={() => {
+                              setReturnTarget(d);
+                              setReturnNote(d.reviewNote || '');
+                            }}
+                          >
                             Yêu cầu sửa
                           </Button>
                         </>
@@ -202,6 +290,36 @@ export function AdminDestinationsPage() {
           </div>
         </>
       ) : null}
+
+      <Modal
+        open={Boolean(returnTarget)}
+        size="sm"
+        title="Trả hồ sơ Địa điểm về Bản nháp"
+        onClose={() => setReturnTarget(null)}
+      >
+        {returnTarget && (
+          <form onSubmit={handleReturnDraft} className="space-y-4">
+            <p className="text-sm text-river-700">
+              Ghi rõ nội dung cần chỉnh sửa cho <strong>{returnTarget.name}</strong> (tối thiểu 5 ký tự):
+            </p>
+            <Textarea
+              rows={3}
+              value={returnNote}
+              onChange={(e) => setReturnNote(e.target.value)}
+              placeholder="VD: Vui lòng bổ sung ảnh thực tế, tọa độ GPS chuẩn và nguồn xác minh..."
+              required
+            />
+            <div className="flex justify-end gap-2 pt-2 border-t border-sand-200">
+              <Button type="button" variant="secondary" onClick={() => setReturnTarget(null)}>
+                Hủy
+              </Button>
+              <Button type="submit" variant="danger" loading={busyId === returnTarget.id}>
+                Trả về bản nháp
+              </Button>
+            </div>
+          </form>
+        )}
+      </Modal>
 
       <ConfirmDialog
         open={Boolean(toDelete)}

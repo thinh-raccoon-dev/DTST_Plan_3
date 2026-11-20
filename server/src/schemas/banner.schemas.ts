@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { BANNER_KINDS, BANNER_PLACEMENTS, BANNER_THEMES } from '../models/Banner.js';
+import { BANNER_APPROVAL_STATUSES, BANNER_KINDS, BANNER_PLACEMENTS, BANNER_THEMES } from '../models/Banner.js';
 import { httpUrlSchema, paginationSchema } from './common.js';
 
 const optionalText = (max: number) => z.string().trim().max(max).optional().or(z.literal(''));
@@ -60,6 +60,7 @@ export const bannerPatchSchema = z
 
 export const adminBannerQuerySchema = paginationSchema.extend({
   status: z.enum(['active', 'inactive']).optional(),
+  approvalStatus: z.enum(BANNER_APPROVAL_STATUSES).optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
 });
 

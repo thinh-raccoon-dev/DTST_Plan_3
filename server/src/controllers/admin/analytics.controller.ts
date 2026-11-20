@@ -1,10 +1,13 @@
 import type { Request, Response } from 'express';
 import { Types } from 'mongoose';
 import { z } from 'zod';
+import { getAreaLabel } from '../../config/catalog.js';
 import { AnalyticsEventModel, type EventType } from '../../models/AnalyticsEvent.js';
 import { ChallengeModel } from '../../models/Challenge.js';
 import { DestinationModel } from '../../models/Destination.js';
 import { QrCodeModel } from '../../models/QrCode.js';
+import { logAuditEvent } from '../../services/audit.service.js';
+import { toUtf8BomCsv } from '../../utils/csv.js';
 import { badRequest } from '../../utils/errors.js';
 
 const TIMEZONE = 'Asia/Ho_Chi_Minh';
@@ -65,9 +68,31 @@ export async function getAnalytics(req: Request, res: Response) {
     match.destinationId = { $in: partnerDestIds };
   }
 
-  const [byType, daily, uniqueRows, topDest, topQr, topChallenges, publishedDestinations, activeQrCodes] = await Promise.all([
+  const prevStart = new Date(range.start.getTime() - range.days * DAY_MS);
+  const prevMatch: Record<string, unknown> = {
+    timestamp: { $gte: prevStart, $lt: range.start },
+    ...(partnerDestIds !== null ? { destinationId: { $in: partnerDestIds } } : {}),
+  };
+
+  const [
+    byType,
+    prevByType,
+    daily,
+    uniqueRows,
+    topDest,
+    topQr,
+    topChallenges,
+    publishedDestinations,
+    activeQrCodes,
+    allDestsMeta,
+    areaEventsAgg,
+  ] = await Promise.all([
     AnalyticsEventModel.aggregate<{ _id: EventType; count: number }>([
       { $match: match },
+      { $group: { _id: '$eventType', count: { $sum: 1 } } },
+    ]),
+    AnalyticsEventModel.aggregate<{ _id: EventType; count: number }>([
+      { $match: prevMatch },
       { $group: { _id: '$eventType', count: { $sum: 1 } } },
     ]),
     AnalyticsEventModel.aggregate<{ _id: { day: string; type: EventType }; count: number }>([
@@ -101,9 +126,81 @@ export async function getAnalytics(req: Request, res: Response) {
       status: 'active',
       ...(partnerDestIds !== null ? { targetId: { $in: partnerDestIds } } : {}),
     }),
+    DestinationModel.find(partnerDestIds !== null ? { _id: { $in: partnerDestIds } } : {})
+      .select('_id area verificationStatus managedBy publicationStatus')
+      .lean(),
+    AnalyticsEventModel.aggregate<{
+      _id: { destinationId: Types.ObjectId; eventType: EventType };
+      count: number;
+    }>([
+      {
+        $match: {
+          ...match,
+          destinationId: { $exists: true },
+          eventType: { $in: ['destination_page_view', 'qr_landing_view', 'destination_check_in'] },
+        },
+      },
+      { $group: { _id: { destinationId: '$destinationId', eventType: '$eventType' }, count: { $sum: 1 } } },
+    ]),
   ]);
 
   const count = (type: EventType) => byType.find((row) => row._id === type)?.count ?? 0;
+  const prevCount = (type: EventType) => prevByType.find((row) => row._id === type)?.count ?? 0;
+  const pctDelta = (curr: number, prev: number): number | null => {
+    if (prev === 0) return curr > 0 ? 100 : 0;
+    return Math.round(((curr - prev) / prev) * 1000) / 10;
+  };
+
+  // Area breakdown & verification coverage
+  const destAreaById = new Map<string, string>();
+  const areaBuckets = new Map<
+    string,
+    { area: string; label: string; destinations: number; views: number; checkIns: number }
+  >();
+  let verifiedCount = 0;
+  let partialCount = 0;
+  let unverifiedCount = 0;
+  let assignedToPartnerCount = 0;
+
+  for (const d of allDestsMeta) {
+    destAreaById.set(String(d._id), d.area);
+    const bucket = areaBuckets.get(d.area) ?? {
+      area: d.area,
+      label: getAreaLabel(d.area),
+      destinations: 0,
+      views: 0,
+      checkIns: 0,
+    };
+    bucket.destinations += 1;
+    areaBuckets.set(d.area, bucket);
+
+    if (d.verificationStatus === 'verified') verifiedCount += 1;
+    else if (d.verificationStatus === 'partially_verified') partialCount += 1;
+    else unverifiedCount += 1;
+    if (d.managedBy) assignedToPartnerCount += 1;
+  }
+
+  for (const row of areaEventsAgg) {
+    const area = destAreaById.get(String(row._id.destinationId));
+    if (!area) continue;
+    const bucket = areaBuckets.get(area);
+    if (!bucket) continue;
+    if (row._id.eventType === 'destination_check_in') bucket.checkIns += row.count;
+    else bucket.views += row.count;
+  }
+
+  const areaBreakdown = Array.from(areaBuckets.values())
+    .sort((a, b) => b.views + b.checkIns * 3 - (a.views + a.checkIns * 3) || b.destinations - a.destinations)
+    .slice(0, 12);
+
+  const verificationCoverage = {
+    total: allDestsMeta.length,
+    verified: verifiedCount,
+    partiallyVerified: partialCount,
+    unverified: unverifiedCount,
+    assignedToPartner: assignedToPartnerCount,
+    unassigned: Math.max(0, allDestsMeta.length - assignedToPartnerCount),
+  };
 
   const dayMap = new Map<string, Record<string, number>>();
   for (let i = 0; i < range.days; i += 1) {
@@ -147,11 +244,21 @@ export async function getAnalytics(req: Request, res: Response) {
     uniqueAccounts: unique.accounts,
   };
 
+  const growth = {
+    destinationPageViewsPct: pctDelta(totals.destinationPageViews, prevCount('destination_page_view')),
+    qrLandingViewsPct: pctDelta(totals.qrLandingViews, prevCount('qr_landing_view')),
+    checkInsPct: pctDelta(totals.checkIns, prevCount('destination_check_in')),
+    challengeCompletionsPct: pctDelta(totals.challengeCompletions, prevCount('challenge_completed')),
+  };
+
   res.set('Cache-Control', 'no-store');
   res.json({
     range: { from: range.from, to: range.to, days: range.days },
     current: { publishedDestinations, activeQrCodes },
     totals,
+    growth,
+    areaBreakdown,
+    verificationCoverage,
     funnel: {
       steps: [
         { key: 'pageView', label: 'Xem trang địa điểm', count: totals.destinationPageViews },
@@ -184,4 +291,97 @@ export async function getAnalytics(req: Request, res: Response) {
       funnel: 'Tỷ lệ chuyển đổi qua các bước; mỗi bước tính trên tổng số lượt ghi nhận trong khoảng thời gian đã chọn.',
     },
   });
+}
+
+/** Provincial analytics CSV export (UTF-8 BOM + OWASP CSV Formula Injection Defense). */
+export async function exportAdminAnalyticsCsv(req: Request, res: Response) {
+  const query = querySchema.parse(req.query);
+  const range = resolveRange(query.from, query.to);
+  const match = { timestamp: { $gte: range.start, $lt: range.endExclusive } };
+
+  const [daily, allDests, areaEvents] = await Promise.all([
+    AnalyticsEventModel.aggregate<{ _id: { day: string; type: EventType }; count: number }>([
+      { $match: match },
+      {
+        $group: {
+          _id: { day: { $dateToString: { format: '%Y-%m-%d', date: '$timestamp', timezone: TIMEZONE } }, type: '$eventType' },
+          count: { $sum: 1 },
+        },
+      },
+    ]),
+    DestinationModel.find().select('_id area verificationStatus managedBy publicationStatus').lean(),
+    AnalyticsEventModel.aggregate<{ _id: { destinationId: Types.ObjectId; eventType: EventType }; count: number }>([
+      {
+        $match: {
+          ...match,
+          destinationId: { $exists: true },
+          eventType: { $in: ['destination_page_view', 'qr_landing_view', 'destination_check_in'] },
+        },
+      },
+      { $group: { _id: { destinationId: '$destinationId', eventType: '$eventType' }, count: { $sum: 1 } } },
+    ]),
+  ]);
+
+  const dayMap = new Map<string, { pageViews: number; qrLandings: number; checkIns: number; completions: number }>();
+  for (let i = 0; i < range.days; i += 1) {
+    dayMap.set(vnDateString(new Date(range.start.getTime() + i * DAY_MS)), {
+      pageViews: 0,
+      qrLandings: 0,
+      checkIns: 0,
+      completions: 0,
+    });
+  }
+  for (const row of daily) {
+    const b = dayMap.get(row._id.day);
+    if (!b) continue;
+    if (row._id.type === 'destination_page_view') b.pageViews += row.count;
+    if (row._id.type === 'qr_landing_view') b.qrLandings += row.count;
+    if (row._id.type === 'destination_check_in') b.checkIns += row.count;
+    if (row._id.type === 'challenge_completed') b.completions += row.count;
+  }
+
+  const destArea = new Map(allDests.map((d) => [String(d._id), d.area]));
+  const areaStats = new Map<string, { dests: number; views: number; checkIns: number }>();
+  for (const d of allDests) {
+    const entry = areaStats.get(d.area) ?? { dests: 0, views: 0, checkIns: 0 };
+    entry.dests += 1;
+    areaStats.set(d.area, entry);
+  }
+  for (const ev of areaEvents) {
+    const area = destArea.get(String(ev._id.destinationId));
+    if (!area) continue;
+    const entry = areaStats.get(area);
+    if (!entry) continue;
+    if (ev._id.eventType === 'destination_check_in') entry.checkIns += ev.count;
+    else entry.views += ev.count;
+  }
+
+  const rows: unknown[][] = [
+    ['BAO CAO THONG KE DU LICH CAP TINH - SO VHTTDL DONG THAP'],
+    ['Khoang thoi gian', `${range.from} den ${range.to} (${range.days} ngay)`],
+    ['Thoi diem xuat', new Date().toLocaleString('vi-VN', { timeZone: TIMEZONE })],
+    ['Tong so diem den', allDests.length],
+    [''],
+    ['--- PHAN BO THEO DIA BAN ---'],
+    ['Dia ban', 'So diem den', 'Luot xem / QR', 'Luot Check-in thuc dia'],
+    ...Array.from(areaStats.entries()).map(([area, s]) => [getAreaLabel(area), s.dests, s.views, s.checkIns]),
+    [''],
+    ['--- CHI TIET THEO NGAY ---'],
+    ['Ngay', 'Xem trang KDL', 'Mo tu QR', 'Check-in thuc dia', 'Hoan thanh thu thach'],
+    ...Array.from(dayMap.entries()).map(([date, d]) => [date, d.pageViews, d.qrLandings, d.checkIns, d.completions]),
+  ];
+
+  await logAuditEvent({
+    req,
+    action: 'admin.analytics.export',
+    targetType: 'report',
+    targetId: `${range.from}_${range.to}`,
+    targetName: `Báo cáo cấp tỉnh ${range.from} -> ${range.to}`,
+    details: { days: range.days },
+  });
+
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="bao-cao-so-vhttdl-${range.from}-den-${range.to}.csv"`);
+  res.setHeader('Cache-Control', 'no-store');
+  res.send(toUtf8BomCsv(rows));
 }

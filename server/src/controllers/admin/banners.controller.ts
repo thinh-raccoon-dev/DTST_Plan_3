@@ -60,6 +60,7 @@ export async function listBanners(req: Request, res: Response) {
   const query = adminBannerQuerySchema.parse(req.query);
   const filter: Record<string, unknown> = {};
   if (query.status) filter.status = query.status;
+  if (query.approvalStatus) filter.approvalStatus = query.approvalStatus;
   const [docs, total] = await Promise.all([
     BannerModel.find(filter)
       .sort({ sortOrder: 1, createdAt: -1 })
