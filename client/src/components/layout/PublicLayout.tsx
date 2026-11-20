@@ -2,6 +2,7 @@ import { Mail, Phone } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link, Outlet, ScrollRestoration } from 'react-router-dom';
 import { AiCopilotWidget } from '../ai/AiCopilotWidget';
+import { ScrollProgressBar } from '../ui/MotionPrimitives';
 import { Header } from './Header';
 import { LogoFull } from './Logo';
 import { MobileBottomNav } from './MobileBottomNav';
@@ -115,6 +116,7 @@ function Footer() {
 export function PublicLayout() {
   return (
     <div className="relative flex min-h-dvh flex-col overflow-x-clip">
+      <ScrollProgressBar />
       <PetalBackdrop />
       <Header />
       <main id="main" className="flex-1">

@@ -272,3 +272,268 @@
 .pb-safe {
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
+
+/* ── Living Mekong Scenic & Gen Z Tactile Animations ─────────────────────── */
+@keyframes dtst-petal-sway {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+  50% {
+    transform: translate3d(6px, -8px, 0) rotate(3deg);
+  }
+}
+.dtst-petal-sway {
+  animation: dtst-petal-sway 9s ease-in-out infinite;
+  will-change: transform;
+}
+
+@keyframes dtst-petal-drift {
+  0% {
+    transform: translate3d(-5vw, -12vh, 0) rotate(0deg) scale(0.9);
+    opacity: 0;
+  }
+  12% {
+    opacity: 0.45;
+  }
+  80% {
+    opacity: 0.35;
+  }
+  100% {
+    transform: translate3d(18vw, 108vh, 0) rotate(240deg) scale(1.05);
+    opacity: 0;
+  }
+}
+.dtst-petal-drift {
+  animation: dtst-petal-drift var(--petal-dur, 18s) linear var(--petal-delay, 0s) infinite;
+  will-change: transform, opacity;
+}
+
+@keyframes dtst-cloud-glide {
+  0% {
+    transform: translateX(-12%);
+  }
+  50% {
+    transform: translateX(12%);
+  }
+  100% {
+    transform: translateX(-12%);
+  }
+}
+.dtst-cloud-glide {
+  animation: dtst-cloud-glide 28s ease-in-out infinite;
+}
+.dtst-cloud-glide-slow {
+  animation: dtst-cloud-glide 42s ease-in-out infinite reverse;
+}
+
+@keyframes dtst-crane-fly {
+  0% {
+    transform: translate3d(-120px, 14px, 0) scale(0.88);
+    opacity: 0;
+  }
+  12% {
+    opacity: 0.92;
+  }
+  50% {
+    transform: translate3d(260px, -14px, 0) scale(1);
+    opacity: 0.95;
+  }
+  88% {
+    opacity: 0.85;
+  }
+  100% {
+    transform: translate3d(640px, -30px, 0) scale(0.82);
+    opacity: 0;
+  }
+}
+.dtst-crane-fly {
+  animation: dtst-crane-fly 22s linear infinite;
+}
+
+@keyframes dtst-boat-glide {
+  0% {
+    transform: translate3d(-18px, 0, 0) rotate(-0.8deg);
+  }
+  50% {
+    transform: translate3d(24px, -3px, 0) rotate(1.2deg);
+  }
+  100% {
+    transform: translate3d(-18px, 0, 0) rotate(-0.8deg);
+  }
+}
+.dtst-boat-glide {
+  animation: dtst-boat-glide 11s ease-in-out infinite;
+  transform-origin: center;
+}
+
+@keyframes dtst-water-shimmer {
+  0%,
+  100% {
+    transform: translateX(0);
+    opacity: 0.55;
+  }
+  50% {
+    transform: translateX(14px);
+    opacity: 0.95;
+  }
+}
+.dtst-water-shimmer {
+  animation: dtst-water-shimmer 5.5s ease-in-out infinite;
+}
+
+@keyframes dtst-firefly {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(0.85);
+    opacity: 0.25;
+  }
+  50% {
+    transform: translate3d(12px, -18px, 0) scale(1.25);
+    opacity: 0.95;
+  }
+}
+.dtst-firefly {
+  animation: dtst-firefly 4.8s ease-in-out infinite;
+}
+
+@keyframes dtst-ken-burns {
+  0% {
+    transform: scale(1.02) translate3d(0, 0, 0);
+  }
+  100% {
+    transform: scale(1.11) translate3d(-1.5%, -1%, 0);
+  }
+}
+.dtst-ken-burns {
+  animation: dtst-ken-burns 8s ease-out forwards;
+}
+
+@keyframes dtst-story-bar {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+.dtst-story-bar {
+  transform-origin: left center;
+  animation: dtst-story-bar 6.2s linear forwards;
+}
+
+@keyframes dtst-marquee {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+.dtst-marquee-track {
+  display: flex;
+  width: max-content;
+  animation: dtst-marquee 32s linear infinite;
+}
+.dtst-marquee-track:hover {
+  animation-play-state: paused;
+}
+
+@keyframes dtst-aurora {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+.dtst-aurora-btn {
+  background-size: 220% 220%;
+  animation: dtst-aurora 5s ease infinite;
+}
+
+/* Scroll-reveal utility */
+.dtst-reveal {
+  opacity: 0;
+  transform: translate3d(0, 22px, 0);
+  transition:
+    opacity 620ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 620ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.dtst-reveal[data-reveal-dir='scale'] {
+  transform: scale(0.96) translate3d(0, 14px, 0);
+}
+.dtst-reveal[data-visible='true'] {
+  opacity: 1;
+  transform: none;
+}
+
+/* ── Universal Accessibility & Senior Comfort Engine ─────────────────────── */
+html[data-font-scale='large'] {
+  font-size: 17.5px;
+}
+@media (min-width: 640px) {
+  html[data-font-scale='large'] {
+    font-size: 18.5px;
+  }
+}
+
+html[data-font-scale='xlarge'] {
+  font-size: 18.5px;
+}
+@media (min-width: 640px) {
+  html[data-font-scale='xlarge'] {
+    font-size: 20px;
+  }
+}
+
+html[data-high-contrast='true'] {
+  --color-river-400: #3d5246;
+  --color-river-500: #293e33;
+  --color-river-600: #1b3126;
+  --color-sand-200: #a8bbae;
+  --color-sand-300: #879e8e;
+}
+
+html[data-high-contrast='true'] body {
+  background-color: #ffffff;
+  color: #0f241b;
+}
+
+html[data-senior-mode='true'] body {
+  line-height: 1.65;
+}
+
+html[data-senior-mode='true'] button,
+html[data-senior-mode='true'] a.rounded-full,
+html[data-senior-mode='true'] [role='tab'] {
+  min-height: 46px;
+}
+
+html[data-senior-mode='true'] :focus-visible {
+  outline: 3px solid #176b50;
+  outline-offset: 3px;
+}
+
+html[data-calm-motion='true'] .dtst-petal-sway,
+html[data-calm-motion='true'] .dtst-petal-drift,
+html[data-calm-motion='true'] .dtst-cloud-glide,
+html[data-calm-motion='true'] .dtst-cloud-glide-slow,
+html[data-calm-motion='true'] .dtst-crane-fly,
+html[data-calm-motion='true'] .dtst-boat-glide,
+html[data-calm-motion='true'] .dtst-water-shimmer,
+html[data-calm-motion='true'] .dtst-firefly,
+html[data-calm-motion='true'] .dtst-ken-burns,
+html[data-calm-motion='true'] .dtst-marquee-track,
+html[data-calm-motion='true'] .tp-float,
+html[data-calm-motion='true'] .tp-shimmer {
+  animation: none !important;
+}
+
+html[data-calm-motion='true'] .dtst-reveal {
+  opacity: 1 !important;
+  transform: none !important;
+  transition: none !important;
+}
+

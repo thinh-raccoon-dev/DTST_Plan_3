@@ -19,6 +19,7 @@ import { api, toApiError } from '../../lib/api';
 import { useAuthStore } from '../../stores/authStore';
 import { useItineraryDraft } from '../../stores/itineraryDraftStore';
 import { toast } from '../../stores/toastStore';
+import { useUiComfortStore } from '../../stores/uiComfortStore';
 import type { Area, Category, SavedItinerary } from '../../types/api';
 
 interface MatchedDestination {
@@ -290,6 +291,24 @@ export function AiCopilotWidget() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const sendMessageRef = useRef<(overrideText?: string) => Promise<void> | void>(() => {});
+  const seniorMode = useUiComfortStore((s) => s.seniorMode);
+
+  // Listen for external open triggers (AI Vibe Showcase, Hero Story Deck, Senior Quick Launch)
+  useEffect(() => {
+    const handleExternalOpen = (evt: Event) => {
+      const detail = (evt as CustomEvent<{ prompt?: string }>).detail || {};
+      setIsOpen(true);
+      setIsMinimized(false);
+      if (detail.prompt) {
+        window.setTimeout(() => {
+          void sendMessageRef.current(detail.prompt);
+        }, 120);
+      }
+    };
+    window.addEventListener('meko:open', handleExternalOpen);
+    return () => window.removeEventListener('meko:open', handleExternalOpen);
+  }, []);
 
   // Auto scroll to bottom of chat
   useEffect(() => {
@@ -780,6 +799,8 @@ export function AiCopilotWidget() {
     }
   };
 
+  sendMessageRef.current = handleSendMessage;
+
   // Floating trigger button when closed
   if (!isOpen) {
     return (
@@ -792,19 +813,21 @@ export function AiCopilotWidget() {
             setIsOpen(true);
             setIsMinimized(false);
           }}
-          className="group relative flex items-center gap-2.5 rounded-full bg-gradient-to-tr from-leaf-800 via-leaf-700 to-teal-600 p-1.5 text-white shadow-xl ring-2 ring-white/80 transition-all duration-200 hover:scale-105 hover:shadow-2xl focus:outline-none focus:ring-4 focus:ring-leaf-300 sm:pl-3.5 sm:pr-4 sm:py-2.5 sm:ring-0"
+          className={`group relative flex items-center gap-2.5 rounded-full bg-gradient-to-tr from-leaf-800 via-leaf-700 to-teal-600 text-white shadow-xl ring-2 ring-white/80 transition-all duration-200 hover:scale-105 hover:shadow-2xl focus:outline-none focus:ring-4 focus:ring-leaf-300 sm:py-2.5 sm:pl-3.5 sm:pr-4 sm:ring-0 ${
+            seniorMode ? 'py-2 pl-2.5 pr-4' : 'p-1.5'
+          }`}
           aria-label="Mở trợ lý Pé Meko"
         >
           <span className="relative flex h-10 w-10 items-center justify-center rounded-full bg-white/15 text-xl shadow-inner sm:h-9 sm:w-9">
             🦊
             <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-leaf-800 bg-emerald-400" />
           </span>
-          <div className="hidden text-left sm:block">
+          <div className={seniorMode ? 'text-left' : 'hidden text-left sm:block'}>
             <div className="text-xs font-extrabold leading-tight tracking-tight text-white">
-              Pé Meko
+              {seniorMode ? 'Hỏi Trợ lý AI' : 'Pé Meko'}
             </div>
-            <div className="text-[10px] font-medium text-leaf-100 leading-tight">
-              Trợ lý du lịch AI
+            <div className="text-[10px] font-medium leading-tight text-leaf-100">
+              {seniorMode ? 'Nhấn để hỏi Pé Meko' : 'Trợ lý du lịch AI'}
             </div>
           </div>
         </button>

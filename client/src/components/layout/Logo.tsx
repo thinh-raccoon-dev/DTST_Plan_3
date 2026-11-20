@@ -16,25 +16,25 @@ export function Logo({
   stacked?: boolean;
 }) {
   return (
-    <Link to={to} className="flex shrink-0 items-center gap-2.5 rounded-xl" aria-label="Trang chủ Hộ chiếu Trải nghiệm Đồng Tháp">
+    <Link to={to} className="flex min-w-0 shrink items-center gap-1.5 rounded-xl sm:shrink-0 sm:gap-2.5" aria-label="Trang chủ Hộ chiếu Trải nghiệm Đồng Tháp">
       <img
         src="/images/logo-mark.png"
         alt=""
         width={420}
         height={329}
         decoding="async"
-        className="h-11 w-auto shrink-0 select-none"
+        className="h-9 w-auto shrink-0 select-none sm:h-11"
         draggable={false}
       />
-      <span className="flex flex-col whitespace-nowrap leading-none">
-        <span className="text-[1.05rem] font-extrabold tracking-[0.02em] text-river-900">
+      <span className="flex min-w-0 flex-col whitespace-nowrap leading-none">
+        <span className="text-[0.9rem] font-extrabold tracking-[0.01em] text-river-900 sm:text-[1.05rem] sm:tracking-[0.02em]">
           ĐỒNG <span className="text-lotus-600">THÁP</span>
         </span>
         <span
           className={
             stacked
-              ? 'mt-1 text-[0.62rem] font-semibold tracking-[0.3em] text-leaf-700'
-              : 'mt-1 text-[0.65rem] font-semibold tracking-wide text-leaf-700'
+              ? 'mt-1 text-[0.55rem] font-semibold tracking-[0.18em] text-leaf-700 sm:text-[0.62rem] sm:tracking-[0.3em]'
+              : 'mt-1 text-[0.6rem] font-semibold tracking-wide text-leaf-700 sm:text-[0.65rem]'
           }
         >
           {subtitle}
