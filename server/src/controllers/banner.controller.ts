@@ -27,6 +27,7 @@ export function activeBannerFilter(placement: string, now = new Date()) {
     placement,
     status: 'active',
     $and: [
+      { $or: [{ approvalStatus: 'approved' }, { approvalStatus: { $exists: false } }] },
       { $or: [{ startAt: { $exists: false } }, { startAt: null }, { startAt: { $lte: now } }] },
       { $or: [{ endAt: { $exists: false } }, { endAt: null }, { endAt: { $gte: now } }] },
     ],

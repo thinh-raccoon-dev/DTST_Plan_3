@@ -79,6 +79,56 @@ export interface DestinationImage {
   sourceUrl: string | null;
 }
 
+export type ServiceCategory = 'ticket' | 'combo' | 'activity' | 'food' | 'guide' | 'other';
+
+export interface DestinationServiceItem {
+  id: string;
+  name: string;
+  category: ServiceCategory;
+  priceVnd: number;
+  unit: string;
+  durationMinutes: number | null;
+  description: string;
+  includesVat: boolean;
+  isAvailable: boolean;
+}
+
+export interface ExpBalance {
+  totalEarnedExp: number;
+  totalSpentExp: number;
+  spendableExp: number;
+}
+
+export interface PublicVoucherItem {
+  id: string;
+  title: string;
+  description: string;
+  discountLabel: string;
+  terms: string;
+  pointsCost: number;
+  totalQuantity: number;
+  remaining: number;
+  maxPerUser: number;
+  myClaimCount: number;
+  canClaimMore: boolean;
+  validFrom: string;
+  validUntil: string;
+}
+
+export interface MyVoucherClaimItem {
+  id: string;
+  claimCode: string;
+  voucherTitle: string;
+  discountLabel: string;
+  terms: string;
+  pointsSpent: number;
+  status: 'issued' | 'redeemed' | 'expired';
+  expiresAt: string;
+  redeemedAt: string | null;
+  createdAt: string;
+  destination: { id: string; name: string; slug: string; area: string } | null;
+}
+
 export interface DestinationDetail extends Omit<DestinationSummary, 'image'> {
   image: { url: string; alt: string } | null;
   description: string;
@@ -87,10 +137,13 @@ export interface DestinationDetail extends Omit<DestinationSummary, 'image'> {
   images: DestinationImage[];
   openingHours: string | null;
   referencePrice: string | null;
+  services?: DestinationServiceItem[];
   contactInfo: { phone?: string; website?: string; email?: string } | null;
   sourceUrls: string[];
   verification: Record<'location' | 'openingHours' | 'referencePrice' | 'contactInfo', VerificationLevel>;
   lastVerifiedAt: string | null;
+  partnerNotice?: string | null;
+  partnerNoticeUpdatedAt?: string | null;
   updatedAt: string | null;
 }
 
@@ -703,6 +756,9 @@ export interface PublicBanner {
 export interface AdminBanner extends PublicBanner {
   placement: 'home_top';
   status: 'active' | 'inactive';
+  approvalStatus?: 'approved' | 'pending_review' | 'rejected';
+  destinationId?: string | null;
+  reviewFeedback?: string | null;
   isLive: boolean;
   startAt: string | null;
   endAt: string | null;
@@ -961,9 +1017,25 @@ export interface AdminReviewsResponse {
   managedDestinations: Array<{ id: string; name: string; slug: string }>;
 }
 
+export interface PartnerChallengeQuestion {
+  prompt: string;
+  options: string[];
+  correctOptionIndex: number;
+  explanation?: string;
+}
+
 export interface PartnerOverviewResponse {
   hasDestination: boolean;
+  daysWindow?: 7 | 30 | 90;
   message?: string;
+  managedDestinations?: Array<{
+    id: string;
+    name: string;
+    slug: string;
+    area: string;
+    operationalStatus: 'active' | 'temporarily_closed' | 'closed';
+    publicationStatus: string;
+  }>;
   destination?: {
     id: string;
     name: string;
@@ -982,7 +1054,20 @@ export interface PartnerOverviewResponse {
     publicationStatus: string;
     durationMinutes?: number;
     reviewNote?: string;
+    partnerNotice?: string;
+    partnerNoticeUpdatedAt?: string | null;
     managedBy?: { displayName: string; email: string };
+  };
+  profileHealth?: {
+    score: number;
+    tier: string;
+    checks: Array<{
+      key: string;
+      label: string;
+      passed: boolean;
+      weight: number;
+      hint: string;
+    }>;
   };
   metrics?: {
     totalViews: number;
@@ -993,6 +1078,11 @@ export interface PartnerOverviewResponse {
     totalChallenges: number;
     totalCompletedChallenges: number;
     totalQrs: number;
+    activeAlertsCount?: number;
+    activeVouchersCount?: number;
+    servicesCount?: number;
+    newInquiriesCount?: number;
+    pendingBannersCount?: number;
   };
   chartAnalytics?: {
     dailyTrend: Array<{ date: string; label: string; views: number; checkIns: number }>;
@@ -1023,19 +1113,23 @@ export interface PartnerOverviewResponse {
     id: string;
     title: string;
     description?: string;
-    status: string;
+    story?: string;
+    status: 'active' | 'inactive' | string;
     questionCount: number;
+    questions?: PartnerChallengeQuestion[];
     rewardPoints: number;
     completions: number;
     createdAt: string;
   }>;
-    qrs?: Array<{
+  qrs?: Array<{
     id: string;
     code: string;
     label: string;
     targetType: string;
     targetId: string;
-    status: string;
+    status: 'active' | 'inactive' | string;
+    url?: string;
+    landingViews?: number;
     createdAt: string;
   }>;
   badges?: Array<{
@@ -1044,10 +1138,21 @@ export interface PartnerOverviewResponse {
     name: string;
     description: string;
     icon: string;
-    criteriaType: string;
+    criteriaType: 'checkin_count' | 'challenge_count' | string;
     targetCount: number;
     rewardPoints: number;
     status: 'active' | 'inactive';
+    createdAt: string;
+  }>;
+  activeAlerts?: Array<{
+    id: string;
+    type: 'accident' | 'landslide' | 'flood' | 'storm' | 'road_closed';
+    severity: 'advisory' | 'warning' | 'critical';
+    title: string;
+    description: string;
+    radiusKm: number;
+    terrainImpact: string;
+    expiresAt: string | null;
     createdAt: string;
   }>;
 }

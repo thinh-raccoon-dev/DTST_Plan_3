@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express';
+import { z } from 'zod';
 import { BannerModel, type Banner, type BannerDocument } from '../../models/Banner.js';
 import { logAuditEvent } from '../../services/audit.service.js';
 import { adminBannerQuerySchema, bannerInputSchema, bannerPatchSchema } from '../../schemas/banner.schemas.js';
@@ -23,8 +24,11 @@ function toAdminBanner(b: LeanBanner) {
     linkUrl: b.linkUrl ?? null,
     linkLabel: b.linkLabel ?? null,
     sponsorName: b.sponsorName ?? null,
+    destinationId: b.destinationId ? String(b.destinationId) : null,
+    approvalStatus: b.approvalStatus ?? 'approved',
+    reviewFeedback: b.reviewFeedback ?? null,
     status: b.status,
-    isLive: b.status === 'active' && !scheduledOut,
+    isLive: b.status === 'active' && (b.approvalStatus ?? 'approved') === 'approved' && !scheduledOut,
     startAt: b.startAt ?? null,
     endAt: b.endAt ?? null,
     sortOrder: b.sortOrder ?? 0,
@@ -133,4 +137,56 @@ export async function deleteBanner(req: Request, res: Response) {
   });
 
   res.status(204).end();
+}
+
+const reviewBannerSchema = z.object({
+  decision: z.enum(['approve', 'reject']),
+  activateNow: z.boolean().default(true),
+  feedback: z.string().trim().max(500).optional(),
+});
+
+/** Admin moderation endpoint for Partner-submitted seasonal promo banners. */
+export async function reviewPartnerBanner(req: Request, res: Response) {
+  const { id } = idParamsSchema.parse(req.params);
+  const body = reviewBannerSchema.parse(req.body);
+  const doc = await BannerModel.findById(id);
+  if (!doc) throw notFound('Không tìm thấy banner.');
+
+  if (body.decision === 'approve') {
+    doc.approvalStatus = 'approved';
+    doc.reviewFeedback = body.feedback || 'Đã phê duyệt hiển thị theo quy định Sở VHTTDL.';
+    if (body.activateNow) doc.status = 'active';
+  } else {
+    if (!body.feedback || body.feedback.trim().length < 5) {
+      throw badRequest('Vui lòng ghi rõ lý do từ chối (tối thiểu 5 ký tự) để đối tác chỉnh sửa.', 'VALIDATION_ERROR');
+    }
+    doc.approvalStatus = 'rejected';
+    doc.status = 'inactive';
+    doc.reviewFeedback = body.feedback;
+  }
+
+  await doc.save();
+
+  await logAuditEvent({
+    req,
+    action: body.decision === 'approve' ? 'banner.approve' : 'banner.reject',
+    targetType: 'banner',
+    targetId: doc._id,
+    targetName: doc.title,
+    destinationId: doc.destinationId ?? undefined,
+    details: {
+      decision: body.decision,
+      status: doc.status,
+      feedback: doc.reviewFeedback,
+    },
+  });
+
+  res.json({
+    success: true,
+    banner: toAdminBanner(doc.toObject() as LeanBanner),
+    message:
+      body.decision === 'approve'
+        ? 'Đã phê duyệt banner của đối tác thành công!'
+        : 'Đã từ chối banner và gửi phản hồi cho đối tác.',
+  });
 }

@@ -19,6 +19,7 @@ const memoryPinSchema = new Schema(
     moodLabel: { type: String, required: true, trim: true, maxlength: 60, default: 'Kỷ niệm đáng nhớ' },
     note: { type: String, trim: true, maxlength: 400, default: '' },
     placeName: { type: String, trim: true, maxlength: 160 },
+    imageUrl: { type: String, trim: true, maxlength: 400 },
     createdAt: { type: Number, required: true },
   },
   { _id: false },

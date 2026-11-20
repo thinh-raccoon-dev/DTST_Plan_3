@@ -9,6 +9,9 @@ export type BannerTheme = (typeof BANNER_THEMES)[number];
 export const BANNER_PLACEMENTS = ['home_top'] as const;
 export type BannerPlacement = (typeof BANNER_PLACEMENTS)[number];
 
+export const BANNER_APPROVAL_STATUSES = ['approved', 'pending_review', 'rejected'] as const;
+export type BannerApprovalStatus = (typeof BANNER_APPROVAL_STATUSES)[number];
+
 const bannerSchema = new Schema(
   {
     placement: { type: String, enum: BANNER_PLACEMENTS, default: 'home_top', required: true },
@@ -23,6 +26,16 @@ const bannerSchema = new Schema(
     linkLabel: { type: String, trim: true, maxlength: 40 },
     // Advertising transparency: promo banners always show "Quảng cáo" plus the sponsor when provided.
     sponsorName: { type: String, trim: true, maxlength: 120 },
+    // Partner promo submission workflow (Luật Quảng cáo 2012 — requires Sở VHTTDL approval)
+    destinationId: { type: Schema.Types.ObjectId, ref: 'Destination', index: true },
+    submittedBy: { type: Schema.Types.ObjectId, ref: 'User' },
+    approvalStatus: {
+      type: String,
+      enum: BANNER_APPROVAL_STATUSES,
+      default: 'approved',
+      required: true,
+    },
+    reviewFeedback: { type: String, trim: true, maxlength: 500 },
     status: { type: String, enum: ['active', 'inactive'], default: 'inactive', required: true },
     startAt: { type: Date },
     endAt: { type: Date },

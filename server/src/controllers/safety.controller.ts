@@ -1,11 +1,14 @@
 import type { Request, Response } from 'express';
+import { Types } from 'mongoose';
 import { z } from 'zod';
+import { DestinationModel } from '../models/Destination.js';
 import {
   SAFETY_ALERT_TYPES,
   SAFETY_SEVERITIES,
   SafetyAlertModel,
   TERRAIN_IMPACTS,
 } from '../models/SafetyAlert.js';
+import { logAuditEvent } from '../services/audit.service.js';
 import { assessItinerarySafety } from '../services/safetyGuardian.service.js';
 import { logger } from '../utils/logger.js';
 
@@ -52,6 +55,7 @@ const createAlertSchema = z.object({
   radiusKm: z.coerce.number().min(0.5).max(150).default(8),
   terrainImpact: z.enum(TERRAIN_IMPACTS).default('outdoor'),
   hoursValid: z.coerce.number().min(1).max(168).default(24),
+  destinationId: z.string().optional(),
 });
 
 export async function checkItinerarySafetyHandler(req: Request, res: Response): Promise<void> {
@@ -100,27 +104,102 @@ export async function createSafetyAlertHandler(req: Request, res: Response): Pro
     return;
   }
 
-  const { hoursValid, ...data } = parsed.data;
+  const isPartner = req.user?.role === 'partner';
+  const { hoursValid, destinationId, ...data } = parsed.data;
+  let resolvedDestinationId: Types.ObjectId | undefined;
+
+  if (isPartner) {
+    const userObjectId = new Types.ObjectId(req.user!.id);
+    const filter: Record<string, unknown> = { managedBy: { $in: [req.user!.id, userObjectId] } };
+    if (destinationId) {
+      if (!Types.ObjectId.isValid(destinationId)) {
+        res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'Mã địa điểm không hợp lệ.' } });
+        return;
+      }
+      filter._id = new Types.ObjectId(destinationId);
+    }
+    const ownedDest = await DestinationModel.findOne(filter).select('_id name').lean();
+    if (!ownedDest) {
+      res.status(403).json({
+        error: { code: 'FORBIDDEN', message: 'Đối tác chỉ được đăng cảnh báo cho địa điểm thuộc quyền quản lý.' },
+      });
+      return;
+    }
+    resolvedDestinationId = ownedDest._id;
+  } else if (destinationId && Types.ObjectId.isValid(destinationId)) {
+    resolvedDestinationId = new Types.ObjectId(destinationId);
+  }
+
+  const clampedRadiusKm = isPartner ? Math.min(data.radiusKm, 15) : data.radiusKm;
+
   const doc = await SafetyAlertModel.create({
     ...data,
-    source: req.user?.role === 'partner' ? 'partner' : 'admin',
+    radiusKm: clampedRadiusKm,
+    destinationId: resolvedDestinationId,
+    source: isPartner ? 'partner' : 'admin',
     isActive: true,
     expiresAt: new Date(Date.now() + hoursValid * 60 * 60 * 1000),
     createdBy: req.user?.id,
+  });
+
+  await logAuditEvent({
+    req,
+    action: 'safety_alert.create',
+    targetType: 'safety_alert',
+    targetId: doc._id,
+    targetName: doc.title,
+    destinationId: resolvedDestinationId,
+    details: { type: doc.type, severity: doc.severity, radiusKm: doc.radiusKm, hoursValid },
   });
 
   res.status(201).json({ success: true, alert: doc });
 }
 
 export async function deactivateSafetyAlertHandler(req: Request, res: Response): Promise<void> {
-  const updated = await SafetyAlertModel.findByIdAndUpdate(
-    req.params.id,
-    { $set: { isActive: false } },
-    { new: true },
-  );
-  if (!updated) {
+  const id = String(req.params.id || '');
+  if (!Types.ObjectId.isValid(id)) {
+    res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'Mã cảnh báo không hợp lệ.' } });
+    return;
+  }
+
+  const existing = await SafetyAlertModel.findById(id);
+  if (!existing) {
     res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Không tìm thấy cảnh báo.' } });
     return;
   }
-  res.json({ success: true, alert: updated });
+
+  if (req.user?.role === 'partner') {
+    const userObjectId = new Types.ObjectId(req.user.id);
+    const createdBySelf = existing.createdBy && String(existing.createdBy) === req.user.id;
+    let ownsDest = false;
+    if (existing.destinationId) {
+      ownsDest = Boolean(
+        await DestinationModel.exists({
+          _id: existing.destinationId,
+          managedBy: { $in: [req.user.id, userObjectId] },
+        }),
+      );
+    }
+    if (!createdBySelf && !ownsDest) {
+      res.status(403).json({
+        error: { code: 'FORBIDDEN', message: 'Bạn không có quyền gỡ cảnh báo của đơn vị khác.' },
+      });
+      return;
+    }
+  }
+
+  existing.isActive = false;
+  await existing.save();
+
+  await logAuditEvent({
+    req,
+    action: 'safety_alert.deactivate',
+    targetType: 'safety_alert',
+    targetId: existing._id,
+    targetName: existing.title,
+    destinationId: existing.destinationId ?? undefined,
+    details: { type: existing.type, severity: existing.severity },
+  });
+
+  res.json({ success: true, alert: existing });
 }

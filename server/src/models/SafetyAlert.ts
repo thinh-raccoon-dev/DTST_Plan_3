@@ -33,6 +33,7 @@ const safetyAlertSchema = new Schema(
       enum: ['admin', 'partner', 'weather_engine', 'demo_simulation'],
       default: 'admin',
     },
+    destinationId: { type: Schema.Types.ObjectId, ref: 'Destination', index: true },
     isActive: { type: Boolean, default: true },
     expiresAt: { type: Date, default: () => new Date(Date.now() + 24 * 60 * 60 * 1000) },
     createdBy: { type: Schema.Types.ObjectId, ref: 'User' },

@@ -1,4 +1,4 @@
-import { Heart, MapPin, MapPinCheck, QrCode, Route, Sparkles, Trophy } from 'lucide-react';
+import { Heart, MapPin, MapPinCheck, Megaphone, QrCode, Route, Sparkles, Trophy } from 'lucide-react';
 import { useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { CategoryIcon } from '../components/destination/CategoryIcon';
@@ -7,6 +7,7 @@ import { DestinationCard } from '../components/destination/DestinationCard';
 import { DestinationFacts, DestinationMap, DestinationSources } from '../components/destination/DestinationInfo';
 import { DestinationImage } from '../components/destination/DestinationImage';
 import { DestinationReviews } from '../components/destination/DestinationReviews';
+import { DestinationPartnerCommerceSection } from '../components/destinations/DestinationPartnerCommerceSection';
 import { PageContainer } from '../components/layout/PublicLayout';
 import { Badge } from '../components/ui/Badge';
 import { Button, ButtonLink } from '../components/ui/Button';
@@ -107,6 +108,23 @@ export function DestinationDetailPage() {
 
             {d.summary && <p className="mt-4 text-sm leading-relaxed text-river-700 sm:text-base">{d.summary}</p>}
 
+            {d.partnerNotice && (
+              <div className="mt-4 flex items-start gap-2.5 rounded-2xl border border-amber-300/80 bg-amber-50/90 p-3.5 text-sm text-amber-950">
+                <Megaphone className="mt-0.5 size-4 shrink-0 text-amber-700" aria-hidden />
+                <div className="min-w-0">
+                  <p className="text-xs font-extrabold uppercase tracking-wider text-amber-800">
+                    Thông báo chính thức từ Ban Quản lý cơ sở
+                    {d.partnerNoticeUpdatedAt && (
+                      <span className="ml-1.5 font-medium normal-case text-amber-700">
+                        · Cập nhật {new Date(d.partnerNoticeUpdatedAt).toLocaleDateString('vi-VN')}
+                      </span>
+                    )}
+                  </p>
+                  <p className="mt-1 leading-relaxed">{d.partnerNotice}</p>
+                </div>
+              </div>
+            )}
+
             <div className="mt-auto flex flex-wrap gap-2.5 border-t border-sand-200 pt-6">
               <Button
                 variant={favorite.favorited ? 'secondary' : 'primary'}
@@ -185,6 +203,12 @@ export function DestinationDetailPage() {
               </>
             )}
           </Card>
+
+          <DestinationPartnerCommerceSection
+            destinationSlug={d.slug}
+            destinationName={d.name}
+            services={d.services}
+          />
 
           <DestinationReviews
             destinationId={d.id}
