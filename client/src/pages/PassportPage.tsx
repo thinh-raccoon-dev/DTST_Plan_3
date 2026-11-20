@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom';
 import { announceBadges } from '../components/challenge/ChallengeQuiz';
 import { PageContainer } from '../components/layout/PublicLayout';
 import { DigitalTravelerPass } from '../components/passport/DigitalTravelerPass';
+import { PassportVoucherWallet } from '../components/passport/PassportVoucherWallet';
 import { Button, ButtonLink } from '../components/ui/Button';
 import { Card, StatCard } from '../components/ui/Card';
 import { EmptyState, ErrorState, Notice, PageLoader } from '../components/ui/States';
@@ -229,6 +230,8 @@ export function PassportPage() {
           })}
         </ul>
       </section>
+
+      <PassportVoucherWallet />
 
       <div className="mt-10 grid gap-6 lg:grid-cols-2">
         <Card className="p-5 sm:p-6">

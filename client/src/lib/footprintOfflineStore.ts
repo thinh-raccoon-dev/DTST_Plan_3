@@ -13,6 +13,7 @@ export interface MemoryPin {
   moodLabel: string;
   note: string;
   placeName?: string;
+  imageUrl?: string;
   createdAt: number;
 }
 
@@ -212,7 +213,10 @@ export async function mergeServerTracksWithLocal(
       startedAt: typeof srv.startedAt === 'number' ? srv.startedAt : new Date(srv.startedAt).getTime(),
       endedAt: typeof srv.endedAt === 'number' ? srv.endedAt : new Date(srv.endedAt).getTime(),
       points: srv.points || [],
-      memories: srv.memories || [],
+      memories: (srv.memories || []).map((m) => ({
+        ...m,
+        imageUrl: resolveStopPhoto(m.placeName, m.imageUrl),
+      })),
       isDemoRoute: srv.isDemoRoute,
       syncStatus: 'synced',
     };
@@ -236,14 +240,22 @@ export interface PresetJourneyRoute {
   title: string;
   subtitle: string;
   color: string;
-  waypoints: Array<{ lat: number; lng: number; placeName?: string; emoji?: string; mood?: string; note?: string }>;
+  waypoints: Array<{
+    lat: number;
+    lng: number;
+    placeName?: string;
+    emoji?: string;
+    mood?: string;
+    note?: string;
+    imageUrl?: string;
+  }>;
 }
 
 export const PRESET_DEMO_JOURNEYS: PresetJourneyRoute[] = [
   {
     id: 'demo-sa-dec-heritage',
     title: 'Hành trình Di sản & Hoa Sa Đéc',
-    subtitle: 'Làng hoa Tân Quy Đông → Nhà cổ Huỳnh Thủy Lê → Chùa Kiến An Cung → Chợ Sa Đéc',
+    subtitle: 'Làng hoa Sa Đéc → Nhà cổ Huỳnh Thủy Lê → Chùa Ông Quách → Phố Hủ tiếu',
     color: '#10b981',
     waypoints: [
       {
@@ -253,10 +265,11 @@ export const PRESET_DEMO_JOURNEYS: PresetJourneyRoute[] = [
         emoji: '🌸',
         mood: 'Rực rỡ sắc hoa',
         note: 'Check-in giàn hoa cúc mâm xôi trên mặt nước cực đẹp!',
+        imageUrl: '/images/destinations/sa-dec/lang-hoa-sa-dec.jpg',
       },
-      { lat: 10.3082, lng: 105.7512 },
-      { lat: 10.3025, lng: 105.7548 },
-      { lat: 10.2974, lng: 105.7571 },
+      { lat: 10.3078, lng: 105.7518 },
+      { lat: 10.3016, lng: 105.7554 },
+      { lat: 10.2966, lng: 105.7576 },
       {
         lat: 10.2923,
         lng: 105.7592,
@@ -264,24 +277,27 @@ export const PRESET_DEMO_JOURNEYS: PresetJourneyRoute[] = [
         emoji: '🏛️',
         mood: 'Hoài niệm Đông Dương',
         note: 'Nghe kể chuyện tình Người Tình bên kiến trúc Pháp - Hoa trăm tuổi.',
+        imageUrl: '/images/destinations/sa-dec/nha-co-huynh-thuy-le.jpg',
       },
-      { lat: 10.2929, lng: 105.7585 },
+      { lat: 10.2931, lng: 105.7584 },
       {
-        lat: 10.2935,
-        lng: 105.7579,
+        lat: 10.2941,
+        lng: 105.7572,
         placeName: 'Kiến An Cung – Chùa Ông Quách',
         emoji: '🏮',
         mood: 'Tâm linh cổ kính',
         note: 'Kiến trúc chạm khắc gỗ tinh xảo tuyệt mỹ ngay trung tâm Sa Đéc.',
+        imageUrl: '/images/destinations/sa-dec/kien-an-cung-chua-ong-quach.jpg',
       },
-      { lat: 10.2918, lng: 105.7615 },
+      { lat: 10.2916, lng: 105.7618 },
       {
-        lat: 10.2904,
-        lng: 105.7638,
+        lat: 10.2896,
+        lng: 105.7646,
         placeName: 'Phố Ẩm thực & Hủ tiếu Sa Đéc',
         emoji: '🍜',
         mood: 'Ngon xuất sắc',
         note: 'Thưởng thức tô hủ tiếu Bà Sẩm đậm đà chuẩn vị xứ bột!',
+        imageUrl: '/images/destinations/sa-dec/hu-tieu-sa-dec-ba-sam.jpg',
       },
     ],
   },
@@ -289,7 +305,7 @@ export const PRESET_DEMO_JOURNEYS: PresetJourneyRoute[] = [
     id: 'demo-cao-lanh-lotus',
     title: 'Cung đường Sen Hồng Cao Lãnh – Xẻo Quýt',
     subtitle: 'Văn Thánh Miếu → Bảo tàng Đồng Tháp → Lăng Cụ Phó bảng → Rừng tràm Xẻo Quýt',
-    color: '#06b6d4',
+    color: '#0ea5e9',
     waypoints: [
       {
         lat: 10.4555,
@@ -298,6 +314,7 @@ export const PRESET_DEMO_JOURNEYS: PresetJourneyRoute[] = [
         emoji: '🪷',
         mood: 'Bình yên buổi sớm',
         note: 'Dạo bước bên hồ sen và đường sách trung tâm TP. Cao Lãnh.',
+        imageUrl: '/images/destinations/cao-lanh/van-thanh-mieu-cao-lanh.jpg',
       },
       {
         lat: 10.4562,
@@ -306,6 +323,7 @@ export const PRESET_DEMO_JOURNEYS: PresetJourneyRoute[] = [
         emoji: '🏺',
         mood: 'Khám phá văn hóa Óc Eo',
         note: 'Chiêm ngưỡng bộ sưu tập cổ vật vàng văn hóa Óc Eo quý giá.',
+        imageUrl: '/images/destinations/cao-lanh/bao-tang-tong-hop-dong-thap.jpg',
       },
       { lat: 10.4521, lng: 105.6338 },
       {
@@ -315,6 +333,7 @@ export const PRESET_DEMO_JOURNEYS: PresetJourneyRoute[] = [
         emoji: '🙏',
         mood: 'Trang nghiêm & Tự hào',
         note: 'Viếng vòm mộ cánh sen trắng và thăm nhà sàn Bác Hồ.',
+        imageUrl: '/images/destinations/cao-lanh/khu-di-tich-nguyen-sinh-sac.jpg',
       },
       { lat: 10.4435, lng: 105.668 },
       { lat: 10.4385, lng: 105.709 },
@@ -325,22 +344,24 @@ export const PRESET_DEMO_JOURNEYS: PresetJourneyRoute[] = [
         emoji: '🚣',
         mood: 'Xanh mát rừng tràm',
         note: 'Ngồi xuồng ba lá len lỏi dưới tán rừng tràm nguyên sinh.',
+        imageUrl: '/images/destinations/cao-lanh/khu-di-tich-xeo-quyt.jpg',
       },
     ],
   },
   {
     id: 'demo-tram-chim-eco',
-    title: 'Chinh phục Rừng Tràm Chim – Đồng Sen Tháp Mười',
+    title: 'Chinh phục Tràm Chim – Đồng Sen Tháp Mười',
     subtitle: 'Vườn quốc gia Tràm Chim → Gáo Giồng → Đồng sen Tháp Mười',
     color: '#f43f5e',
     waypoints: [
       {
         lat: 10.6749,
         lng: 105.5653,
-        placeName: 'Vườn quốc gia Tràm Chim (Ramsar 2.000)',
+        placeName: 'Vườn quốc gia Tràm Chim (Ramsar)',
         emoji: '🦩',
         mood: 'Thiên nhiên kỳ vĩ',
         note: 'Đi tắc ráng xuyên đồng nước nổi ngắm đàn chim trời bay rợp bóng.',
+        imageUrl: '/images/destinations/tam-nong/vuon-quoc-gia-tram-chim.jpg',
       },
       { lat: 10.625, lng: 105.612 },
       { lat: 10.578, lng: 105.652 },
@@ -351,6 +372,7 @@ export const PRESET_DEMO_JOURNEYS: PresetJourneyRoute[] = [
         emoji: '🌿',
         mood: 'Chill giữa ốc đảo xanh',
         note: 'Lên đài quan sát 18m ngắm toàn cảnh rừng tràm bạt ngàn.',
+        imageUrl: '/images/destinations/cao-lanh/khu-du-lich-sinh-thai-gao-giong.jpg',
       },
       { lat: 10.548, lng: 105.735 },
       {
@@ -360,10 +382,28 @@ export const PRESET_DEMO_JOURNEYS: PresetJourneyRoute[] = [
         emoji: '🌸',
         mood: 'Ngát hương Sen Hồng',
         note: 'Thưởng thức cá lóc nướng trui cuốn lá sen non giữa đồng sen.',
+        imageUrl: '/images/destinations/thap-muoi/dong-sen-thap-muoi.jpg',
       },
     ],
   },
 ];
+
+export function resolveStopPhoto(placeName?: string, existing?: string): string | undefined {
+  if (existing) return existing;
+  if (!placeName) return undefined;
+  const lower = placeName.toLowerCase();
+  for (const pr of PRESET_DEMO_JOURNEYS) {
+    for (const wp of pr.waypoints) {
+      if (wp.placeName && wp.imageUrl) {
+        const key = wp.placeName.toLowerCase();
+        if (key === lower || lower.includes(key.slice(0, 14)) || key.includes(lower.slice(0, 14))) {
+          return wp.imageUrl;
+        }
+      }
+    }
+  }
+  return undefined;
+}
 
 /** Interpolate smooth GPS points between waypoints for lifelike path drawing and replay */
 export function interpolateWaypoints(
@@ -386,6 +426,7 @@ export function interpolateWaypoints(
         moodLabel: cur.mood || 'Trải nghiệm tuyệt vời',
         note: cur.note || '',
         placeName: cur.placeName,
+        imageUrl: cur.imageUrl,
         createdAt: now + stepCounter * 15000,
       });
     }
@@ -413,4 +454,71 @@ export function interpolateWaypoints(
   }
 
   return { points, memories };
+}
+
+/**
+ * Snap preset waypoints onto real Đồng Tháp roads via OSRM when online so routes follow
+ * actual highways, streets, and bridges instead of straight lines! Falls back smoothly offline.
+ */
+export async function resolveRoadSnappedJourney(
+  waypoints: PresetJourneyRoute['waypoints'],
+  online: boolean,
+): Promise<{ points: TrackPoint[]; memories: MemoryPin[]; roadSnapped: boolean }> {
+  const fallback = interpolateWaypoints(waypoints, 8);
+  if (!online || waypoints.length < 2) {
+    return { ...fallback, roadSnapped: false };
+  }
+
+  // Only route through meaningful named stops (or all waypoints if <= 6) so OSRM picks clean highways
+  const named = waypoints.filter((w) => Boolean(w.placeName));
+  const routeNodes = named.length >= 2 ? named : waypoints;
+  const coordsParam = routeNodes.map((w) => `${w.lng.toFixed(6)},${w.lat.toFixed(6)}`).join(';');
+
+  try {
+    const ctrl = new AbortController();
+    const timer = window.setTimeout(() => ctrl.abort(), 3800);
+    const res = await fetch(
+      `https://router.project-osrm.org/route/v1/driving/${coordsParam}?overview=full&geometries=geojson`,
+      { signal: ctrl.signal },
+    );
+    window.clearTimeout(timer);
+
+    if (!res.ok) return { ...fallback, roadSnapped: false };
+    const json = (await res.json()) as {
+      routes?: Array<{ geometry?: { coordinates?: Array<[number, number]> } }>;
+    };
+    const rawCoords = json.routes?.[0]?.geometry?.coordinates;
+    if (!rawCoords || rawCoords.length < 4) {
+      return { ...fallback, roadSnapped: false };
+    }
+
+    // Downsample gracefully to ~70-110 smooth points so animation & IndexedDB storage stay super snappy
+    const maxPts = 96;
+    const stride = rawCoords.length > maxPts ? Math.ceil(rawCoords.length / maxPts) : 1;
+    const now = Date.now();
+    const points: TrackPoint[] = [];
+    for (let i = 0; i < rawCoords.length; i += stride) {
+      const [lng, lat] = rawCoords[i]!;
+      points.push({
+        lat: Number(lat.toFixed(6)),
+        lng: Number(lng.toFixed(6)),
+        timestamp: now + points.length * 15000,
+        speedKmh: 36,
+      });
+    }
+    const [lastLng, lastLat] = rawCoords[rawCoords.length - 1]!;
+    const lastPt = points[points.length - 1];
+    if (!lastPt || lastPt.lat !== Number(lastLat.toFixed(6)) || lastPt.lng !== Number(lastLng.toFixed(6))) {
+      points.push({
+        lat: Number(lastLat.toFixed(6)),
+        lng: Number(lastLng.toFixed(6)),
+        timestamp: now + points.length * 15000,
+        speedKmh: 0,
+      });
+    }
+
+    return { points, memories: fallback.memories, roadSnapped: true };
+  } catch {
+    return { ...fallback, roadSnapped: false };
+  }
 }

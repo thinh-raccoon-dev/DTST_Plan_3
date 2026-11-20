@@ -23,6 +23,7 @@ const memorySchema = z.object({
   moodLabel: z.string().trim().min(1).max(60).default('Kỷ niệm đáng nhớ'),
   note: z.string().trim().max(400).optional().default(''),
   placeName: z.string().trim().max(160).optional(),
+  imageUrl: z.string().trim().max(400).optional(),
   createdAt: z.union([z.number(), z.string()]).transform((v) => (typeof v === 'number' ? v : new Date(v).getTime() || Date.now())),
 });
 

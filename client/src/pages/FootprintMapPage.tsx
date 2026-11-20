@@ -1,20 +1,27 @@
 import clsx from 'clsx';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
+import * as maplibregl from 'maplibre-gl';
+import 'maplibre-gl/dist/maplibre-gl.css';
 import {
+  Camera,
   CloudOff,
+  Compass,
   Download,
   Eye,
   EyeOff,
+  Flag,
   Flame,
   Footprints,
+  Layers,
   MapPin,
   MapPinCheck,
   MapPinPlus,
+  Maximize2,
+  Navigation,
   Pause,
   Play,
   Radio,
   RefreshCw,
+  Route,
   Sparkles,
   Square,
   Stamp,
@@ -36,11 +43,12 @@ import {
   deleteLocalTrackById,
   getAllLocalTracks,
   haversineDistanceKm,
-  interpolateWaypoints,
   markTracksAsSynced,
   mergeServerTracksWithLocal,
   PRESET_DEMO_JOURNEYS,
   registerFootprintServiceWorker,
+  resolveRoadSnappedJourney,
+  resolveStopPhoto,
   saveLocalTrack,
   type CheckInPinItem,
   type LocalFootprintTrack,
@@ -48,8 +56,12 @@ import {
   type PresetJourneyRoute,
   type TrackPoint,
 } from '../lib/footprintOfflineStore';
+import { downloadFootprintShareCard } from '../lib/footprintShareCard';
 import { toast } from '../stores/toastStore';
 import type { BadgeInfo } from '../types/api';
+
+// Use static self-contained worker from public/ so Vite dev & prod never hit 504
+maplibregl.setWorkerUrl('/maplibre-gl-worker.mjs');
 
 interface GeofenceTargetItem {
   id: string;
@@ -64,29 +76,14 @@ interface GeofenceTargetItem {
 }
 
 const GEOFENCE_CACHE_KEY = 'dtst_geofence_targets_v1';
+const LIBERTY_STYLE_URL = 'https://tiles.openfreemap.org/styles/liberty';
 
-type MapStyleMode = 'night_neon' | 'day_street' | 'satellite';
+type MapStyleMode = 'day_3d' | 'night_neon' | 'satellite';
 
-const MAP_TILES: Record<
-  MapStyleMode,
-  { url: string; attribution: string; label: string; tileClassName?: string }
-> = {
-  night_neon: {
-    url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-    attribution: '&copy; OpenStreetMap contributors · Neon Night Mode',
-    label: '🌙 Đêm Neon (Bump/Jagat)',
-    tileClassName: 'tp-neon-night-tile',
-  },
-  day_street: {
-    url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-    attribution: '&copy; OpenStreetMap contributors',
-    label: '🌿 Bản đồ Sáng',
-  },
-  satellite: {
-    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    attribution: 'Tiles &copy; Esri',
-    label: '🛰️ Vệ tinh',
-  },
+const MAP_STYLE_LABELS: Record<MapStyleMode, { label: string; short: string }> = {
+  day_3d: { label: '☀️ Sáng 3D', short: '☀️ Sáng' },
+  night_neon: { label: '🌙 Đêm Neon', short: '🌙 Đêm' },
+  satellite: { label: '🛰️ Vệ tinh', short: '🛰️ Vệ tinh' },
 };
 
 const MOOD_PRESETS = [
@@ -98,7 +95,154 @@ const MOOD_PRESETS = [
   { emoji: '🚣', label: 'Phiêu lưu sông nước' },
 ];
 
-const TRACK_COLORS = ['#10b981', '#06b6d4', '#f43f5e', '#f59e0b', '#a855f7'];
+const TRACK_COLORS = ['#10b981', '#0ea5e9', '#f43f5e', '#f59e0b', '#8b5cf6'];
+
+let cachedLibertyStyle: any = null;
+
+async function buildFootprintMapStyle(mode: MapStyleMode): Promise<any> {
+  if (mode === 'satellite') {
+    return {
+      version: 8,
+      sources: {
+        esri_satellite: {
+          type: 'raster',
+          tiles: [
+            'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+          ],
+          tileSize: 256,
+          attribution: 'Tiles &copy; Esri',
+          maxzoom: 19,
+        },
+      },
+      layers: [
+        {
+          id: 'esri-satellite-layer',
+          type: 'raster',
+          source: 'esri_satellite',
+          minzoom: 0,
+          maxzoom: 22,
+        },
+      ],
+      sky: {
+        'sky-color': '#5fa8e6',
+        'horizon-color': '#d7eeff',
+        'fog-color': '#cfe8fb',
+        'sky-horizon-blend': 0.7,
+        'horizon-fog-blend': 0.6,
+        'fog-ground-blend': 0.5,
+      },
+    };
+  }
+
+  try {
+    if (!cachedLibertyStyle) {
+      const res = await fetch(LIBERTY_STYLE_URL);
+      cachedLibertyStyle = await res.json();
+    }
+  } catch {
+    // Graceful offline raster OSM fallback if OpenFreeMap style cannot be fetched
+    return {
+      version: 8,
+      sources: {
+        osm_fallback: {
+          type: 'raster',
+          tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+          tileSize: 256,
+          attribution: '&copy; OpenStreetMap contributors',
+          maxzoom: 19,
+        },
+      },
+      layers: [{ id: 'osm-fallback', type: 'raster', source: 'osm_fallback' }],
+    };
+  }
+
+  const style = JSON.parse(JSON.stringify(cachedLibertyStyle));
+
+  if (mode === 'day_3d') {
+    style.sky = {
+      'sky-color': '#78bef5',
+      'horizon-color': '#eef7ff',
+      'fog-color': '#f2f9ff',
+      'sky-horizon-blend': 0.7,
+      'horizon-fog-blend': 0.6,
+      'fog-ground-blend': 0.4,
+    };
+    for (const layer of style.layers ?? []) {
+      if (layer.id === 'building-3d' || layer.type === 'fill-extrusion') {
+        layer.minzoom = 13;
+        layer.paint = {
+          ...(layer.paint ?? {}),
+          'fill-extrusion-color': '#e7dfd4',
+          'fill-extrusion-opacity': 0.86,
+        };
+      }
+    }
+    return style;
+  }
+
+  // Native WebGL Dark Cyber-Neon 3D Vector style (crisp labels, glowing waterways, zero raster blur!)
+  style.sky = {
+    'sky-color': '#040c16',
+    'horizon-color': '#103452',
+    'fog-color': '#0b2236',
+    'sky-horizon-blend': 0.78,
+    'horizon-fog-blend': 0.7,
+    'fog-ground-blend': 0.55,
+  };
+
+  for (const layer of style.layers ?? []) {
+    const id = String(layer.id || '').toLowerCase();
+    const paint = (layer.paint = layer.paint ?? {});
+    if (layer.type === 'background') {
+      paint['background-color'] = '#07131e';
+    } else if (layer.type === 'raster') {
+      paint['raster-opacity'] = 0.14;
+    } else if (layer.type === 'fill-extrusion' || id === 'building-3d') {
+      layer.minzoom = 13;
+      paint['fill-extrusion-color'] = '#1b3a5c';
+      paint['fill-extrusion-opacity'] = 0.9;
+    } else if (layer.type === 'fill') {
+      if (id.includes('water')) {
+        paint['fill-color'] = '#0b3354';
+      } else if (
+        id.includes('park') ||
+        id.includes('grass') ||
+        id.includes('wood') ||
+        id.includes('forest') ||
+        id.includes('green') ||
+        id.includes('landcover')
+      ) {
+        paint['fill-color'] = '#0b2b27';
+        if (paint['fill-outline-color']) paint['fill-outline-color'] = '#134940';
+      } else if (id.includes('building')) {
+        paint['fill-color'] = '#132942';
+        if (paint['fill-outline-color']) paint['fill-outline-color'] = '#204269';
+      } else {
+        paint['fill-color'] = '#0c1d2e';
+      }
+    } else if (layer.type === 'line') {
+      if (id.includes('water')) {
+        paint['line-color'] = '#114a75';
+      } else if (id.includes('boundary')) {
+        paint['line-color'] = '#246273';
+      } else if (id.includes('casing')) {
+        paint['line-color'] = '#0a1622';
+      } else if (id.includes('motorway') || id.includes('trunk') || id.includes('primary')) {
+        paint['line-color'] = '#2e658f';
+      } else if (id.includes('secondary') || id.includes('tertiary')) {
+        paint['line-color'] = '#214866';
+      } else {
+        paint['line-color'] = '#17324b';
+      }
+    } else if (layer.type === 'symbol') {
+      paint['text-color'] = id.includes('water') ? '#67d1ff' : '#eaf6ff';
+      paint['text-halo-color'] = '#06111c';
+      paint['text-halo-width'] = 1.6;
+    }
+  }
+
+  return style;
+}
 
 function formatDurationClock(seconds: number): string {
   const mins = Math.floor(seconds / 60);
@@ -109,20 +253,30 @@ function formatDurationClock(seconds: number): string {
   return `${hrs}h ${remMins}p`;
 }
 
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 export function FootprintMapPage() {
-  useDocumentTitle('Bản đồ Dấu chân Khám phá · Đồng Tháp Smart Travel');
+  useDocumentTitle('Bản đồ Dấu chân & Lộ trình 3D · Đồng Tháp Smart Travel');
 
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const fogCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const mapInstanceRef = useRef<L.Map | null>(null);
-  const tileLayerRef = useRef<L.TileLayer | null>(null);
-  const polylinesGroupRef = useRef<L.LayerGroup | null>(null);
-  const pinsGroupRef = useRef<L.LayerGroup | null>(null);
-  const avatarMarkerRef = useRef<L.Marker | null>(null);
+  const mapRef = useRef<maplibregl.Map | null>(null);
+  const markersRef = useRef<maplibregl.Marker[]>([]);
+  const avatarMarkerRef = useRef<maplibregl.Marker | null>(null);
+  const dashAnimRef = useRef<number>(0);
 
+  const [mapReady, setMapReady] = useState(false);
   const [tracks, setTracks] = useState<LocalFootprintTrack[]>([]);
   const [checkInPins, setCheckInPins] = useState<CheckInPinItem[]>([]);
   const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null);
+  const [focusedStopIdx, setFocusedStopIdx] = useState<number | null>(null);
+  const [sidebarTab, setSidebarTab] = useState<'timeline' | 'journeys'>('timeline');
 
   // Hands-free Automatic GPS Check-in state (Geofencing <= 1,000m)
   const [autoCheckInEnabled, setAutoCheckInEnabled] = useState(true);
@@ -136,10 +290,11 @@ export function FootprintMapPage() {
   });
   const checkedInSessionRef = useRef<Set<string>>(new Set());
 
-  // Map & Fog-of-War visual controls
-  const [mapStyle, setMapStyle] = useState<MapStyleMode>('night_neon');
+  // Map & Fog-of-War visual controls (Default Daylight 3D so roads, rivers & routes pop immediately!)
+  const [mapStyle, setMapStyle] = useState<MapStyleMode>('day_3d');
+  const [is3DView, setIs3DView] = useState(true);
   const [fogEnabled, setFogEnabled] = useState(true);
-  const [fogRadiusPx, setFogRadiusPx] = useState(46);
+  const [fogRadiusPx, setFogRadiusPx] = useState(54);
 
   // Network & Offline Simulation controls
   const [browserOnline, setBrowserOnline] = useState<boolean>(
@@ -173,13 +328,18 @@ export function FootprintMapPage() {
   // Drop Memory Pin Modal state
   const [pinModalOpen, setPinModalOpen] = useState(false);
   const [pinCoords, setPinCoords] = useState<{ lat: number; lng: number }>({
-    lat: 10.4562,
-    lng: 105.6324,
+    lat: 10.3015,
+    lng: 105.7554,
   });
   const [pinEmoji, setPinEmoji] = useState(MOOD_PRESETS[0]!.emoji);
   const [pinMood, setPinMood] = useState(MOOD_PRESETS[0]!.label);
   const [pinPlaceName, setPinPlaceName] = useState('');
   const [pinNote, setPinNote] = useState('');
+
+  const selectedTrack = useMemo(
+    () => tracks.find((t) => t.clientId === selectedTrackId) || tracks[0] || null,
+    [tracks, selectedTrackId],
+  );
 
   // Register offline tile caching Service Worker
   useEffect(() => {
@@ -203,25 +363,28 @@ export function FootprintMapPage() {
     [tracks],
   );
 
-  // Sync local pending tracks with MongoDB Server when online
+  // Sync local pending tracks with MongoDB Server when online (+ auto-seed road-snapped starter journey)
   const syncWithCloud = useCallback(
     async (silent = false) => {
       let localList = await getAllLocalTracks();
 
-      // Auto-seed a starter journey on first visit so the map is immediately alive & clear
+      // Auto-seed a crisp road-snapped starter journey on first visit so the map is immediately vivid & clear
       if (
         localList.length === 0 &&
         typeof window !== 'undefined' &&
         !window.sessionStorage.getItem('dtst_footprint_user_cleared')
       ) {
         const preset = PRESET_DEMO_JOURNEYS[0]!;
-        const { points: starterPts, memories: starterMems } = interpolateWaypoints(preset.waypoints, 7);
+        const { points: starterPts, memories: starterMems } = await resolveRoadSnappedJourney(
+          preset.waypoints,
+          isEffectiveOnline,
+        );
         const starterTrack: LocalFootprintTrack = {
           clientId: `starter-${preset.id}`,
           title: preset.title,
           color: preset.color,
           distanceKm: calculatePolylineKm(starterPts),
-          durationSeconds: starterPts.length * 18,
+          durationSeconds: starterPts.length * 16,
           startedAt: Date.now() - 1800000,
           endedAt: Date.now(),
           points: starterPts,
@@ -231,6 +394,45 @@ export function FootprintMapPage() {
         };
         await saveLocalTrack(starterTrack);
         localList = await getAllLocalTracks();
+      } else {
+        // Upgrade old straight-line starter track once to real road-snapped OSRM geometry + photos
+        const starterNeedsSnap =
+          isEffectiveOnline &&
+          typeof window !== 'undefined' &&
+          !window.localStorage.getItem('dtst_starter_snapped_v2');
+
+        let touched = false;
+        const presetMemImages = new Map<string, string>();
+        for (const pr of PRESET_DEMO_JOURNEYS) {
+          for (const wp of pr.waypoints) {
+            if (wp.placeName && wp.imageUrl) presetMemImages.set(wp.placeName, wp.imageUrl);
+          }
+        }
+        for (const tr of localList) {
+          let changed = false;
+          if (starterNeedsSnap && tr.clientId === 'starter-demo-sa-dec-heritage') {
+            const preset = PRESET_DEMO_JOURNEYS[0]!;
+            const snapped = await resolveRoadSnappedJourney(preset.waypoints, true);
+            if (snapped.roadSnapped && snapped.points.length >= 4) {
+              tr.points = snapped.points;
+              tr.memories = snapped.memories;
+              tr.distanceKm = calculatePolylineKm(snapped.points);
+              changed = true;
+              window.localStorage.setItem('dtst_starter_snapped_v2', '1');
+            }
+          }
+          for (const mem of tr.memories || []) {
+            if (!mem.imageUrl && mem.placeName && presetMemImages.has(mem.placeName)) {
+              mem.imageUrl = presetMemImages.get(mem.placeName);
+              changed = true;
+            }
+          }
+          if (changed) {
+            touched = true;
+            await saveLocalTrack(tr);
+          }
+        }
+        if (touched) localList = await getAllLocalTracks();
       }
 
       setTracks(localList);
@@ -276,13 +478,13 @@ export function FootprintMapPage() {
             const totalExp = autoList.reduce((acc, item) => acc + (item.pointsAwarded || 10), 0);
             const names = autoList.map((a) => a.name).join(', ');
             toast.success(
-              `🛂 Tự động Điểm danh GPS thành công! (+${totalExp} EXP)`,
-              `Khi di chuyển trên hành trình, hệ thống đã tự động đóng dấu Hộ chiếu tại ${autoList.length} điểm: ${names}.`,
+              `🛂 Tự động Điểm danh GPS (+${totalExp} EXP)!`,
+              `Hệ thống tự động đóng dấu Hộ chiếu tại ${autoList.length} điểm: ${names}.`,
             );
           } else if (!silent) {
             toast.success(
               'Đã đồng bộ lên Cloud!',
-              `Đã sao lưu thành công ${pending.length} hành trình từ bộ nhớ Offline lên máy chủ.`,
+              `Đã sao lưu ${pending.length} hành trình từ bộ nhớ Offline lên máy chủ.`,
             );
           }
 
@@ -330,11 +532,11 @@ export function FootprintMapPage() {
           try {
             localStorage.setItem(GEOFENCE_CACHE_KEY, JSON.stringify(res.data.geofenceTargets));
           } catch {
-            // ignore storage quota
+            // ignore
           }
         }
       } catch {
-        // Offline or network hiccup — local tracks remain safe in IndexedDB
+        // Offline or transient network error — local tracks stay safe in IndexedDB
       } finally {
         setIsSyncing(false);
       }
@@ -342,12 +544,11 @@ export function FootprintMapPage() {
     [autoCheckInEnabled, isEffectiveOnline, selectedTrackId],
   );
 
-  // Initial load & auto-sync when switching from Offline -> Online
   useEffect(() => {
     void syncWithCloud(true);
   }, [syncWithCloud]);
 
-  // Calculate statistics across all tracks + check-ins
+  // Compute statistics across all tracks + check-ins
   const stats = useMemo(() => {
     const liveDist = calculatePolylineKm(livePoints);
     const totalKm =
@@ -385,43 +586,141 @@ export function FootprintMapPage() {
     };
   }, [tracks, livePoints, liveMemories, checkInPins]);
 
-  // Draw HTML5 Canvas Fog-of-War overlay synced with Leaflet viewport
+  // Compute ordered stops with segment distances for the selected track's Route Timeline
+  const routeStopsWithLegs = useMemo(() => {
+    if (!selectedTrack) return [];
+    const mems = selectedTrack.memories || [];
+    if (mems.length > 0) {
+      return mems.map((m, idx) => {
+        const prev = idx > 0 ? mems[idx - 1]! : null;
+        const legKm = prev
+          ? Math.max(0.2, Math.round(haversineDistanceKm(prev, m) * 1.18 * 10) / 10)
+          : 0;
+        const legMin = prev ? Math.max(2, Math.round((legKm / 30) * 60)) : 0;
+        return {
+          idx,
+          lat: m.lat,
+          lng: m.lng,
+          title: m.placeName || m.moodLabel,
+          emoji: m.emoji,
+          moodLabel: m.moodLabel,
+          note: m.note,
+          imageUrl: resolveStopPhoto(m.placeName, m.imageUrl),
+          legKm,
+          legMin,
+        };
+      });
+    }
+    // If a GPS track has no memory pins yet, create Start & Finish anchors
+    if (selectedTrack.points.length >= 2) {
+      const start = selectedTrack.points[0]!;
+      const end = selectedTrack.points[selectedTrack.points.length - 1]!;
+      return [
+        {
+          idx: 0,
+          lat: start.lat,
+          lng: start.lng,
+          title: 'Điểm xuất phát',
+          emoji: '🚩',
+          moodLabel: 'Bắt đầu hành trình',
+          note: `Tọa độ ${start.lat.toFixed(4)}, ${start.lng.toFixed(4)}`,
+          imageUrl: undefined,
+          legKm: 0,
+          legMin: 0,
+        },
+        {
+          idx: 1,
+          lat: end.lat,
+          lng: end.lng,
+          title: 'Điểm kết thúc',
+          emoji: '🏁',
+          moodLabel: 'Hoàn thành lộ trình',
+          note: `Tổng chiều dài ${selectedTrack.distanceKm} km`,
+          imageUrl: undefined,
+          legKm: selectedTrack.distanceKm,
+          legMin: Math.max(2, Math.round((selectedTrack.durationSeconds || 120) / 60)),
+        },
+      ];
+    }
+    return [];
+  }, [selectedTrack]);
+
+  // Fit MapLibre camera cleanly to frame 100% of a track's points
+  const fitTrackBounds = useCallback(
+    (pts: TrackPoint[], instant = false) => {
+      const map = mapRef.current;
+      if (!map || pts.length === 0) return;
+
+      if (pts.length === 1) {
+        map.flyTo({
+          center: [pts[0]!.lng, pts[0]!.lat],
+          zoom: 14.2,
+          pitch: is3DView ? 46 : 0,
+          duration: instant ? 0 : 900,
+        });
+        return;
+      }
+
+      const bounds = new maplibregl.LngLatBounds();
+      for (const p of pts) {
+        bounds.extend([p.lng, p.lat]);
+      }
+
+      map.fitBounds(bounds, {
+        padding: { top: 82, bottom: 112, left: 48, right: 48 },
+        pitch: is3DView ? 44 : 0,
+        bearing: is3DView ? -10 : 0,
+        maxZoom: 15,
+        duration: instant ? 0 : 950,
+      });
+    },
+    [is3DView],
+  );
+
+  // Frame-accurate Fog-of-War Canvas overlay synced to MapLibre GL JS projection
   const redrawFogOfWar = useCallback(() => {
     const canvas = fogCanvasRef.current;
-    const map = mapInstanceRef.current;
+    const map = mapRef.current;
     if (!canvas || !map) return;
 
-    const size = map.getSize();
-    if (canvas.width !== size.x || canvas.height !== size.y) {
-      canvas.width = size.x;
-      canvas.height = size.y;
+    const container = map.getContainer();
+    const w = container.clientWidth;
+    const h = container.clientHeight;
+    if (w === 0 || h === 0) return;
+
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w;
+      canvas.height = h;
     }
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+    ctx.clearRect(0, 0, w, h);
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
     if (!fogEnabled) return;
 
-    // 1. Fill translucent atmospheric Fog of War mist so map roads/rivers remain visible underneath
+    // 1. Clean translucent mist so map streets & rivers stay recognizable
     ctx.globalCompositeOperation = 'source-over';
     ctx.fillStyle =
-      mapStyle === 'night_neon' ? 'rgba(6, 18, 26, 0.54)' : 'rgba(12, 34, 28, 0.42)';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+      mapStyle === 'night_neon'
+        ? 'rgba(5, 16, 28, 0.40)'
+        : mapStyle === 'satellite'
+          ? 'rgba(6, 22, 18, 0.34)'
+          : 'rgba(15, 47, 37, 0.22)';
+    ctx.fillRect(0, 0, w, h);
 
-    // 2. Carve out soft clearings along every GPS trail, live point, memory pin, and check-in
+    // 2. Carve glowing clear corridors along GPS trails, live points, memories & check-ins
     ctx.globalCompositeOperation = 'destination-out';
-
     const zoom = map.getZoom();
-    const scaleFactor = Math.max(0.7, Math.min(2.4, Math.pow(1.18, zoom - 11)));
+    const scaleFactor = Math.max(0.65, Math.min(2.3, Math.pow(1.16, zoom - 12)));
     const radius = fogRadiusPx * scaleFactor;
 
     const carveCircle = (lat: number, lng: number, r: number) => {
-      const pt = map.latLngToContainerPoint([lat, lng]);
-      if (pt.x < -r || pt.y < -r || pt.x > canvas.width + r || pt.y > canvas.height + r) return;
-      const grad = ctx.createRadialGradient(pt.x, pt.y, r * 0.25, pt.x, pt.y, r);
+      const pt = map.project([lng, lat]);
+      if (pt.x < -r || pt.y < -r || pt.x > w + r || pt.y > h + r) return;
+      const grad = ctx.createRadialGradient(pt.x, pt.y, r * 0.3, pt.x, pt.y, r);
       grad.addColorStop(0, 'rgba(0,0,0,1)');
-      grad.addColorStop(0.65, 'rgba(0,0,0,0.90)');
+      grad.addColorStop(0.65, 'rgba(0,0,0,0.92)');
       grad.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.fillStyle = grad;
       ctx.beginPath();
@@ -434,220 +733,509 @@ export function FootprintMapPage() {
         carveCircle(p.lat, p.lng, radius);
       }
       for (const m of track.memories) {
-        carveCircle(m.lat, m.lng, radius * 1.25);
+        carveCircle(m.lat, m.lng, radius * 1.28);
       }
     }
-
     for (const p of livePoints) {
-      carveCircle(p.lat, p.lng, radius * 1.15);
+      carveCircle(p.lat, p.lng, radius * 1.2);
     }
-
     for (const pin of checkInPins) {
-      carveCircle(pin.coordinates.lat, pin.coordinates.lng, radius * 1.35);
+      carveCircle(pin.coordinates.lat, pin.coordinates.lng, radius * 1.4);
     }
-
     if (avatarPos) {
-      carveCircle(avatarPos.lat, avatarPos.lng, radius * 1.45);
+      carveCircle(avatarPos.lat, avatarPos.lng, radius * 1.55);
     }
-
-    // If user cleared all tracks, keep a welcoming spotlight at the center of the viewport
     if (tracks.length === 0 && livePoints.length === 0 && checkInPins.length === 0) {
-      const center = map.getCenter();
-      carveCircle(center.lat, center.lng, radius * 2.1);
+      const c = map.getCenter();
+      carveCircle(c.lat, c.lng, radius * 2.2);
     }
 
     ctx.globalCompositeOperation = 'source-over';
   }, [fogEnabled, fogRadiusPx, mapStyle, tracks, livePoints, checkInPins, avatarPos]);
 
-  // Initialize Leaflet Map
-  useEffect(() => {
-    if (!mapContainerRef.current || mapInstanceRef.current) return;
+  // Synchronize WebGL GeoJSON Route Layers & Numbered Photo Markers
+  const syncMapLayersAndMarkers = useCallback(() => {
+    const map = mapRef.current;
+    if (!map || !map.isStyleLoaded()) return;
 
-    const map = L.map(mapContainerRef.current, {
-      center: [10.3025, 105.758],
-      zoom: 13,
-      zoomControl: true,
-    });
+    const activeTrackColor =
+      livePoints.length >= 2 ? '#f43f5e' : selectedTrack?.color || '#10b981';
 
-    const tileConfig = MAP_TILES[mapStyle];
-    const tileLayer = L.tileLayer(tileConfig.url, {
-      attribution: tileConfig.attribution,
-      maxZoom: 19,
-      className: tileConfig.tileClassName || '',
-    }).addTo(map);
-
-    const polylinesGroup = L.layerGroup().addTo(map);
-    const pinsGroup = L.layerGroup().addTo(map);
-
-    mapInstanceRef.current = map;
-    tileLayerRef.current = tileLayer;
-    polylinesGroupRef.current = polylinesGroup;
-    pinsGroupRef.current = pinsGroup;
-
-    // Allow clicking on map to pre-fill Memory Pin coordinates
-    map.on('click', (e: L.LeafletMouseEvent) => {
-      setPinCoords({
-        lat: Number(e.latlng.lat.toFixed(6)),
-        lng: Number(e.latlng.lng.toFixed(6)),
+    // Secondary (unselected) tracks GeoJSON
+    const secondaryFeatures: GeoJSON.Feature<GeoJSON.LineString>[] = [];
+    for (const t of tracks) {
+      if (t.points.length < 2) continue;
+      if (livePoints.length < 2 && selectedTrack && t.clientId === selectedTrack.clientId) continue;
+      secondaryFeatures.push({
+        type: 'Feature',
+        properties: { color: t.color || '#10b981' },
+        geometry: {
+          type: 'LineString',
+          coordinates: t.points.map((p) => [p.lng, p.lat]),
+        },
       });
+    }
+
+    // Active (highlighted) route GeoJSON
+    const activePts = livePoints.length >= 2 ? livePoints : selectedTrack?.points || [];
+    const activeFeatures: GeoJSON.Feature<GeoJSON.LineString>[] =
+      activePts.length >= 2
+        ? [
+            {
+              type: 'Feature',
+              properties: { color: activeTrackColor },
+              geometry: {
+                type: 'LineString',
+                coordinates: activePts.map((p) => [p.lng, p.lat]),
+              },
+            },
+          ]
+        : [];
+
+    // Replayed progress trail GeoJSON (bright gold highlight behind avatar during Replay!)
+    const replayFeatures: GeoJSON.Feature<GeoJSON.LineString>[] = [];
+    if (isReplaying && selectedTrack && selectedTrack.points.length >= 2 && replayProgress > 1) {
+      const cutIdx = Math.max(
+        2,
+        Math.min(
+          selectedTrack.points.length,
+          Math.ceil((replayProgress / 100) * selectedTrack.points.length),
+        ),
+      );
+      replayFeatures.push({
+        type: 'Feature',
+        properties: {},
+        geometry: {
+          type: 'LineString',
+          coordinates: selectedTrack.points.slice(0, cutIdx).map((p) => [p.lng, p.lat]),
+        },
+      });
+    }
+
+    const secondaryData: GeoJSON.FeatureCollection = {
+      type: 'FeatureCollection',
+      features: secondaryFeatures,
+    };
+    const activeData: GeoJSON.FeatureCollection = {
+      type: 'FeatureCollection',
+      features: activeFeatures,
+    };
+    const replayData: GeoJSON.FeatureCollection = {
+      type: 'FeatureCollection',
+      features: replayFeatures,
+    };
+
+    const setOrAddSource = (id: string, data: GeoJSON.FeatureCollection) => {
+      const src = map.getSource(id) as maplibregl.GeoJSONSource | undefined;
+      if (src) {
+        src.setData(data);
+      } else {
+        map.addSource(id, { type: 'geojson', data });
+      }
+    };
+
+    setOrAddSource('fp-secondary-routes', secondaryData);
+    setOrAddSource('fp-active-route', activeData);
+    setOrAddSource('fp-replay-progress', replayData);
+
+    const casingColor = mapStyle === 'night_neon' ? '#04111d' : '#ffffff';
+
+    if (!map.getLayer('fp-secondary-line')) {
+      map.addLayer({
+        id: 'fp-secondary-line',
+        type: 'line',
+        source: 'fp-secondary-routes',
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: {
+          'line-color': ['coalesce', ['get', 'color'], '#10b981'],
+          'line-width': 4,
+          'line-opacity': 0.38,
+          'line-dasharray': [2, 1.8],
+        },
+      });
+    }
+
+    if (!map.getLayer('fp-active-glow')) {
+      map.addLayer({
+        id: 'fp-active-glow',
+        type: 'line',
+        source: 'fp-active-route',
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: {
+          'line-color': activeTrackColor,
+          'line-width': 18,
+          'line-blur': 8,
+          'line-opacity': mapStyle === 'night_neon' ? 0.55 : 0.34,
+        },
+      });
+    } else {
+      map.setPaintProperty('fp-active-glow', 'line-color', activeTrackColor);
+      map.setPaintProperty('fp-active-glow', 'line-opacity', mapStyle === 'night_neon' ? 0.55 : 0.34);
+    }
+
+    if (!map.getLayer('fp-active-casing')) {
+      map.addLayer({
+        id: 'fp-active-casing',
+        type: 'line',
+        source: 'fp-active-route',
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: {
+          'line-color': casingColor,
+          'line-width': 10,
+          'line-opacity': 0.96,
+        },
+      });
+    } else {
+      map.setPaintProperty('fp-active-casing', 'line-color', casingColor);
+    }
+
+    if (!map.getLayer('fp-active-core')) {
+      map.addLayer({
+        id: 'fp-active-core',
+        type: 'line',
+        source: 'fp-active-route',
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: {
+          'line-color': activeTrackColor,
+          'line-width': 5.8,
+          'line-opacity': 1,
+        },
+      });
+    } else {
+      map.setPaintProperty('fp-active-core', 'line-color', activeTrackColor);
+    }
+
+    if (!map.getLayer('fp-active-energy')) {
+      map.addLayer({
+        id: 'fp-active-energy',
+        type: 'line',
+        source: 'fp-active-route',
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: {
+          'line-color': '#ffffff',
+          'line-width': 2.6,
+          'line-opacity': 0.85,
+          'line-dasharray': [0.4, 3.2],
+        },
+      });
+    }
+
+    if (!map.getLayer('fp-replay-line')) {
+      map.addLayer({
+        id: 'fp-replay-line',
+        type: 'line',
+        source: 'fp-replay-progress',
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: {
+          'line-color': '#fbbf24',
+          'line-width': 6.5,
+          'line-opacity': 0.96,
+        },
+      });
+    }
+
+    // Clear and rebuild crisp Numbered Photo Markers (Zero overlapping pill clutter!)
+    for (const m of markersRef.current) m.remove();
+    markersRef.current = [];
+
+    const activeStops = liveMemories.length > 0 ? liveMemories : selectedTrack?.memories || [];
+
+    // If active route has points but no memory pins, render clear Start & End flags
+    if (activePts.length >= 2 && activeStops.length === 0) {
+      const startPt = activePts[0]!;
+      const endPt = activePts[activePts.length - 1]!;
+      const makeFlag = (emoji: string, label: string, bg: string) => {
+        const el = document.createElement('div');
+        el.innerHTML = `<div style="display:inline-flex;align-items:center;gap:4px;background:${bg};color:#fff;padding:4px 10px;border-radius:999px;border:2px solid #fff;font-size:11px;font-weight:800;box-shadow:0 8px 20px rgba(0,0,0,0.28);white-space:nowrap;">${emoji} ${label}</div>`;
+        return el;
+      };
+      markersRef.current.push(
+        new maplibregl.Marker({ element: makeFlag('🚩', 'Xuất phát', '#059669'), anchor: 'bottom' })
+          .setLngLat([startPt.lng, startPt.lat])
+          .addTo(map),
+        new maplibregl.Marker({ element: makeFlag('🏁', 'Kết thúc', '#0f172a'), anchor: 'bottom' })
+          .setLngLat([endPt.lng, endPt.lat])
+          .addTo(map),
+      );
+    }
+
+    // Render crisp Numbered Stop Pins with Real Thumbnail & Interactive Rich Popup
+    activeStops.forEach((mem, idx) => {
+      const isFocused = focusedStopIdx === idx;
+      const isStart = idx === 0;
+      const isEnd = idx === activeStops.length - 1 && activeStops.length > 1;
+      const stopLabel = escapeHtml(mem.placeName || mem.moodLabel);
+      const photoUrl = resolveStopPhoto(mem.placeName, mem.imageUrl);
+      const roleTag = isStart ? 'XUẤT PHÁT' : isEnd ? 'ĐÍCH ĐẾN' : `CHẶNG ${idx + 1}`;
+
+      const el = document.createElement('button');
+      el.type = 'button';
+      el.className = 'fp-stop-marker group';
+      el.setAttribute('aria-label', `Chặng ${idx + 1}: ${mem.placeName || mem.moodLabel}`);
+      el.innerHTML = `
+        <div style="display:flex;flex-direction:column;align-items:center;cursor:pointer;transition:transform 200ms ease;transform:${isFocused ? 'scale(1.14)' : 'scale(1)'};">
+          ${
+            isFocused
+              ? `<div style="margin-bottom:5px;display:inline-flex;align-items:center;gap:5px;background:rgba(15,47,37,0.95);color:#fff;padding:4px 10px;border-radius:999px;border:1.5px solid ${activeTrackColor};font-size:11px;font-weight:800;white-space:nowrap;max-width:190px;box-shadow:0 10px 24px rgba(0,0,0,0.35);">
+                  <span style="font-size:10px;color:#6ee7b7;flex-shrink:0">${roleTag}</span>
+                  <span style="overflow:hidden;text-overflow:ellipsis">${stopLabel}</span>
+                </div>`
+              : ''
+          }
+          <div style="position:relative;width:${isFocused ? 46 : 38}px;height:${isFocused ? 46 : 38}px;border-radius:999px;border:3px solid ${isFocused ? '#ffffff' : activeTrackColor};background:#fff;box-shadow:0 8px 22px rgba(0,0,0,0.34);overflow:hidden;display:grid;place-items:center;">
+            ${
+              photoUrl
+                ? `<img src="${escapeHtml(photoUrl)}" alt="" style="width:100%;height:100%;object-fit:cover;" />`
+                : `<span style="font-size:18px;line-height:1">${mem.emoji}</span>`
+            }
+          </div>
+          <span style="margin-top:-10px;position:relative;z-index:2;display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 5px;border-radius:999px;background:${isStart ? '#059669' : isEnd ? '#e11d48' : activeTrackColor};color:#fff;border:2px solid #fff;font-size:11px;font-weight:900;box-shadow:0 4px 10px rgba(0,0,0,0.3);">
+            ${idx + 1}
+          </span>
+        </div>
+      `;
+
+      const popupHtml = `
+        <div style="width:220px;font-family:'Be Vietnam Pro',system-ui,sans-serif;">
+          ${
+            photoUrl
+              ? `<img src="${escapeHtml(photoUrl)}" alt="" style="width:100%;height:105px;object-fit:cover;border-radius:12px;margin-bottom:8px;" />`
+              : ''
+          }
+          <div style="font-size:10px;font-weight:800;letter-spacing:0.06em;color:${activeTrackColor};text-transform:uppercase;">
+            ${roleTag} · ${mem.emoji} ${escapeHtml(mem.moodLabel)}
+          </div>
+          <div style="font-size:13px;font-weight:800;color:#0f2f25;margin-top:2px;">${stopLabel}</div>
+          ${
+            mem.note
+              ? `<p style="font-size:11px;line-height:1.45;color:#475569;margin:5px 0 0;">${escapeHtml(mem.note)}</p>`
+              : ''
+          }
+        </div>
+      `;
+
+      const popup = new maplibregl.Popup({ offset: 24, maxWidth: '250px' }).setHTML(popupHtml);
+      const marker = new maplibregl.Marker({ element: el, anchor: 'bottom' })
+        .setLngLat([mem.lng, mem.lat])
+        .setPopup(popup)
+        .addTo(map);
+
+      el.addEventListener('click', () => {
+        setFocusedStopIdx(idx);
+        map.flyTo({
+          center: [mem.lng, mem.lat],
+          zoom: Math.max(map.getZoom(), 14.6),
+          pitch: is3DView ? 48 : 0,
+          duration: 750,
+        });
+      });
+
+      markersRef.current.push(marker);
     });
+
+    // Render Passport Check-in Stamp Badges as sleek compact 26px emerald seals (never overlapping active numbered route stops!)
+    for (const chk of checkInPins) {
+      const overlapsActiveStop = activeStops.some(
+        (s) =>
+          haversineDistanceKm(
+            { lat: s.lat, lng: s.lng },
+            { lat: chk.coordinates.lat, lng: chk.coordinates.lng },
+          ) < 0.25,
+      );
+      if (overlapsActiveStop) continue;
+
+      const el = document.createElement('button');
+      el.type = 'button';
+      el.title = `Đã đóng dấu Hộ chiếu: ${chk.name}`;
+      el.innerHTML = `
+        <div style="display:grid;place-items:center;width:26px;height:26px;border-radius:999px;background:linear-gradient(135deg,#059669,#0d9488);color:#fff;border:2px solid #fff;box-shadow:0 4px 12px rgba(5,150,105,0.45);font-size:12px;cursor:pointer;transition:transform 150ms ease;">
+          🛂
+        </div>
+      `;
+      const popup = new maplibregl.Popup({ offset: 14 }).setHTML(`
+        <div style="min-width:190px;font-family:'Be Vietnam Pro',system-ui,sans-serif;">
+          <div style="font-size:10px;font-weight:800;text-transform:uppercase;color:#059669">🛂 Đã đóng dấu Hộ chiếu (+${chk.pointsAwarded}đ)</div>
+          <div style="font-weight:800;font-size:13px;color:#0f2922;margin-top:2px">${escapeHtml(chk.name)}</div>
+          <p style="font-size:11px;color:#475569;margin:4px 0 6px">${escapeHtml(chk.summary)}</p>
+          <a href="/destinations/${encodeURIComponent(chk.slug)}" style="font-size:11px;font-weight:700;color:#059669;text-decoration:underline">Xem chi tiết địa điểm →</a>
+        </div>
+      `);
+      markersRef.current.push(
+        new maplibregl.Marker({ element: el, anchor: 'center' })
+          .setLngLat([chk.coordinates.lng, chk.coordinates.lat])
+          .setPopup(popup)
+          .addTo(map),
+      );
+    }
+
+    redrawFogOfWar();
+  }, [
+    tracks,
+    selectedTrack,
+    livePoints,
+    liveMemories,
+    checkInPins,
+    focusedStopIdx,
+    mapStyle,
+    is3DView,
+    isReplaying,
+    replayProgress,
+    redrawFogOfWar,
+  ]);
+
+  // Initialize MapLibre GL JS 3D Map
+  useEffect(() => {
+    if (!mapContainerRef.current || mapRef.current) return;
+    let cancelled = false;
+
+    const init = async () => {
+      const style = await buildFootprintMapStyle(mapStyle);
+      if (cancelled || !mapContainerRef.current) return;
+
+      const map = new maplibregl.Map({
+        container: mapContainerRef.current,
+        style,
+        center: [105.756, 10.301],
+        zoom: 13.2,
+        pitch: is3DView ? 44 : 0,
+        bearing: is3DView ? -10 : 0,
+      });
+
+      map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'bottom-right');
+
+      map.on('load', () => {
+        if (cancelled) return;
+        setMapReady(true);
+      });
+
+      map.on('click', (e) => {
+        setPinCoords({
+          lat: Number(e.lngLat.lat.toFixed(6)),
+          lng: Number(e.lngLat.lng.toFixed(6)),
+        });
+      });
+
+      mapRef.current = map;
+    };
+
+    void init();
 
     return () => {
-      map.remove();
-      mapInstanceRef.current = null;
+      cancelled = true;
+      window.cancelAnimationFrame(dashAnimRef.current);
+      if (avatarMarkerRef.current) {
+        avatarMarkerRef.current.remove();
+        avatarMarkerRef.current = null;
+      }
+      for (const m of markersRef.current) m.remove();
+      markersRef.current = [];
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
+      setMapReady(false);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Bind redrawFogOfWar to map movement/zoom
+  // Re-bind Fog-of-War redraw to every WebGL render frame
   useEffect(() => {
-    const map = mapInstanceRef.current;
-    if (!map) return;
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
     redrawFogOfWar();
-    map.on('move zoom moveend zoomend resize', redrawFogOfWar);
+    map.on('render', redrawFogOfWar);
+    map.on('resize', redrawFogOfWar);
     return () => {
-      map.off('move zoom moveend zoomend resize', redrawFogOfWar);
+      map.off('render', redrawFogOfWar);
+      map.off('resize', redrawFogOfWar);
     };
-  }, [redrawFogOfWar]);
+  }, [mapReady, redrawFogOfWar]);
 
-  // Switch Map Tile Theme
+  // Switch MapLibre 3D style cleanly without destroying map state
+  const prevStyleRef = useRef<MapStyleMode>(mapStyle);
   useEffect(() => {
-    const map = mapInstanceRef.current;
-    if (!map) return;
-    if (tileLayerRef.current) {
-      tileLayerRef.current.remove();
-    }
-    const cfg = MAP_TILES[mapStyle];
-    tileLayerRef.current = L.tileLayer(cfg.url, {
-      attribution: cfg.attribution,
-      maxZoom: 19,
-      className: cfg.tileClassName || '',
-    }).addTo(map);
-    redrawFogOfWar();
-  }, [mapStyle, redrawFogOfWar]);
+    const map = mapRef.current;
+    if (!map || !mapReady || prevStyleRef.current === mapStyle) return;
+    prevStyleRef.current = mapStyle;
 
-  // Render Glowing Polylines, Check-in Stamps & Jagat Memory Pins on Leaflet
-  useEffect(() => {
-    const polyGroup = polylinesGroupRef.current;
-    const pinGroup = pinsGroupRef.current;
-    if (!polyGroup || !pinGroup) return;
+    let cancelled = false;
+    void buildFootprintMapStyle(mapStyle).then((style) => {
+      if (cancelled || !mapRef.current) return;
+      map.setStyle(style);
+      map.once('style.load', () => {
+        if (!cancelled) syncMapLayersAndMarkers();
+      });
+    });
 
-    polyGroup.clearLayers();
-    pinGroup.clearLayers();
-
-    const drawGlowingTrail = (pts: TrackPoint[], color: string, isSelected: boolean) => {
-      if (pts.length < 2) return;
-      const latlngs: L.LatLngExpression[] = pts.map((p) => [p.lat, p.lng]);
-
-      // Outer neon glow halo
-      L.polyline(latlngs, {
-        color,
-        weight: isSelected ? 14 : 10,
-        opacity: isSelected ? 0.35 : 0.22,
-        lineCap: 'round',
-        lineJoin: 'round',
-      }).addTo(polyGroup);
-
-      // Inner bright core trail
-      L.polyline(latlngs, {
-        color,
-        weight: isSelected ? 5 : 3.5,
-        opacity: 0.95,
-        lineCap: 'round',
-        lineJoin: 'round',
-      }).addTo(polyGroup);
-
-      // Start & End breadcrumb dots
-      const first = pts[0]!;
-      const last = pts[pts.length - 1]!;
-      L.circleMarker([first.lat, first.lng], {
-        radius: 5,
-        color: '#ffffff',
-        weight: 2,
-        fillColor: color,
-        fillOpacity: 1,
-      }).addTo(polyGroup);
-
-      L.circleMarker([last.lat, last.lng], {
-        radius: 6,
-        color: '#ffffff',
-        weight: 2,
-        fillColor: color,
-        fillOpacity: 1,
-      }).addTo(polyGroup);
+    return () => {
+      cancelled = true;
     };
+  }, [mapStyle, mapReady, syncMapLayersAndMarkers]);
 
-    // Draw saved/offline tracks
-    for (const t of tracks) {
-      const isSel = t.clientId === selectedTrackId;
-      drawGlowingTrail(t.points, t.color || '#10b981', isSel);
+  // Smoothly toggle 3D / 2D camera pitch
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    map.easeTo({
+      pitch: is3DView ? 44 : 0,
+      bearing: is3DView ? -10 : 0,
+      duration: 650,
+    });
+  }, [is3DView, mapReady]);
 
-      for (const mem of t.memories || []) {
-        const icon = L.divIcon({
-          className: 'dtst-memory-pin',
-          html: `<div style="display:inline-flex;align-items:center;gap:4px;background:rgba(255,255,255,0.95);border:2px solid ${t.color || '#10b981'};border-radius:999px;padding:3px 9px;box-shadow:0 6px 16px rgba(0,0,0,0.28);white-space:nowrap;font-size:11px;font-weight:700;color:#0f2922;transform:translate(-50%,-100%);max-width:165px;">
-            <span style="font-size:14px;flex-shrink:0">${mem.emoji}</span>
-            <span style="overflow:hidden;text-overflow:ellipsis">${mem.placeName || mem.moodLabel}</span>
-          </div>`,
-          iconSize: [0, 0],
-        });
-        L.marker([mem.lat, mem.lng], { icon })
-          .bindPopup(
-            `<div style="min-width:180px">
-              <div style="font-weight:800;font-size:13px;color:#0f2922">${mem.emoji} ${mem.placeName || mem.moodLabel}</div>
-              <div style="font-size:11px;color:#047857;font-weight:600;margin-top:2px">${mem.moodLabel}</div>
-              ${mem.note ? `<p style="font-size:12px;color:#334155;margin:6px 0 0">${mem.note}</p>` : ''}
-            </div>`,
-          )
-          .addTo(pinGroup);
+  // Keep route layers & markers in sync whenever data changes
+  useEffect(() => {
+    if (!mapReady) return;
+    syncMapLayersAndMarkers();
+  }, [mapReady, syncMapLayersAndMarkers]);
+
+  // Auto-fit full route bounds whenever user switches tracks or map finishes first load!
+  const lastFittedTrackRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!mapReady || !selectedTrack || selectedTrack.points.length < 2) return;
+    if (lastFittedTrackRef.current === selectedTrack.clientId) return;
+    lastFittedTrackRef.current = selectedTrack.clientId;
+    setFocusedStopIdx(0);
+    fitTrackBounds(selectedTrack.points);
+  }, [mapReady, selectedTrack, fitTrackBounds]);
+
+  // Subtle animated marching light pulse along active route to make travel direction crystal clear
+  useEffect(() => {
+    if (!mapReady) return;
+    const dashSteps: Array<[number, number, number]> = [
+      [0, 3.6, 0.5],
+      [0.6, 3.0, 0.5],
+      [1.2, 2.4, 0.5],
+      [1.8, 1.8, 0.5],
+      [2.4, 1.2, 0.5],
+      [3.0, 0.6, 0.5],
+      [3.6, 0, 0.5],
+    ];
+    let step = 0;
+    let lastTs = 0;
+
+    const tick = (ts: number) => {
+      const map = mapRef.current;
+      if (map && ts - lastTs > 130 && map.isStyleLoaded() && map.getLayer('fp-active-energy')) {
+        lastTs = ts;
+        step = (step + 1) % dashSteps.length;
+        try {
+          map.setPaintProperty('fp-active-energy', 'line-dasharray', dashSteps[step]);
+        } catch {
+          // ignore while switching styles
+        }
       }
-    }
+      dashAnimRef.current = window.requestAnimationFrame(tick);
+    };
 
-    // Draw active live recording trail
-    if (livePoints.length >= 2) {
-      drawGlowingTrail(livePoints, '#f43f5e', true);
-    }
-    for (const mem of liveMemories) {
-      const icon = L.divIcon({
-        className: 'dtst-live-memory-pin',
-        html: `<div style="display:inline-flex;align-items:center;gap:4px;background:#fff1f2;border:2px solid #f43f5e;border-radius:999px;padding:3px 9px;box-shadow:0 6px 16px rgba(244,63,94,0.35);white-space:nowrap;font-size:11px;font-weight:700;color:#881337;transform:translate(-50%,-100%);">
-          <span style="font-size:14px">${mem.emoji}</span>
-          <span>${mem.placeName || mem.moodLabel}</span>
-        </div>`,
-        iconSize: [0, 0],
-      });
-      L.marker([mem.lat, mem.lng], { icon }).addTo(pinGroup);
-    }
+    dashAnimRef.current = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(dashAnimRef.current);
+  }, [mapReady]);
 
-    // Draw Passport Check-in Stamp Pins
-    for (const chk of checkInPins) {
-      const icon = L.divIcon({
-        className: 'dtst-checkin-pin',
-        html: `<div style="display:inline-flex;align-items:center;gap:4px;background:linear-gradient(135deg,#059669,#0d9488);color:white;border:2px solid white;border-radius:999px;padding:3px 9px;box-shadow:0 6px 16px rgba(5,150,105,0.45);white-space:nowrap;font-size:11px;font-weight:800;transform:translate(-50%,-100%);max-width:165px;">
-          <span style="flex-shrink:0">🛂</span>
-          <span style="overflow:hidden;text-overflow:ellipsis">${chk.name}</span>
-        </div>`,
-        iconSize: [0, 0],
-      });
-      L.marker([chk.coordinates.lat, chk.coordinates.lng], { icon })
-        .bindPopup(
-          `<div style="min-width:190px">
-            <div style="font-size:10px;font-weight:800;text-transform:uppercase;color:#059669">🛂 Đã đóng dấu Hộ chiếu (+${chk.pointsAwarded}đ)</div>
-            <div style="font-weight:800;font-size:13px;color:#0f2922;margin-top:2px">${chk.name}</div>
-            <p style="font-size:11px;color:#475569;margin:4px 0 6px">${chk.summary}</p>
-            <a href="/destinations/${chk.slug}" style="font-size:11px;font-weight:700;color:#059669;text-decoration:underline">Xem chi tiết địa điểm →</a>
-          </div>`,
-        )
-        .addTo(pinGroup);
-    }
-
-    redrawFogOfWar();
-  }, [tracks, selectedTrackId, livePoints, liveMemories, checkInPins, redrawFogOfWar]);
-
-  // Render Moving Avatar Marker (Pé Meko 🦊) during Replay / Demo / Live GPS
+  // Moving Pé Meko 🦊 Beacon during Replay / Demo / Live GPS
   useEffect(() => {
-    const map = mapInstanceRef.current;
-    if (!map) return;
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
 
     if (!avatarPos) {
       if (avatarMarkerRef.current) {
@@ -657,27 +1245,24 @@ export function FootprintMapPage() {
       return;
     }
 
-    const icon = L.divIcon({
-      className: 'dtst-avatar-marker',
-      html: `<div style="position:relative;display:flex;align-items:center;justify-content:center;width:42px;height:42px;transform:translate(-50%,-50%);">
-        <span style="position:absolute;inset:0;border-radius:999px;background:rgba(16,185,129,0.45);animation:ping 1.4s cubic-bezier(0,0,0.2,1) infinite;"></span>
-        <span style="position:relative;display:grid;place-items:center;width:36px;height:36px;border-radius:999px;background:linear-gradient(135deg,#059669,#14b8a6);border:2.5px solid white;box-shadow:0 8px 20px rgba(0,0,0,0.4);font-size:20px;">🦊</span>
-      </div>`,
-      iconSize: [0, 0],
-    });
-
     if (!avatarMarkerRef.current) {
-      avatarMarkerRef.current = L.marker([avatarPos.lat, avatarPos.lng], {
-        icon,
-        zIndexOffset: 1000,
-      }).addTo(map);
+      const el = document.createElement('div');
+      el.innerHTML = `
+        <div style="position:relative;display:flex;align-items:center;justify-content:center;width:46px;height:46px;">
+          <span style="position:absolute;inset:0;border-radius:999px;background:rgba(16,185,129,0.45);animation:ping 1.4s cubic-bezier(0,0,0.2,1) infinite;"></span>
+          <span style="position:relative;display:grid;place-items:center;width:38px;height:38px;border-radius:999px;background:linear-gradient(135deg,#059669,#14b8a6);border:3px solid white;box-shadow:0 8px 24px rgba(0,0,0,0.42);font-size:20px;">🦊</span>
+        </div>
+      `;
+      avatarMarkerRef.current = new maplibregl.Marker({ element: el, anchor: 'center' })
+        .setLngLat([avatarPos.lng, avatarPos.lat])
+        .addTo(map);
     } else {
-      avatarMarkerRef.current.setLatLng([avatarPos.lat, avatarPos.lng]);
+      avatarMarkerRef.current.setLngLat([avatarPos.lng, avatarPos.lat]);
     }
     redrawFogOfWar();
-  }, [avatarPos, redrawFogOfWar]);
+  }, [avatarPos, mapReady, redrawFogOfWar]);
 
-  // Timer for live recording elapsed seconds
+  // Timer for live GPS recording elapsed seconds
   useEffect(() => {
     if (!isRecordingGps || !liveStartedAt) return;
     const id = window.setInterval(() => {
@@ -686,7 +1271,7 @@ export function FootprintMapPage() {
     return () => window.clearInterval(id);
   }, [isRecordingGps, liveStartedAt]);
 
-  // Hands-Free Automatic GPS Geofence Check-in (triggers when entering <= 1,000m of any destination)
+  // Hands-Free Automatic GPS Geofence Check-in (triggers <= 1,000m)
   const checkAndTriggerGeofence = useCallback(
     async (lat: number, lng: number) => {
       if (!autoCheckInEnabled || geofenceTargets.length === 0) return;
@@ -702,7 +1287,6 @@ export function FootprintMapPage() {
           checkedInSessionRef.current.add(target.id);
           const distMeters = Math.round(distKm * 1000);
 
-          // Immediately add Passport Stamp Pin on the map & open Fog-of-War
           const optimisticPin: CheckInPinItem = {
             id: `auto-chk-${target.id}-${Date.now()}`,
             destinationId: target.id,
@@ -737,19 +1321,17 @@ export function FootprintMapPage() {
               if (res.data.created) {
                 toast.success(
                   `🛂 Tự động Điểm danh GPS (+${res.data.pointsAwarded} EXP)!`,
-                  `Hệ thống phát hiện bạn vừa đến gần "${target.name}" (cách ${distMeters}m) và tự động đóng dấu Hộ chiếu số!`,
+                  `Phát hiện bạn vừa đến gần "${target.name}" (${distMeters}m) và tự động đóng dấu Hộ chiếu số!`,
                 );
-                if (res.data.newBadges?.length) {
-                  announceBadges(res.data.newBadges);
-                }
+                if (res.data.newBadges?.length) announceBadges(res.data.newBadges);
               }
             } catch {
-              // If transient network drop, syncFootprintsHandler will still auto-checkin on next sync!
+              // handled on next sync
             }
           } else {
             toast.info(
               `🛂 Tự động Điểm danh Offline: ${target.name}`,
-              `Đã ghi nhận tự động vào bộ nhớ máy (cách ${distMeters}m). Sẽ tự động cộng +15 EXP khi có Wi-Fi lại!`,
+              `Đã ghi nhận vào máy (cách ${distMeters}m). Sẽ tự động cộng EXP khi có Wi-Fi lại!`,
             );
           }
         }
@@ -758,20 +1340,19 @@ export function FootprintMapPage() {
     [autoCheckInEnabled, geofenceTargets, isEffectiveOnline, simulatingRouteId],
   );
 
-  // Start Live Real GPS Recording (with Screen Wake Lock + Offline IndexedDB autosave)
+  // Start Live Real GPS Recording
   const handleStartLiveGps = async () => {
     if (!('geolocation' in navigator)) {
-      toast.error('Thiết bị không hỗ trợ GPS', 'Bạn có thể dùng nút Chạy thử Hành trình Mẫu bên cạnh nhé!');
+      toast.error('Thiết bị không hỗ trợ GPS', 'Hãy thử chạy Cung đường Mẫu ở tab Chuyến đi nhé!');
       return;
     }
 
-    // Request Screen Wake Lock so phone screen stays awake while riding/walking
     try {
       if ('wakeLock' in navigator) {
         wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
       }
     } catch {
-      // ignore if browser blocks wakeLock
+      // ignore
     }
 
     const startTs = Date.now();
@@ -782,10 +1363,10 @@ export function FootprintMapPage() {
     setIsRecordingGps(true);
 
     toast.success(
-      'Đã bật ghi hành trình & Tự động Điểm danh GPS!',
+      'Đã bật ghi hành trình GPS & Tự động Điểm danh!',
       isEffectiveOnline
-        ? 'Đi qua bất kỳ điểm du lịch nào trong bán kính 1.000m sẽ tự động được điểm danh nhận EXP!'
-        : 'Đang ghi ở chế độ Offline (Mất Wi-Fi) — vẫn tự động phát hiện và lưu điểm danh vào máy!',
+        ? 'Di chuyển đến bất kỳ điểm du lịch nào trong bán kính 1.000m sẽ tự động đóng dấu Hộ chiếu!'
+        : 'Đang ghi ở chế độ Offline — dữ liệu vẫn lưu an toàn trong máy!',
     );
 
     const watchId = navigator.geolocation.watchPosition(
@@ -803,15 +1384,15 @@ export function FootprintMapPage() {
         setLivePoints((prev) => {
           if (prev.length > 0) {
             const last = prev[prev.length - 1]!;
-            if (haversineDistanceKm(last, pt) < 0.008) return prev; // filter GPS jitter < 8m
+            if (haversineDistanceKm(last, pt) < 0.008) return prev;
           }
           const updated = [...prev, pt];
-          mapInstanceRef.current?.panTo([pt.lat, pt.lng], { animate: true });
+          mapRef.current?.easeTo({ center: [pt.lng, pt.lat], duration: 500 });
           return updated;
         });
       },
       () => {
-        toast.info('Đang chờ tín hiệu vệ tinh GPS...', 'Nếu bạn ngồi trong nhà, hãy thử bấm Chạy Hành trình Mẫu!');
+        toast.info('Đang chờ tín hiệu GPS...', 'Nếu đang ở trong nhà, bạn có thể chạy Cung đường Mẫu!');
       },
       { enableHighAccuracy: true, maximumAge: 3000, timeout: 10000 },
     );
@@ -819,7 +1400,7 @@ export function FootprintMapPage() {
     watchIdRef.current = watchId;
   };
 
-  // Stop & Save Live GPS Recording to IndexedDB (+ sync to Cloud if online)
+  // Stop & Save Live GPS Recording
   const handleStopAndSaveLiveGps = async () => {
     if (watchIdRef.current !== null) {
       navigator.geolocation.clearWatch(watchIdRef.current);
@@ -837,7 +1418,7 @@ export function FootprintMapPage() {
     setIsRecordingGps(false);
 
     if (livePoints.length === 0) {
-      toast.info('Chưa ghi nhận được bước di chuyển nào', 'Bạn có thể bấm Chạy thử Hành trình Mẫu để xem hiệu ứng vẽ đường!');
+      toast.info('Chưa ghi nhận bước di chuyển nào', 'Hãy thử chạy 1 Cung đường Mẫu để xem lộ trình 3D!');
       return;
     }
 
@@ -857,13 +1438,14 @@ export function FootprintMapPage() {
     await saveLocalTrack(newTrack);
     setLivePoints([]);
     setLiveMemories([]);
+    lastFittedTrackRef.current = null;
     setSelectedTrackId(newTrack.clientId);
-
+    setSidebarTab('timeline');
     await syncWithCloud(false);
   };
 
-  // 1-Click Simulate a Realistic Journey Across Đồng Tháp (Great for Laptop Demo & Testing Offline Sync!)
-  const handleRunDemoJourney = (preset: PresetJourneyRoute) => {
+  // 1-Click Road-Snapped Demo Journey Simulator
+  const handleRunDemoJourney = async (preset: PresetJourneyRoute) => {
     if (simTimerRef.current) {
       window.clearInterval(simTimerRef.current);
       simTimerRef.current = null;
@@ -871,9 +1453,15 @@ export function FootprintMapPage() {
     setIsReplaying(false);
     setSimulatingRouteId(preset.id);
 
-    const { points: fullPoints, memories: fullMemories } = interpolateWaypoints(preset.waypoints, 7);
+    const { points: fullPoints, memories: fullMemories, roadSnapped } =
+      await resolveRoadSnappedJourney(preset.waypoints, isEffectiveOnline);
+
+    if (roadSnapped) {
+      toast.info(`🛣️ Đang chạy tuyến "${preset.title}"`, 'Lộ trình đã bám sát đường bộ thực tế Đồng Tháp!');
+    }
+
     const startPt = fullPoints[0]!;
-    mapInstanceRef.current?.flyTo([startPt.lat, startPt.lng], 13, { duration: 1.2 });
+    fitTrackBounds(fullPoints);
 
     setLiveStartedAt(Date.now());
     setLiveTrackTitle(preset.title);
@@ -894,8 +1482,8 @@ export function FootprintMapPage() {
           title: preset.title,
           color: preset.color,
           distanceKm: calculatePolylineKm(fullPoints),
-          durationSeconds: fullPoints.length * 18,
-          startedAt: Date.now() - fullPoints.length * 18000,
+          durationSeconds: fullPoints.length * 16,
+          startedAt: Date.now() - fullPoints.length * 16000,
           endedAt: Date.now(),
           points: fullPoints,
           memories: fullMemories,
@@ -906,7 +1494,10 @@ export function FootprintMapPage() {
         await saveLocalTrack(completedTrack);
         setLivePoints([]);
         setLiveMemories([]);
+        lastFittedTrackRef.current = null;
         setSelectedTrackId(completedTrack.clientId);
+        setSidebarTab('timeline');
+        fitTrackBounds(fullPoints);
 
         if (isEffectiveOnline) {
           await syncWithCloud(false);
@@ -914,8 +1505,8 @@ export function FootprintMapPage() {
           const updated = await getAllLocalTracks();
           setTracks(updated);
           toast.info(
-            'Đã lưu hành trình & điểm danh vào Bộ nhớ Offline (IndexedDB)!',
-            `Hành trình "${preset.title}" (${completedTrack.distanceKm} km) đã được lưu an toàn khi mất Wi-Fi. Hãy bật lại Wi-Fi để xem tự động đồng bộ!`,
+            'Đã lưu lộ trình vào Bộ nhớ Offline (IndexedDB)!',
+            `Hành trình "${preset.title}" (${completedTrack.distanceKm} km) đã lưu an toàn khi mất mạng.`,
           );
         }
         return;
@@ -924,7 +1515,7 @@ export function FootprintMapPage() {
       const nextPt = fullPoints[idx]!;
       const partialPoints = fullPoints.slice(0, idx + 1);
       const unlockedMems = fullMemories.filter((m) =>
-        partialPoints.some((p) => haversineDistanceKm(p, m) < 0.08),
+        partialPoints.some((p) => haversineDistanceKm(p, m) < 0.25),
       );
 
       setLivePoints(partialPoints);
@@ -932,17 +1523,11 @@ export function FootprintMapPage() {
       setAvatarPos({ lat: nextPt.lat, lng: nextPt.lng });
       setPinCoords({ lat: nextPt.lat, lng: nextPt.lng });
       void checkAndTriggerGeofence(nextPt.lat, nextPt.lng);
-      mapInstanceRef.current?.panTo([nextPt.lat, nextPt.lng], { animate: true });
       idx++;
-    }, 140);
+    }, 95);
   };
 
-  // Animated Route Replay for Selected Track
-  const selectedTrack = useMemo(
-    () => tracks.find((t) => t.clientId === selectedTrackId) || tracks[0] || null,
-    [tracks, selectedTrackId],
-  );
-
+  // Cinematic 3D Route Replay along the road
   useEffect(() => {
     if (!isReplaying || !selectedTrack || selectedTrack.points.length < 2) {
       if (replayTimerRef.current) {
@@ -953,7 +1538,7 @@ export function FootprintMapPage() {
     }
 
     const totalPts = selectedTrack.points.length;
-    const intervalMs = Math.max(40, Math.round(180 / replaySpeed));
+    const intervalMs = Math.max(45, Math.round(150 / replaySpeed));
 
     replayTimerRef.current = window.setInterval(() => {
       setReplayProgress((prev) => {
@@ -962,12 +1547,18 @@ export function FootprintMapPage() {
           setIsReplaying(false);
           const last = selectedTrack.points[totalPts - 1]!;
           setAvatarPos({ lat: last.lat, lng: last.lng });
+          fitTrackBounds(selectedTrack.points);
           return 100;
         }
         const ptIdx = Math.min(totalPts - 1, Math.floor((next / 100) * totalPts));
         const pt = selectedTrack.points[ptIdx]!;
         setAvatarPos({ lat: pt.lat, lng: pt.lng });
-        mapInstanceRef.current?.panTo([pt.lat, pt.lng], { animate: true });
+        mapRef.current?.easeTo({
+          center: [pt.lng, pt.lat],
+          zoom: Math.max(mapRef.current.getZoom(), 14.2),
+          pitch: is3DView ? 50 : 0,
+          duration: intervalMs * 1.1,
+        });
         return next;
       });
     }, intervalMs);
@@ -978,7 +1569,7 @@ export function FootprintMapPage() {
         replayTimerRef.current = null;
       }
     };
-  }, [isReplaying, replaySpeed, selectedTrack]);
+  }, [isReplaying, replaySpeed, selectedTrack, is3DView, fitTrackBounds]);
 
   const handleStartReplay = (track: LocalFootprintTrack) => {
     if (track.points.length < 2) return;
@@ -986,7 +1577,12 @@ export function FootprintMapPage() {
     setReplayProgress(0);
     const first = track.points[0]!;
     setAvatarPos({ lat: first.lat, lng: first.lng });
-    mapInstanceRef.current?.flyTo([first.lat, first.lng], 13, { duration: 0.9 });
+    mapRef.current?.flyTo({
+      center: [first.lng, first.lat],
+      zoom: 14.3,
+      pitch: is3DView ? 50 : 0,
+      duration: 850,
+    });
     setIsReplaying(true);
   };
 
@@ -1055,6 +1651,7 @@ export function FootprintMapPage() {
     const remaining = await getAllLocalTracks();
     setTracks(remaining);
     if (selectedTrackId === clientId) {
+      lastFittedTrackRef.current = null;
       setSelectedTrackId(remaining[0]?.clientId ?? null);
     }
     toast.info('Đã xóa hành trình khỏi bản đồ');
@@ -1063,7 +1660,7 @@ export function FootprintMapPage() {
   const handleExportJson = () => {
     const payload = {
       exportedAt: new Date().toISOString(),
-      platform: 'Đồng Tháp Smart Travel - Footprint Map',
+      platform: 'Đồng Tháp Smart Travel - Footprint Map 3D',
       stats,
       tracks,
       checkInPins,
@@ -1078,255 +1675,142 @@ export function FootprintMapPage() {
     toast.success('Đã xuất file sao lưu hành trình (.json)');
   };
 
+  const handleShareCard = () => {
+    if (!selectedTrack) {
+      toast.info('Chưa có lộ trình để xuất ảnh', 'Hãy chọn hoặc chạy thử 1 cung đường trước nhé!');
+      return;
+    }
+    const ok = downloadFootprintShareCard(selectedTrack, stats.exploredPercent);
+    if (ok) {
+      toast.success('Đã tải Thẻ Lộ trình HD (.png)!', 'Bạn có thể chia sẻ ngay lên Facebook, TikTok hoặc Instagram.');
+    }
+  };
+
+  const focusStopOnMap = (idx: number, lat: number, lng: number) => {
+    setFocusedStopIdx(idx);
+    mapRef.current?.flyTo({
+      center: [lng, lat],
+      zoom: 14.8,
+      pitch: is3DView ? 48 : 0,
+      duration: 750,
+    });
+  };
+
   return (
-    <PageContainer>
-      <style>{`
-        .leaflet-tile.tp-neon-night-tile {
-          filter: invert(100%) hue-rotate(185deg) brightness(94%) contrast(96%) saturate(140%);
-        }
-        .tp-night-map-bg .leaflet-container {
-          background: #0b1922 !important;
-        }
-      `}</style>
-      {/* ── Top Offline-First & Cloud Sync Status Bar ────────────────── */}
-      <div
-        className={clsx(
-          'mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-xs shadow-2xs transition-all',
-          !isEffectiveOnline
-            ? 'border-amber-300 bg-gradient-to-r from-amber-50 via-orange-50/70 to-white text-amber-950'
-            : pendingSyncCount > 0
-              ? 'border-teal-300 bg-teal-50/70 text-teal-950'
-              : 'border-emerald-200 bg-emerald-50/60 text-emerald-950',
-        )}
-      >
-        <div className="flex items-center gap-2.5">
-          <span
-            className={clsx(
-              'grid size-8 shrink-0 place-items-center rounded-xl text-white shadow-xs',
-              !isEffectiveOnline ? 'bg-amber-500 animate-pulse' : 'bg-emerald-600',
-            )}
-          >
-            {!isEffectiveOnline ? <WifiOff className="size-4" /> : <Wifi className="size-4" />}
-          </span>
-          <div>
-            <div className="flex flex-wrap items-center gap-2 font-bold">
-              <span>
-                {!isEffectiveOnline
-                  ? '🟠 Đang ở Chế độ Offline (Mất kết nối Wi-Fi / 4G)'
-                  : '🟢 Kết nối Cloud Trực tuyến · Tự động đồng bộ IndexedDB'}
-              </span>
-              {pendingSyncCount > 0 && (
-                <span className="rounded-full bg-amber-200/90 px-2.5 py-0.5 text-[11px] font-extrabold text-amber-900">
-                  {pendingSyncCount} hành trình đang lưu đệm trên máy chờ đồng bộ
-                </span>
-              )}
-            </div>
-            <p className="mt-0.5 text-[11px] opacity-85">
-              {!isEffectiveOnline
-                ? 'Chip GPS và bộ nhớ IndexedDB vẫn đang ghi lại 100% bước di chuyển & ghim kỷ niệm của bạn mà không cần internet!'
-                : 'Mọi vệt hành trình và vùng mở khóa sương mù đều được lưu song song trên thiết bị (Offline-First) và máy chủ đám mây.'}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              const nextState = !simulateOffline;
-              setSimulateOffline(nextState);
-              if (!nextState) {
-                toast.info('Đã bật lại kết nối mạng!', 'Đang tự động đẩy dữ liệu Offline từ IndexedDB lên Cloud...');
-              } else {
-                toast.info(
-                  'Đã bật Giả lập Mất Wi-Fi!',
-                  'Bây giờ bạn hãy thử Chạy hành trình mẫu hoặc Thả ghim để kiểm chứng khả năng lưu Offline 100%!',
-                );
-              }
-            }}
-            className={clsx(
-              'inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-extrabold transition shadow-2xs',
-              simulateOffline
-                ? 'bg-emerald-600 text-white hover:bg-emerald-700'
-                : 'border border-amber-300 bg-white text-amber-800 hover:bg-amber-50',
-            )}
-          >
-            {simulateOffline ? (
-              <>
-                <Wifi className="size-3.5" /> Bật lại Wi-Fi (Auto-Sync)
-              </>
-            ) : (
-              <>
-                <CloudOff className="size-3.5" /> Test giả lập Mất Wi-Fi
-              </>
-            )}
-          </button>
-
-          <button
-            type="button"
-            disabled={isSyncing || !isEffectiveOnline}
-            onClick={() => void syncWithCloud(false)}
-            className="inline-flex items-center gap-1 rounded-full border border-sand-300 bg-white px-3 py-1.5 text-xs font-bold text-river-700 hover:bg-sand-50 disabled:opacity-45"
-          >
-            <RefreshCw className={clsx('size-3.5', isSyncing && 'animate-spin')} />
-            Đồng bộ ngay
-          </button>
-        </div>
-      </div>
-
-      {/* ── Hero Banner & Gamified Stats ──────────────────────────────── */}
-      <section className="tp-fade-up relative overflow-hidden rounded-panel bg-gradient-to-br from-river-950 via-leaf-900 to-teal-900 p-4 text-white shadow-raised sm:p-8">
+    <PageContainer width="cinema">
+      {/* ── Compact Cinema Command Header (Keeps 3D Map immediately above the fold!) ── */}
+      <section className="tp-fade-up relative overflow-hidden rounded-panel bg-gradient-to-br from-river-950 via-leaf-900 to-teal-900 p-4 text-white shadow-raised sm:px-6 sm:py-5">
         <div
-          className="pointer-events-none absolute -right-12 -top-16 size-72 rounded-full bg-emerald-400/15 blur-3xl"
+          className="pointer-events-none absolute -right-12 -top-16 size-64 rounded-full bg-emerald-400/20 blur-3xl"
           aria-hidden
         />
-        <div className="relative flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
-          <div>
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-[11px] font-semibold text-teal-200 ring-1 ring-white/20 sm:text-xs">
-              <Footprints className="size-3.5" />
-              Bump & Jagat Style · Fog-of-War & Live Trail
-            </span>
-            <h1 className="mt-2 text-2xl font-black tracking-tight text-white sm:mt-2.5 sm:text-4xl">
-              Bản đồ Dấu chân Khám phá
-            </h1>
-            <p className="mt-1.5 max-w-2xl text-xs leading-relaxed text-leaf-100 sm:text-sm">
-              Đi đến đâu, xóa tan lớp sương mù bản đồ và vẽ lại vệt hành trình phát sáng tới đó. Tự động lưu Offline
-              vào máy ngay cả khi đi giữa rừng tràm không có sóng Wi-Fi!
-            </p>
+        <div className="relative flex flex-col justify-between gap-4 xl:flex-row xl:items-center">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-0.5 text-[11px] font-bold text-emerald-200 ring-1 ring-white/20">
+                <Footprints className="size-3.5" aria-hidden />
+                Bản đồ Dấu chân 3D · Đường bộ thực tế
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  const next = !simulateOffline;
+                  setSimulateOffline(next);
+                  toast.info(
+                    next ? '🟠 Đang giả lập Mất Wi-Fi (Offline)' : '🟢 Đã bật lại Wi-Fi (Auto-Sync)',
+                    next
+                      ? 'Vẫn ghi GPS & lưu hành trình 100% vào IndexedDB!'
+                      : 'Tự động đồng bộ hành trình lên Cloud...',
+                  );
+                }}
+                className={clsx(
+                  'inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-bold ring-1 transition',
+                  !isEffectiveOnline
+                    ? 'bg-amber-400/25 text-amber-100 ring-amber-300/50'
+                    : 'bg-emerald-400/20 text-emerald-100 ring-emerald-300/35 hover:bg-emerald-400/30',
+                )}
+                title="Bấm để kiểm thử chế độ Offline-First (Mất Wi-Fi)"
+              >
+                {!isEffectiveOnline ? <WifiOff className="size-3" /> : <Wifi className="size-3" />}
+                {!isEffectiveOnline
+                  ? `Offline${pendingSyncCount > 0 ? ` (${pendingSyncCount} chờ)` : ''}`
+                  : 'Cloud + Offline'}
+              </button>
+            </div>
+
+            <div className="mt-2 flex flex-wrap items-baseline gap-x-5 gap-y-1">
+              <h1 className="text-xl font-black tracking-tight text-white sm:text-3xl">
+                Bản đồ Dấu chân Khám phá
+              </h1>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-semibold text-leaf-100">
+                <span className="inline-flex items-center gap-1">
+                  <Flame className="size-3.5 text-amber-300" aria-hidden />
+                  <strong className="text-white">{stats.exploredPercent}%</strong> Đồng Tháp
+                </span>
+                <span>
+                  📏 <strong className="text-white">{stats.totalKm} km</strong>
+                </span>
+                <span>
+                  🧭 <strong className="text-white">{stats.totalTracks}</strong> hành trình
+                </span>
+                <span>
+                  🛂 <strong className="text-white">{stats.totalCheckIns + stats.totalMemories}</strong> điểm dấu
+                </span>
+              </div>
+            </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
+          <div className="flex flex-wrap items-center gap-2">
             {!isRecordingGps ? (
               <button
                 type="button"
                 onClick={() => void handleStartLiveGps()}
-                className="inline-flex items-center justify-center gap-1.5 rounded-full bg-gradient-to-r from-rose-500 to-amber-500 px-3.5 py-2.5 text-xs font-extrabold text-white shadow-lg shadow-rose-600/30 transition hover:scale-105 sm:px-5"
+                className="inline-flex items-center justify-center gap-1.5 rounded-full bg-gradient-to-r from-rose-500 to-amber-500 px-4 py-2 text-xs font-extrabold text-white shadow-lg shadow-rose-600/30 transition hover:scale-105"
               >
-                <Radio className="size-4 shrink-0 animate-pulse" />
-                <span className="truncate">Ghi GPS thực tế</span>
+                <Radio className="size-3.5 shrink-0 animate-pulse" />
+                Ghi GPS thực tế
               </button>
             ) : (
               <button
                 type="button"
                 onClick={() => void handleStopAndSaveLiveGps()}
-                className="inline-flex items-center justify-center gap-1.5 rounded-full bg-rose-600 px-3.5 py-2.5 text-xs font-extrabold text-white ring-4 ring-rose-400/40 animate-pulse sm:px-5"
+                className="inline-flex items-center justify-center gap-1.5 rounded-full bg-rose-600 px-4 py-2 text-xs font-extrabold text-white ring-4 ring-rose-400/40 animate-pulse"
               >
                 <Square className="size-3.5 shrink-0 fill-white" />
-                <span className="truncate">Dừng ({formatDurationClock(liveElapsedSec)})</span>
+                Dừng ({formatDurationClock(liveElapsedSec)})
               </button>
             )}
 
             <button
               type="button"
               onClick={() => setPinModalOpen(true)}
-              className="inline-flex items-center justify-center gap-1.5 rounded-full bg-white/15 px-3.5 py-2.5 text-xs font-bold text-white ring-1 ring-white/25 backdrop-blur-sm transition hover:bg-white/25 sm:px-4"
+              className="inline-flex items-center justify-center gap-1.5 rounded-full bg-white/15 px-3.5 py-2 text-xs font-bold text-white ring-1 ring-white/25 backdrop-blur-sm transition hover:bg-white/25"
             >
-              <MapPinPlus className="size-4 shrink-0 text-amber-300" />
-              <span className="truncate">Thả Ghim Kỷ Niệm</span>
+              <MapPinPlus className="size-3.5 text-amber-300" />
+              Thả Ghim
             </button>
-          </div>
-        </div>
 
-        {/* 4 Gamified Stat Tiles (Compact 2x2 grid on mobile!) */}
-        <div className="relative mt-4 grid grid-cols-2 gap-2.5 sm:mt-6 sm:gap-3 lg:grid-cols-4">
-          <div className="rounded-2xl bg-white/10 p-3 ring-1 ring-white/15 backdrop-blur-xs sm:p-4">
-            <div className="flex items-center justify-between text-[11px] font-semibold text-teal-200 sm:text-xs">
-              <span className="truncate">🌫️ Mở khóa Sương mù</span>
-              <Flame className="size-3.5 shrink-0 text-amber-300 sm:size-4" />
-            </div>
-            <p className="mt-1 text-xl font-black text-white sm:mt-1.5 sm:text-2xl">{stats.exploredPercent}%</p>
-            <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-white/15 sm:mt-2">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-emerald-300 to-teal-300 transition-all duration-700"
-                style={{ width: `${Math.max(5, stats.exploredPercent)}%` }}
-              />
-            </div>
-            <p className="mt-1 truncate text-[10px] text-leaf-100/80 sm:text-[11px]">{stats.unlockedZones} vùng đã mở</p>
-          </div>
-
-          <div className="rounded-2xl bg-white/10 p-3 ring-1 ring-white/15 backdrop-blur-xs sm:p-4">
-            <p className="truncate text-[11px] font-semibold text-teal-200 sm:text-xs">👣 Quãng đường đã vẽ</p>
-            <p className="mt-1 text-xl font-black text-white sm:mt-1.5 sm:text-2xl">{stats.totalKm} km</p>
-            <p className="mt-1.5 truncate text-[10px] text-leaf-100/80 sm:mt-2 sm:text-[11px]">Vệ tinh GPS thực địa</p>
-          </div>
-
-          <div className="rounded-2xl bg-white/10 p-3 ring-1 ring-white/15 backdrop-blur-xs sm:p-4">
-            <p className="truncate text-[11px] font-semibold text-teal-200 sm:text-xs">⚡ Chuyến hành trình</p>
-            <p className="mt-1 text-xl font-black text-white sm:mt-1.5 sm:text-2xl">{stats.totalTracks} chuyến</p>
-            <p className="mt-1.5 truncate text-[10px] text-leaf-100/80 sm:mt-2 sm:text-[11px]">
-              {pendingSyncCount > 0 ? `${pendingSyncCount} chuyến chờ mạng` : 'Sao lưu máy & Cloud'}
-            </p>
-          </div>
-
-          <div className="rounded-2xl bg-white/10 p-3 ring-1 ring-white/15 backdrop-blur-xs sm:p-4">
-            <p className="truncate text-[11px] font-semibold text-teal-200 sm:text-xs">📍 Con dấu & Ghim</p>
-            <p className="mt-1 text-xl font-black text-white sm:mt-1.5 sm:text-2xl">
-              {stats.totalCheckIns + stats.totalMemories} điểm
-            </p>
-            <p className="mt-1.5 truncate text-[10px] text-leaf-100/80 sm:mt-2 sm:text-[11px]">
-              {stats.totalCheckIns} Hộ chiếu · {stats.totalMemories} ghim
-            </p>
+            <button
+              type="button"
+              onClick={handleShareCard}
+              className="inline-flex items-center justify-center gap-1.5 rounded-full bg-white px-3.5 py-2 text-xs font-extrabold text-leaf-900 shadow-sm transition hover:bg-leaf-50"
+              title="Xuất ảnh Poster Lộ trình chất lượng cao (.png)"
+            >
+              <Camera className="size-3.5 text-leaf-700" />
+              Lưu ảnh HD
+            </button>
           </div>
         </div>
       </section>
 
-      {/* ── Main Interactive Map + Sidebar Layout ─────────────────────── */}
-      <div className="mt-5 grid gap-5 sm:mt-6 sm:gap-6 lg:grid-cols-[1fr_360px]">
-        {/* Left: Interactive Map & Floating Controls */}
-        <div className="min-w-0 space-y-3.5 sm:space-y-4">
-          {/* 1-Click Demo Route Simulator Bar (Swipeable carousel on mobile!) */}
-          <Card className="border border-leaf-200 bg-gradient-to-r from-leaf-50/90 via-white to-teal-50/60 p-3.5 shadow-2xs sm:p-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <h2 className="flex items-center gap-1.5 text-sm font-extrabold text-river-900">
-                  <Zap className="size-4 text-amber-500" />
-                  Chạy thử Hành trình Mẫu (1-Click)
-                </h2>
-                <p className="text-[11px] text-river-600 sm:text-xs">
-                  Chạm 1 cung đường để xem <strong>Pé Meko 🦊</strong> tự chạy, xóa sương mù và Tự động Điểm danh (hoạt động cả khi <em>Mất Wi-Fi</em>!).
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-2.5 flex snap-x gap-2.5 overflow-x-auto pb-1 no-scrollbar sm:mt-3 sm:grid sm:grid-cols-3 sm:overflow-visible sm:pb-0">
-              {PRESET_DEMO_JOURNEYS.map((route) => {
-                const isRunning = simulatingRouteId === route.id;
-                return (
-                  <button
-                    key={route.id}
-                    type="button"
-                    disabled={Boolean(simulatingRouteId)}
-                    onClick={() => handleRunDemoJourney(route)}
-                    className={clsx(
-                      'flex w-[240px] max-w-[76vw] shrink-0 snap-start flex-col justify-between rounded-2xl border p-3 text-left transition-all sm:w-auto sm:max-w-none',
-                      isRunning
-                        ? 'border-emerald-500 bg-emerald-50 ring-2 ring-emerald-300'
-                        : 'border-sand-200 bg-white hover:-translate-y-0.5 hover:border-leaf-400 hover:shadow-sm',
-                    )}
-                  >
-                    <div>
-                      <div className="flex items-center justify-between gap-1">
-                        <span
-                          className="inline-block size-3 rounded-full"
-                          style={{ backgroundColor: route.color }}
-                        />
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-leaf-700">
-                          {isRunning ? '🦊 Đang di chuyển...' : '▶️ Chạy thử'}
-                        </span>
-                      </div>
-                      <p className="mt-1.5 text-xs font-extrabold text-river-900">{route.title}</p>
-                      <p className="mt-0.5 line-clamp-2 text-[11px] text-river-500">{route.subtitle}</p>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </Card>
-
-          {/* Map Toolbar (Single-row swipeable pills on mobile!) */}
-          <div className="flex flex-nowrap items-center justify-between gap-2 overflow-x-auto rounded-2xl border border-sand-200 bg-white p-2.5 shadow-2xs no-scrollbar sm:flex-wrap sm:overflow-visible sm:p-3">
-            <div className="flex shrink-0 items-center gap-1.5">
-              {(Object.keys(MAP_TILES) as MapStyleMode[]).map((mode) => (
+      {/* ── Main Cinema Split Stage: 3D Vector Map (Left) + Step-by-Step Route Studio (Right) ── */}
+      <div className="mt-4 grid gap-4 sm:mt-5 sm:gap-5 lg:grid-cols-[1fr_390px] lg:items-start">
+        {/* Left: Full-Height MapLibre 3D Interactive Stage */}
+        <div className="min-w-0 space-y-3">
+          {/* Sleek Map Controls Bar */}
+          <div className="flex flex-nowrap items-center justify-between gap-2 overflow-x-auto rounded-2xl border border-sand-200 bg-white px-2.5 py-2 shadow-2xs no-scrollbar sm:flex-wrap sm:overflow-visible sm:px-3">
+            <div className="flex shrink-0 items-center gap-1">
+              {(Object.keys(MAP_STYLE_LABELS) as MapStyleMode[]).map((mode) => (
                 <button
                   key={mode}
                   type="button"
@@ -1338,84 +1822,109 @@ export function FootprintMapPage() {
                       : 'bg-sand-100 text-river-700 hover:bg-sand-200',
                   )}
                 >
-                  {MAP_TILES[mode].label}
+                  <span className="hidden sm:inline">{MAP_STYLE_LABELS[mode].label}</span>
+                  <span className="sm:hidden">{MAP_STYLE_LABELS[mode].short}</span>
                 </button>
               ))}
             </div>
 
-            <div className="flex shrink-0 items-center gap-1.5 sm:flex-wrap sm:gap-2">
+            <div className="flex shrink-0 items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setIs3DView((v) => !v)}
+                className={clsx(
+                  'inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-extrabold transition',
+                  is3DView
+                    ? 'bg-river-900 text-emerald-200 ring-1 ring-emerald-400/40'
+                    : 'bg-sand-100 text-river-700 hover:bg-sand-200',
+                )}
+                title="Chuyển góc nhìn nghiêng 3D / Phẳng 2D"
+              >
+                <Layers className="size-3.5" />
+                {is3DView ? 'Góc 3D' : 'Phẳng 2D'}
+              </button>
+
               <button
                 type="button"
                 onClick={() => {
-                  const next = !autoCheckInEnabled;
-                  setAutoCheckInEnabled(next);
-                  toast.info(
-                    next
-                      ? 'Đã BẬT Tự động Điểm danh GPS (<1.000m)'
-                      : 'Đã TẮT Tự động Điểm danh GPS',
-                    next
-                      ? 'Khi bạn di chuyển qua bất kỳ điểm du lịch nào trong bán kính 1.000m, hệ thống sẽ tự động điểm danh nhận EXP mà không cần bấm tay!'
-                      : 'Chuyển về chế độ điểm danh thủ công.',
-                  );
+                  const pts = livePoints.length >= 2 ? livePoints : selectedTrack?.points || [];
+                  if (pts.length > 0) fitTrackBounds(pts);
                 }}
-                className={clsx(
-                  'inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-extrabold transition sm:px-3.5',
-                  autoCheckInEnabled
-                    ? 'bg-emerald-600 text-white shadow-xs ring-1 ring-emerald-400'
-                    : 'bg-sand-100 text-river-600 hover:bg-sand-200',
-                )}
+                className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-leaf-50 px-3 py-1.5 text-xs font-extrabold text-leaf-800 ring-1 ring-leaf-200 transition hover:bg-leaf-100"
+                title="Tự động thu phóng để thấy toàn bộ lộ trình"
               >
-                <MapPinCheck className="size-3.5" />
-                {autoCheckInEnabled ? 'Tự động Check-in: BẬT' : 'Tự động Check-in: TẮT'}
+                <Maximize2 className="size-3.5" />
+                Toàn tuyến
               </button>
 
               <button
                 type="button"
                 onClick={() => setFogEnabled((v) => !v)}
                 className={clsx(
-                  'inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-extrabold transition sm:px-3.5',
+                  'inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-extrabold transition',
                   fogEnabled
-                    ? 'bg-river-900 text-teal-200 ring-1 ring-teal-400/50'
+                    ? 'bg-teal-50 text-teal-900 ring-1 ring-teal-300'
                     : 'bg-sand-100 text-river-600 hover:bg-sand-200',
                 )}
               >
                 {fogEnabled ? <Eye className="size-3.5" /> : <EyeOff className="size-3.5" />}
-                {fogEnabled ? 'Sương mù: BẬT' : 'Sương mù: TẮT'}
+                Sương mù
               </button>
 
               {fogEnabled && (
-                <label className="hidden items-center gap-1.5 text-[11px] font-semibold text-river-600 sm:flex">
+                <label className="hidden items-center gap-1.5 pl-1 text-[11px] font-semibold text-river-600 xl:flex">
                   <span>Độ mở:</span>
                   <input
                     type="range"
-                    min={28}
-                    max={80}
+                    min={32}
+                    max={88}
                     value={fogRadiusPx}
                     onChange={(e) => setFogRadiusPx(Number(e.target.value))}
-                    className="w-20 accent-leaf-600"
+                    className="w-16 accent-leaf-600"
                   />
                 </label>
               )}
             </div>
           </div>
 
-          {/* Map Canvas Container (isolated stacking context so Leaflet panes never bleed over modals/chat!) */}
-          <div
-            className={clsx(
-              'isolate z-0 relative h-[58dvh] min-h-[380px] w-full overflow-hidden rounded-3xl border-2 border-leaf-300 shadow-raised sm:h-[520px]',
-              mapStyle === 'night_neon' && 'tp-night-map-bg',
-            )}
-          >
-            <div ref={mapContainerRef} className="size-full z-10" />
+          {/* 3D WebGL Map Canvas Container */}
+          <div className="isolate relative z-0 h-[58dvh] min-h-[410px] w-full overflow-hidden rounded-3xl border border-sand-300 bg-river-950 shadow-raised sm:h-[580px]">
+            <div ref={mapContainerRef} className="size-full" />
             <canvas
               ref={fogCanvasRef}
-              className="pointer-events-none absolute inset-0 z-[400]"
+              className="pointer-events-none absolute inset-0 z-10"
             />
+
+            {/* Floating Top-Left Active Route Pill inside Map */}
+            {selectedTrack && (
+              <div className="pointer-events-none absolute left-3 top-3 z-20 flex max-w-[calc(100%-1.5rem)] items-center gap-2 rounded-2xl border border-white/25 bg-river-950/85 px-3 py-2 text-white shadow-xl backdrop-blur-md">
+                <span
+                  className="size-3 shrink-0 rounded-full ring-2 ring-white/70"
+                  style={{ backgroundColor: selectedTrack.color || '#10b981' }}
+                />
+                <div className="min-w-0">
+                  <p className="truncate text-xs font-extrabold leading-tight">
+                    {selectedTrack.title}
+                  </p>
+                  <p className="mt-0.5 flex items-center gap-2 text-[10px] font-semibold text-emerald-200">
+                    <span>📏 {selectedTrack.distanceKm} km</span>
+                    <span>·</span>
+                    <span>📍 {routeStopsWithLegs.length} chặng</span>
+                    {autoCheckInEnabled && (
+                      <>
+                        <span>·</span>
+                        <span className="text-teal-200">🛂 Auto Check-in</span>
+                      </>
+                    )}
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* Floating Bottom Replay HUD inside Map */}
             {selectedTrack && selectedTrack.points.length >= 2 && (
-              <div className="absolute bottom-3 left-3 right-3 z-[500] flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/25 bg-river-950/92 px-3 py-2.5 text-white shadow-2xl backdrop-blur-md sm:bottom-4 sm:left-4 sm:right-4 sm:gap-3 sm:px-4 sm:py-3">
-                <div className="flex items-center gap-2.5 min-w-0">
+              <div className="absolute bottom-3 left-3 right-3 z-20 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/25 bg-river-950/90 px-3 py-2.5 text-white shadow-2xl backdrop-blur-md sm:bottom-4 sm:left-4 sm:right-4 sm:px-4">
+                <div className="flex min-w-0 items-center gap-2.5">
                   <button
                     type="button"
                     onClick={() => {
@@ -1425,23 +1934,26 @@ export function FootprintMapPage() {
                         handleStartReplay(selectedTrack);
                       }
                     }}
-                    className="grid size-9 shrink-0 place-items-center rounded-full bg-emerald-500 text-white shadow-md transition hover:bg-emerald-400"
-                    title={isReplaying ? 'Tạm dừng' : 'Phát lại hành trình (Replay)'}
+                    className="grid size-9 shrink-0 place-items-center rounded-full bg-emerald-500 text-white shadow-md transition hover:scale-105 hover:bg-emerald-400"
+                    title={isReplaying ? 'Tạm dừng' : 'Phát lại hành trình 3D'}
                   >
-                    {isReplaying ? <Pause className="size-4" /> : <Play className="size-4 fill-white" />}
+                    {isReplaying ? (
+                      <Pause className="size-4" />
+                    ) : (
+                      <Play className="size-4 translate-x-0.5 fill-white" />
+                    )}
                   </button>
                   <div className="min-w-0">
                     <p className="truncate text-xs font-extrabold text-white">
-                      🎬 {selectedTrack.title}
+                      {isReplaying ? '🦊 Đang bay theo lộ trình...' : '🎬 Bay phát lại 3D theo đường thật'}
                     </p>
-                    <p className="text-[11px] text-teal-200">
-                      {selectedTrack.distanceKm} km · {selectedTrack.points.length} điểm GPS ·{' '}
-                      {selectedTrack.memories?.length || 0} kỷ niệm
+                    <p className="truncate text-[11px] text-teal-200">
+                      Kéo thanh trượt để xem từng chặng trên tuyến đường
                     </p>
                   </div>
                 </div>
 
-                <div className="flex flex-1 items-center gap-3 min-w-[160px] max-w-xs">
+                <div className="flex min-w-[140px] max-w-xs flex-1 items-center gap-2.5">
                   <input
                     type="range"
                     min={0}
@@ -1457,12 +1969,12 @@ export function FootprintMapPage() {
                       const pt = selectedTrack.points[idx];
                       if (pt) {
                         setAvatarPos({ lat: pt.lat, lng: pt.lng });
-                        mapInstanceRef.current?.panTo([pt.lat, pt.lng]);
+                        mapRef.current?.easeTo({ center: [pt.lng, pt.lat], duration: 250 });
                       }
                     }}
                     className="w-full accent-emerald-400"
                   />
-                  <span className="w-9 text-right text-[11px] font-bold tabular-nums text-teal-200">
+                  <span className="w-8 text-right text-[11px] font-bold tabular-nums text-teal-200">
                     {Math.round(replayProgress)}%
                   </span>
                 </div>
@@ -1489,145 +2001,366 @@ export function FootprintMapPage() {
           </div>
         </div>
 
-        {/* Right Sidebar: Recorded Journeys, Memory Pins & Backup */}
-        <aside className="space-y-4">
-          <Card className="p-5">
-            <div className="flex items-center justify-between gap-2">
-              <div>
-                <h2 className="text-base font-extrabold text-river-900">
-                  Nhật ký Hành trình ({tracks.length})
-                </h2>
-                <p className="text-xs text-river-500">
-                  Bấm vào từng chuyến đi để định vị hoặc phát lại (Replay)
-                </p>
-              </div>
+        {/* Right: 2-Tab Interactive Route Studio (Step-by-Step Timeline + Journeys & Demos) */}
+        <aside className="min-w-0 space-y-4">
+          <Card className="overflow-hidden p-0">
+            {/* Clean 2-Tab Switcher */}
+            <div className="grid grid-cols-2 border-b border-sand-200 bg-sand-50/80 p-1.5">
               <button
                 type="button"
-                onClick={handleExportJson}
-                title="Tải file sao lưu Offline (.json)"
-                className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-sand-100 px-3 py-1.5 text-xs font-bold text-river-700 hover:bg-leaf-50 hover:text-leaf-800"
+                onClick={() => setSidebarTab('timeline')}
+                className={clsx(
+                  'inline-flex items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-extrabold transition',
+                  sidebarTab === 'timeline'
+                    ? 'bg-white text-leaf-800 shadow-sm ring-1 ring-sand-200'
+                    : 'text-river-600 hover:text-river-900',
+                )}
               >
-                <Download className="size-3.5" />
-                Sao lưu
+                <Route className="size-3.5" />
+                Lộ trình ({routeStopsWithLegs.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setSidebarTab('journeys')}
+                className={clsx(
+                  'inline-flex items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-extrabold transition',
+                  sidebarTab === 'journeys'
+                    ? 'bg-white text-leaf-800 shadow-sm ring-1 ring-sand-200'
+                    : 'text-river-600 hover:text-river-900',
+                )}
+              >
+                <Compass className="size-3.5" />
+                Chuyến đi ({tracks.length})
               </button>
             </div>
 
-            {tracks.length === 0 ? (
-              <div className="mt-4 rounded-2xl border border-dashed border-sand-300 bg-sand-50/60 p-5 text-center">
-                <Footprints className="mx-auto size-8 text-leaf-600 opacity-75" />
-                <p className="mt-2 text-xs font-bold text-river-800">Chưa có vệt hành trình nào</p>
-                <p className="mt-1 text-[11px] text-river-500">
-                  Hãy bấm <strong>“Ghi hành trình GPS thực tế”</strong> hoặc chạy ngay cung đường mẫu bên dưới để xóa
-                  sương mù nhé!
-                </p>
-                <button
-                  type="button"
-                  onClick={() => handleRunDemoJourney(PRESET_DEMO_JOURNEYS[0]!)}
-                  className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-leaf-600 px-4 py-2 text-xs font-extrabold text-white shadow-xs hover:bg-leaf-700"
-                >
-                  <Play className="size-3.5 fill-white" /> Chạy thử Cung đường Sa Đéc
-                </button>
+            {sidebarTab === 'timeline' ? (
+              <div className="p-4">
+                {selectedTrack && routeStopsWithLegs.length > 0 ? (
+                  <>
+                    <div className="flex items-start justify-between gap-2 pb-3 border-b border-sand-100">
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-bold uppercase tracking-wider text-leaf-700">
+                          Bấm từng chặng để định vị trên bản đồ 3D
+                        </p>
+                        <h2 className="mt-0.5 truncate text-sm font-extrabold text-river-900">
+                          {selectedTrack.title}
+                        </h2>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => fitTrackBounds(selectedTrack.points)}
+                        className="shrink-0 whitespace-nowrap rounded-full bg-leaf-50 px-2.5 py-1 text-[11px] font-bold text-leaf-800 ring-1 ring-leaf-200 hover:bg-leaf-100"
+                      >
+                        Toàn tuyến
+                      </button>
+                    </div>
+
+                    {/* Quick Action Bar at Top (Always clear of floating Pé Meko orb!) */}
+                    <div className="mt-3 grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleStartReplay(selectedTrack)}
+                        className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-leaf-700 py-2 text-xs font-extrabold text-white shadow-xs transition hover:bg-leaf-800"
+                      >
+                        <Play className="size-3.5 fill-white" />
+                        Bay phát lại 3D
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleShareCard}
+                        className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-sand-300 bg-white py-2 text-xs font-bold text-river-800 transition hover:border-leaf-400 hover:bg-leaf-50"
+                      >
+                        <Camera className="size-3.5 text-leaf-700" />
+                        Tải ảnh HD
+                      </button>
+                    </div>
+
+                    {/* Visual Vertical Connected Stop-by-Stop Stepper */}
+                    <ol className="mt-3 max-h-[410px] space-y-2 overflow-y-auto pr-1">
+                      {routeStopsWithLegs.map((stop, i) => {
+                        const isFocused = focusedStopIdx === i;
+                        const isStart = i === 0;
+                        const isEnd = i === routeStopsWithLegs.length - 1 && routeStopsWithLegs.length > 1;
+                        const color = selectedTrack.color || '#10b981';
+
+                        return (
+                          <li key={`${stop.title}-${i}`} className="relative">
+                            {/* Leg distance connector pill between stops */}
+                            {i > 0 && (
+                              <div className="mb-2 ml-4 flex items-center gap-2 border-l-2 border-dashed border-leaf-300 py-1 pl-4 text-[11px] font-semibold text-river-500">
+                                <Navigation className="size-3 shrink-0 text-leaf-600" aria-hidden />
+                                <span>
+                                  Di chuyển <strong className="text-river-800">{stop.legKm} km</strong> · ~{stop.legMin} phút
+                                </span>
+                              </div>
+                            )}
+
+                            <button
+                              type="button"
+                              onClick={() => focusStopOnMap(i, stop.lat, stop.lng)}
+                              className={clsx(
+                                'group flex w-full items-start gap-3 rounded-2xl border p-2.5 text-left transition-all',
+                                isFocused
+                                  ? 'border-leaf-500 bg-leaf-50/75 shadow-sm ring-1 ring-leaf-300'
+                                  : 'border-sand-200 bg-white hover:border-leaf-300 hover:bg-sand-50/60',
+                              )}
+                            >
+                              {/* Numbered Stop Circle + Photo Thumbnail */}
+                              <div className="relative shrink-0">
+                                {stop.imageUrl ? (
+                                  <img
+                                    src={stop.imageUrl}
+                                    alt={stop.title}
+                                    className="size-12 rounded-xl object-cover ring-2 ring-white shadow-xs"
+                                  />
+                                ) : (
+                                  <span className="grid size-12 place-items-center rounded-xl bg-sand-100 text-xl">
+                                    {stop.emoji}
+                                  </span>
+                                )}
+                                <span
+                                  className="absolute -left-1.5 -top-1.5 grid size-5 place-items-center rounded-full text-[10px] font-black text-white ring-2 ring-white shadow"
+                                  style={{
+                                    backgroundColor: isStart ? '#059669' : isEnd ? '#e11d48' : color,
+                                  }}
+                                >
+                                  {i + 1}
+                                </span>
+                              </div>
+
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5">
+                                  <span
+                                    className={clsx(
+                                      'shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-extrabold uppercase',
+                                      isStart
+                                        ? 'bg-emerald-100 text-emerald-800'
+                                        : isEnd
+                                          ? 'bg-rose-100 text-rose-800'
+                                          : 'bg-sand-100 text-river-600',
+                                    )}
+                                  >
+                                    {isStart ? '🚩 Xuất phát' : isEnd ? '🏁 Đích đến' : `Chặng ${i + 1}`}
+                                  </span>
+                                  <span className="truncate text-[10px] font-semibold text-river-500">
+                                    {stop.emoji} {stop.moodLabel}
+                                  </span>
+                                </div>
+                                <p className="mt-1 truncate text-xs font-extrabold text-river-900 group-hover:text-leaf-800">
+                                  {stop.title}
+                                </p>
+                                {stop.note && (
+                                  <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-river-600">
+                                    {stop.note}
+                                  </p>
+                                )}
+                              </div>
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ol>
+                  </>
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-sand-300 bg-sand-50/70 p-6 text-center">
+                    <Flag className="mx-auto size-8 text-leaf-600 opacity-75" />
+                    <p className="mt-2 text-xs font-extrabold text-river-900">Chưa có lộ trình nào được chọn</p>
+                    <p className="mt-1 text-[11px] text-river-500">
+                      Hãy chạy thử ngay một cung đường mẫu bám sát đường thực tế bên dưới!
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => void handleRunDemoJourney(PRESET_DEMO_JOURNEYS[0]!)}
+                      className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-leaf-700 px-4 py-2 text-xs font-extrabold text-white hover:bg-leaf-800"
+                    >
+                      <Play className="size-3.5 fill-white" /> Chạy Cung đường Sa Đéc
+                    </button>
+                  </div>
+                )}
               </div>
             ) : (
-              <div className="mt-4 max-h-[380px] space-y-2.5 overflow-y-auto pr-1">
-                {tracks.map((t) => {
-                  const isSelected = t.clientId === (selectedTrack?.clientId ?? '');
-                  return (
-                    <div
-                      key={t.clientId}
-                      onClick={() => {
-                        setSelectedTrackId(t.clientId);
-                        const first = t.points[0];
-                        if (first) {
-                          mapInstanceRef.current?.flyTo([first.lat, first.lng], 13, { duration: 0.8 });
-                        }
-                      }}
-                      className={clsx(
-                        'cursor-pointer rounded-2xl border p-3.5 transition-all',
-                        isSelected
-                          ? 'border-leaf-500 bg-leaf-50/60 ring-1 ring-leaf-300'
-                          : 'border-sand-200 bg-white hover:border-leaf-300',
-                      )}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span
-                            className="size-3 shrink-0 rounded-full"
-                            style={{ backgroundColor: t.color || '#10b981' }}
-                          />
-                          <h3 className="truncate text-xs font-extrabold text-river-900">{t.title}</h3>
-                        </div>
-                        <span
+              <div className="space-y-4 p-4">
+                {/* 1-Click Road-Snapped Demo Routes */}
+                <div>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="flex items-center gap-1.5 text-xs font-extrabold text-river-900">
+                      <Zap className="size-3.5 text-amber-500" />
+                      Chạy thử Cung đường Mẫu (Đường thật)
+                    </p>
+                  </div>
+                  <div className="mt-2 space-y-2">
+                    {PRESET_DEMO_JOURNEYS.map((route) => {
+                      const isRunning = simulatingRouteId === route.id;
+                      return (
+                        <button
+                          key={route.id}
+                          type="button"
+                          disabled={Boolean(simulatingRouteId)}
+                          onClick={() => void handleRunDemoJourney(route)}
                           className={clsx(
-                            'shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold',
-                            t.syncStatus === 'pending'
-                              ? 'bg-amber-100 text-amber-800 ring-1 ring-amber-300'
-                              : 'bg-emerald-100 text-emerald-800',
+                            'flex w-full items-center justify-between gap-2.5 rounded-2xl border p-3 text-left transition-all',
+                            isRunning
+                              ? 'border-emerald-500 bg-emerald-50 ring-2 ring-emerald-200'
+                              : 'border-sand-200 bg-sand-50/60 hover:border-leaf-400 hover:bg-white',
                           )}
                         >
-                          {t.syncStatus === 'pending' ? '🟠 Lưu Offline' : '🟢 Đã đồng bộ'}
-                        </span>
-                      </div>
-
-                      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-semibold text-river-600">
-                        <span>📏 {t.distanceKm} km</span>
-                        <span>⏱️ {formatDurationClock(t.durationSeconds || 60)}</span>
-                        <span>📍 {t.memories?.length || 0} ghim</span>
-                      </div>
-
-                      <div className="mt-2.5 flex items-center justify-between border-t border-sand-100 pt-2">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleStartReplay(t);
-                          }}
-                          className="inline-flex items-center gap-1 text-[11px] font-extrabold text-leaf-700 hover:underline"
-                        >
-                          <Play className="size-3 fill-leaf-700" /> Phát lại chuyến đi
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span
+                                className="size-2.5 shrink-0 rounded-full"
+                                style={{ backgroundColor: route.color }}
+                              />
+                              <p className="truncate text-xs font-extrabold text-river-900">
+                                {route.title}
+                              </p>
+                            </div>
+                            <p className="mt-0.5 line-clamp-1 text-[11px] text-river-500">
+                              {route.subtitle}
+                            </p>
+                          </div>
+                          <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-[11px] font-extrabold text-leaf-700 ring-1 ring-sand-200">
+                            {isRunning ? '🦊 Đang chạy' : '▶️ Chạy'}
+                          </span>
                         </button>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            void handleDeleteTrack(t.clientId);
-                          }}
-                          className="rounded-lg p-1 text-river-400 hover:bg-rose-50 hover:text-rose-600"
-                          title="Xóa hành trình"
-                        >
-                          <Trash2 className="size-3.5" />
-                        </button>
-                      </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Saved / Offline Tracks List */}
+                <div className="border-t border-sand-200 pt-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-extrabold text-river-900">
+                      Nhật ký đã lưu ({tracks.length})
+                    </p>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        disabled={isSyncing || !isEffectiveOnline}
+                        onClick={() => void syncWithCloud(false)}
+                        className="inline-flex items-center gap-1 rounded-full bg-sand-100 px-2.5 py-1 text-[11px] font-bold text-river-700 hover:bg-leaf-50 disabled:opacity-40"
+                        title="Đồng bộ lên Cloud"
+                      >
+                        <RefreshCw className={clsx('size-3', isSyncing && 'animate-spin')} />
+                        Sync
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleExportJson}
+                        className="inline-flex items-center gap-1 rounded-full bg-sand-100 px-2.5 py-1 text-[11px] font-bold text-river-700 hover:bg-leaf-50"
+                        title="Tải file JSON sao lưu"
+                      >
+                        <Download className="size-3" />
+                        JSON
+                      </button>
                     </div>
-                  );
-                })}
+                  </div>
+
+                  <div className="mt-2.5 max-h-[240px] space-y-2 overflow-y-auto pr-1">
+                    {tracks.map((t) => {
+                      const isSelected = t.clientId === (selectedTrack?.clientId ?? '');
+                      return (
+                        <div
+                          key={t.clientId}
+                          onClick={() => {
+                            lastFittedTrackRef.current = null;
+                            setSelectedTrackId(t.clientId);
+                            setSidebarTab('timeline');
+                          }}
+                          className={clsx(
+                            'cursor-pointer rounded-2xl border p-3 transition-all',
+                            isSelected
+                              ? 'border-leaf-500 bg-leaf-50/60 ring-1 ring-leaf-300'
+                              : 'border-sand-200 bg-white hover:border-leaf-300',
+                          )}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex min-w-0 items-center gap-2">
+                              <span
+                                className="size-2.5 shrink-0 rounded-full"
+                                style={{ backgroundColor: t.color || '#10b981' }}
+                              />
+                              <h3 className="truncate text-xs font-extrabold text-river-900">
+                                {t.title}
+                              </h3>
+                            </div>
+                            <span
+                              className={clsx(
+                                'shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold',
+                                t.syncStatus === 'pending'
+                                  ? 'bg-amber-100 text-amber-800'
+                                  : 'bg-emerald-100 text-emerald-800',
+                              )}
+                            >
+                              {t.syncStatus === 'pending' ? 'Offline' : 'Cloud'}
+                            </span>
+                          </div>
+                          <div className="mt-1.5 flex items-center justify-between text-[11px] text-river-600">
+                            <span>
+                              📏 {t.distanceKm} km · 📍 {t.memories?.length || 0} chặng
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void handleDeleteTrack(t.clientId);
+                              }}
+                              className="rounded-lg p-1 text-river-400 hover:bg-rose-50 hover:text-rose-600"
+                              title="Xóa hành trình"
+                            >
+                              <Trash2 className="size-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
             )}
           </Card>
 
-          {/* Passport Check-in Connection Card */}
-          <Card className="bg-gradient-to-br from-leaf-900 to-river-900 p-5 text-white">
-            <div className="flex items-center gap-2.5">
-              <span className="grid size-9 place-items-center rounded-xl bg-white/15 text-teal-200">
-                <Stamp className="size-5" />
-              </span>
-              <div>
-                <h3 className="text-sm font-extrabold text-white">Liên kết Hộ chiếu Trải nghiệm</h3>
-                <p className="text-[11px] text-leaf-100">
-                  {checkInPins.length} điểm đã đóng dấu trên bản đồ
-                </p>
+          {/* Compact Auto Check-In & Passport Connection Card */}
+          <Card className="bg-gradient-to-br from-leaf-900 to-river-950 p-4 text-white">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2.5">
+                <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-white/15 text-teal-200">
+                  <Stamp className="size-5" />
+                </span>
+                <div>
+                  <h3 className="text-sm font-extrabold text-white">Hộ chiếu & Auto Check-in</h3>
+                  <p className="text-[11px] text-leaf-100">
+                    {checkInPins.length} điểm đã đóng dấu trên bản đồ
+                  </p>
+                </div>
               </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const next = !autoCheckInEnabled;
+                  setAutoCheckInEnabled(next);
+                  toast.info(
+                    next ? 'Đã BẬT Tự động Check-in (<1km)' : 'Đã TẮT Tự động Check-in',
+                  );
+                }}
+                className={clsx(
+                  'inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-extrabold transition',
+                  autoCheckInEnabled
+                    ? 'bg-emerald-500 text-white'
+                    : 'bg-white/15 text-leaf-100 hover:bg-white/25',
+                )}
+              >
+                <MapPinCheck className="size-3" />
+                {autoCheckInEnabled ? 'Auto: BẬT' : 'Auto: TẮT'}
+              </button>
             </div>
-            <p className="mt-2.5 text-xs leading-relaxed text-leaf-100/90">
-              Mỗi lần bạn thực hiện <strong>Điểm danh GPS</strong> hoặc <strong>Quét mã QR</strong> tại điểm tham quan,
-              con dấu sẽ tự động thắp sáng vùng sương mù trên Bản đồ Dấu chân này!
-            </p>
-            <div className="mt-3.5 flex flex-wrap gap-2">
+            <div className="mt-3 flex flex-wrap gap-2">
               <Link
                 to="/check-in"
                 className="inline-flex items-center gap-1 rounded-full bg-emerald-500 px-3.5 py-1.5 text-xs font-extrabold text-white hover:bg-emerald-400"
               >
-                <MapPin className="size-3.5" /> Điểm danh GPS ngay
+                <MapPin className="size-3.5" /> Điểm danh GPS
               </Link>
               <Link
                 to="/passport"
@@ -1635,25 +2368,33 @@ export function FootprintMapPage() {
               >
                 Xem Hộ chiếu số →
               </Link>
+              <button
+                type="button"
+                onClick={() => setSimulateOffline((v) => !v)}
+                className="inline-flex items-center gap-1 rounded-full bg-white/10 px-3 py-1.5 text-[11px] font-bold text-amber-200 hover:bg-white/20"
+              >
+                <CloudOff className="size-3" />
+                {simulateOffline ? 'Bật lại Wi-Fi' : 'Test Offline'}
+              </button>
             </div>
           </Card>
         </aside>
       </div>
 
-      {/* ── Drop Memory Pin Modal (Jagat Style) ───────────────────────── */}
+      {/* ── Drop Memory Pin Modal ─────────────────────────────────────── */}
       {pinModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[1050] flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm">
           <div className="tp-scale-up w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl ring-1 ring-sand-200">
             <div className="flex items-start justify-between">
               <div>
                 <span className="inline-flex items-center gap-1 rounded-full bg-leaf-50 px-2.5 py-0.5 text-[11px] font-bold text-leaf-700">
-                  <Sparkles className="size-3" /> Jagat & Bump Memory Pin
+                  <Sparkles className="size-3" /> Ghim Kỷ Niệm trên Lộ trình
                 </span>
                 <h3 className="mt-1 text-lg font-extrabold text-river-900">
-                  Thả Ghim Kỷ Niệm trên Hành trình
+                  Thả Ghim Kỷ Niệm
                 </h3>
                 <p className="text-xs text-river-500">
-                  Tọa độ: {pinCoords.lat.toFixed(4)}, {pinCoords.lng.toFixed(4)} *(Bạn có thể chạm vào bản đồ để chọn vị trí)*
+                  Tọa độ: {pinCoords.lat.toFixed(4)}, {pinCoords.lng.toFixed(4)} (Chạm vào bản đồ để đổi điểm)
                 </p>
               </div>
               <button
@@ -1701,7 +2442,7 @@ export function FootprintMapPage() {
                   value={pinPlaceName}
                   onChange={(e) => setPinPlaceName(e.target.value)}
                   placeholder="Ví dụ: Cầu tàu Làng hoa Sa Đéc..."
-                  className="mt-1 w-full rounded-xl border border-sand-300 px-3 py-2 text-xs text-river-900 focus:border-leaf-500 focus:outline-none"
+                  className="mt-1 w-full rounded-xl border border-sand-300 px-3 py-2 text-base text-river-900 focus:border-leaf-500 focus:outline-none sm:text-xs"
                 />
               </div>
 
@@ -1712,7 +2453,7 @@ export function FootprintMapPage() {
                   value={pinNote}
                   onChange={(e) => setPinNote(e.target.value)}
                   placeholder="Lưu lại cảm xúc hoặc mẹo nhỏ tại tọa độ này..."
-                  className="mt-1 w-full rounded-xl border border-sand-300 px-3 py-2 text-xs text-river-900 focus:border-leaf-500 focus:outline-none"
+                  className="mt-1 w-full rounded-xl border border-sand-300 px-3 py-2 text-base text-river-900 focus:border-leaf-500 focus:outline-none sm:text-xs"
                 />
               </div>
             </div>

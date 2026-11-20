@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { ArrowLeft, ArrowUpRight, Image as ImageIcon, Pencil, Plus, Power, Save, Trash2 } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, CheckCircle2, Image as ImageIcon, Pencil, Plus, Power, Save, Trash2, XCircle } from 'lucide-react';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -9,7 +9,7 @@ import { Badge, StatusBadge } from '../../components/ui/Badge';
 import { Button, ButtonLink } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { FormField, Input, Select, Textarea } from '../../components/ui/Field';
-import { ConfirmDialog } from '../../components/ui/Modal';
+import { ConfirmDialog, Modal } from '../../components/ui/Modal';
 import { Pagination } from '../../components/ui/Navigation';
 import { EmptyState, ErrorState, Notice, PageLoader } from '../../components/ui/States';
 import { useApiQuery } from '../../hooks/useApiQuery';
@@ -37,6 +37,8 @@ export function AdminBannersPage() {
   const page = Math.max(1, Number(params.get('page')) || 1);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [toDelete, setToDelete] = useState<AdminBanner | null>(null);
+  const [rejectTarget, setRejectTarget] = useState<AdminBanner | null>(null);
+  const [rejectFeedback, setRejectFeedback] = useState('');
   const query = useApiQuery(
     (signal) => api.get<Paginated<AdminBanner>>('/admin/banners', { params: { status: status || undefined, page, limit: 20 }, signal }).then((r) => r.data),
     [status, page],
@@ -47,6 +49,25 @@ export function AdminBannersPage() {
     else next.delete(key);
     if (key !== 'page') next.delete('page');
     setParams(next, { replace: key !== 'page' });
+  };
+
+  const reviewBanner = async (b: AdminBanner, decision: 'approve' | 'reject', feedback?: string) => {
+    setBusyId(b.id);
+    try {
+      const res = await api.patch<{ message?: string }>(`/admin/banners/${b.id}/review`, {
+        decision,
+        activateNow: decision === 'approve',
+        feedback: feedback?.trim() || undefined,
+      });
+      toast.success(res.data?.message || (decision === 'approve' ? 'Đã duyệt banner đối tác!' : 'Đã từ chối banner.'));
+      setRejectTarget(null);
+      setRejectFeedback('');
+      query.reload();
+    } catch (error) {
+      toast.error('Không thể xét duyệt banner', toApiError(error).message);
+    } finally {
+      setBusyId(null);
+    }
   };
 
   const setStatus = async (b: AdminBanner, next: 'active' | 'inactive') => {
@@ -117,8 +138,17 @@ export function AdminBannersPage() {
                       </Link>
                       <StatusBadge status={b.status} label={STATUS_LABELS[b.status]} />
                       <Badge tone={b.kind === 'promo' ? 'lotus' : 'neutral'}>{KIND_LABELS[b.kind]}</Badge>
+                      {b.approvalStatus === 'pending_review' && (
+                        <Badge tone="teal">Chờ Sở VHTTDL duyệt (Đối tác gửi)</Badge>
+                      )}
+                      {b.approvalStatus === 'rejected' && (
+                        <Badge tone="red">Đã từ chối</Badge>
+                      )}
                       {b.status === 'active' && !b.isLive && <Badge tone="teal">Ngoài lịch hiển thị</Badge>}
                     </div>
+                    {b.reviewFeedback && (
+                      <p className="mt-1 text-xs text-river-600 italic">Phản hồi duyệt: {b.reviewFeedback}</p>
+                    )}
                     <p className="mt-1 text-xs text-river-500">
                       Thứ tự {b.sortOrder} · {THEME_LABELS[b.theme]} · {scheduleText(b)}
                       {b.sponsorName && ` · Tài trợ: ${b.sponsorName}`}
@@ -128,6 +158,30 @@ export function AdminBannersPage() {
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
+                    {b.approvalStatus === 'pending_review' && (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="primary"
+                          icon={<CheckCircle2 className="size-4" aria-hidden />}
+                          loading={busyId === b.id}
+                          onClick={() => reviewBanner(b, 'approve')}
+                        >
+                          Duyệt & Bật
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="danger"
+                          icon={<XCircle className="size-4" aria-hidden />}
+                          onClick={() => {
+                            setRejectTarget(b);
+                            setRejectFeedback('');
+                          }}
+                        >
+                          Từ chối
+                        </Button>
+                      </>
+                    )}
                     <ButtonLink to={`/admin/banners/${b.id}/edit`} size="sm" variant="secondary" icon={<Pencil className="size-4" aria-hidden />}>
                       Sửa
                     </ButtonLink>
@@ -164,6 +218,42 @@ export function AdminBannersPage() {
         onConfirm={() => toDelete && remove(toDelete)}
         onCancel={() => setToDelete(null)}
       />
+
+      <Modal
+        open={Boolean(rejectTarget)}
+        size="sm"
+        title="Từ chối Banner đối tác"
+        onClose={() => setRejectTarget(null)}
+      >
+        {rejectTarget && (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void reviewBanner(rejectTarget, 'reject', rejectFeedback);
+            }}
+            className="space-y-4"
+          >
+            <p className="text-sm text-river-700">
+              Ghi rõ lý do từ chối cho banner <strong>{rejectTarget.title}</strong> để đối tác chỉnh sửa đúng quy định Luật Quảng cáo:
+            </p>
+            <Textarea
+              rows={3}
+              value={rejectFeedback}
+              onChange={(e) => setRejectFeedback(e.target.value)}
+              placeholder="VD: Hình ảnh chưa rõ nét / nội dung quảng bá chưa khớp giá vé niêm yết..."
+              required
+            />
+            <div className="flex justify-end gap-2 pt-2 border-t border-sand-200">
+              <Button type="button" variant="secondary" onClick={() => setRejectTarget(null)}>
+                Hủy
+              </Button>
+              <Button type="submit" variant="danger" loading={busyId === rejectTarget.id}>
+                Xác nhận từ chối
+              </Button>
+            </div>
+          </form>
+        )}
+      </Modal>
     </>
   );
 }

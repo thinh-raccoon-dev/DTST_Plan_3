@@ -4,6 +4,7 @@ import { areaLabel, categoryLabel } from '../../lib/catalog';
 import { directionsUrl, formatMinutes } from '../../lib/format';
 import type { DestinationSummary } from '../../types/api';
 import { Badge } from '../ui/Badge';
+import { TiltCard } from '../ui/MotionPrimitives';
 import { CategoryIcon } from './CategoryIcon';
 import { IllustrativeBadge } from './DataBadges';
 import { DestinationImage } from './DestinationImage';
@@ -19,27 +20,30 @@ export function DestinationCard({
 }) {
   const d = destination;
   return (
-    <article
-      className={`tp-fade-up group relative flex h-full flex-col overflow-hidden rounded-card bg-white shadow-card ring-1 transition-all duration-300 hover:-translate-y-1 hover:shadow-raised ${
-        isMapSelected ? 'ring-2 ring-leaf-600' : 'ring-sand-200 hover:ring-leaf-300'
-      }`}
-    >
-      <div className="relative aspect-[4/3] overflow-hidden">
-        <DestinationImage image={d.image} category={d.category} name={d.name} />
-        <div className="absolute left-3 top-3 flex flex-wrap gap-1.5">
-          {d.hasChallenge && (
-            <Badge tone="teal" icon={<QrCode className="size-3" aria-hidden />} className="bg-teal-50/95 shadow-card backdrop-blur-sm">
-              Có thử thách QR
-            </Badge>
-          )}
+    <TiltCard maxTiltDeg={3.5} className="h-full">
+      <article
+        className={`tp-fade-up group relative flex h-full flex-col overflow-hidden rounded-card bg-white shadow-card ring-1 transition-all duration-300 hover:shadow-raised ${
+          isMapSelected ? 'ring-2 ring-leaf-600' : 'ring-sand-200 hover:ring-leaf-300'
+        }`}
+      >
+        <div className="relative aspect-[4/3] overflow-hidden">
+          <div className="size-full transition-transform duration-500 ease-out group-hover:scale-105">
+            <DestinationImage image={d.image} category={d.category} name={d.name} />
+          </div>
+          <div className="absolute left-3 top-3 flex flex-wrap gap-1.5">
+            {d.hasChallenge && (
+              <Badge tone="teal" icon={<QrCode className="size-3" aria-hidden />} className="bg-teal-50/95 shadow-card backdrop-blur-sm">
+                Có thử thách QR
+              </Badge>
+            )}
+          </div>
+          <span
+            className="pointer-events-none absolute bottom-3 right-3 grid size-8 translate-y-1 place-items-center rounded-full bg-white/90 text-leaf-700 opacity-0 shadow-card ring-1 ring-sand-200 backdrop-blur-sm transition-all duration-200 group-hover:translate-y-0 group-hover:opacity-100"
+            aria-hidden
+          >
+            <ArrowUpRight className="size-4" />
+          </span>
         </div>
-        <span
-          className="pointer-events-none absolute bottom-3 right-3 grid size-8 translate-y-1 place-items-center rounded-full bg-white/90 text-leaf-700 opacity-0 shadow-card ring-1 ring-sand-200 backdrop-blur-sm transition-all duration-200 group-hover:translate-y-0 group-hover:opacity-100"
-          aria-hidden
-        >
-          <ArrowUpRight className="size-4" />
-        </span>
-      </div>
       <div className="flex flex-1 flex-col p-4 sm:p-5">
         <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-leaf-700">
           <CategoryIcon category={d.category} className="size-3.5" />
@@ -108,5 +112,6 @@ export function DestinationCard({
         </div>
       </div>
     </article>
+    </TiltCard>
   );
 }

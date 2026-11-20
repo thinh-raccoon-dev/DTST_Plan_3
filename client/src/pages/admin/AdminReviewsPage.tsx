@@ -13,6 +13,7 @@ import {
   PenLine,
   Search,
   Send,
+  Sparkles,
   Star,
   Trash2,
   X,
@@ -51,6 +52,8 @@ export function AdminReviewsPage() {
   const [responseText, setResponseText] = useState('');
   const [responderName, setResponderName] = useState('');
   const [isSubmittingResponse, setIsSubmittingResponse] = useState(false);
+  const [aiSuggestions, setAiSuggestions] = useState<Array<{ tone: string; content: string }>>([]);
+  const [isGeneratingAiReply, setIsGeneratingAiReply] = useState(false);
 
   const [reportModalReview, setReportModalReview] = useState<AdminReviewItem | null>(null);
   const [reportReasonText, setReportReasonText] = useState('');
@@ -85,10 +88,28 @@ export function AdminReviewsPage() {
   const handleOpenRespond = (review: AdminReviewItem) => {
     setRespondModalReview(review);
     setResponseText(review.response?.content || '');
+    setAiSuggestions([]);
     setResponderName(
       review.response?.responderName ||
         (review.destination ? `Ban Quản lý ${review.destination.name}` : 'Ban Quản trị Đồng Tháp Smart Travel'),
     );
+  };
+
+  const handleSuggestAiReply = async () => {
+    if (!respondModalReview) return;
+    setIsGeneratingAiReply(true);
+    try {
+      const res = await api.post<{
+        success: boolean;
+        suggestions: Array<{ tone: string; content: string }>;
+      }>('/admin/partner/ai/suggest-review-reply', { reviewId: respondModalReview.id });
+      setAiSuggestions(res.data.suggestions || []);
+      toast.success('Đã tạo 2 gợi ý phản hồi lịch sự! Chọn 1 mẫu để áp dụng.');
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Không thể tạo gợi ý AI.');
+    } finally {
+      setIsGeneratingAiReply(false);
+    }
   };
 
   const handleSubmitResponse = async (e: React.FormEvent) => {
@@ -660,10 +681,39 @@ export function AdminReviewsPage() {
               />
             </div>
 
-            <div>
-              <label htmlFor="response-content" className="block text-xs font-semibold uppercase tracking-wider text-river-600">
-                Nội dung phản hồi chính thức *
-              </label>
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <label htmlFor="response-content" className="block text-xs font-semibold uppercase tracking-wider text-river-600">
+                  Nội dung phản hồi chính thức *
+                </label>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="accent"
+                  loading={isGeneratingAiReply}
+                  onClick={handleSuggestAiReply}
+                  icon={<Sparkles className="size-3.5" />}
+                >
+                  AI Gợi ý trả lời
+                </Button>
+              </div>
+              {aiSuggestions.length > 0 && (
+                <div className="grid gap-2">
+                  {aiSuggestions.map((s, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => setResponseText(s.content)}
+                      className="rounded-lg border border-lotus-200 bg-lotus-50/50 p-2.5 text-left transition hover:border-lotus-400"
+                    >
+                      <span className="inline-block rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-lotus-800 border border-lotus-200 mb-1">
+                        ✨ {s.tone} (Bấm chọn)
+                      </span>
+                      <p className="text-xs text-river-800">{s.content}</p>
+                    </button>
+                  ))}
+                </div>
+              )}
               <textarea
                 id="response-content"
                 rows={5}

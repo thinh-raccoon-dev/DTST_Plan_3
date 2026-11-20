@@ -7,6 +7,7 @@ import * as adminChallenges from '../controllers/admin/challenges.controller.js'
 import * as adminDestinations from '../controllers/admin/destinations.controller.js';
 import * as adminItineraries from '../controllers/admin/itineraries.controller.js';
 import * as adminPartner from '../controllers/admin/partner.controller.js';
+import * as adminPartnerCommerce from '../controllers/admin/partnerCommerce.controller.js';
 import * as adminPassportLogs from '../controllers/admin/passportLogs.controller.js';
 import * as adminQr from '../controllers/admin/qr.controller.js';
 import * as adminReviews from '../controllers/admin/reviews.controller.js';
@@ -20,6 +21,7 @@ import * as destinations from '../controllers/destination.controller.js';
 import * as footprints from '../controllers/footprint.controller.js';
 import * as itineraries from '../controllers/itinerary.controller.js';
 import * as passport from '../controllers/passport.controller.js';
+import * as partnerPublic from '../controllers/partnerPublic.controller.js';
 import * as qr from '../controllers/qr.controller.js';
 import * as reviews from '../controllers/review.controller.js';
 import * as safety from '../controllers/safety.controller.js';
@@ -73,6 +75,9 @@ export function buildApiRouter(): Router {
   api.post('/destinations/:id/check-in', challengeLimiter, destinations.checkInDestinationGps);
   api.get('/destinations/:slug', destinations.getDestination);
   api.get('/destinations/:slug/related', destinations.getRelatedDestinations);
+  api.get('/destinations/:slug/vouchers', partnerPublic.listDestinationVouchers);
+  api.post('/destinations/:slug/inquiries', eventLimiter, partnerPublic.createGroupInquiry);
+  api.post('/vouchers/:id/claim', requireAuth, challengeLimiter, partnerPublic.claimDestinationVoucher);
   api.post('/events/destination-view', eventLimiter, destinations.recordDestinationView);
 
   // Destination Reviews & Ratings (Google Maps style)
@@ -105,6 +110,7 @@ export function buildApiRouter(): Router {
 
   // Passport & favorites
   api.get('/passport/me', passport.getMyPassport);
+  api.get('/passport/vouchers', requireAuth, partnerPublic.listMyVoucherClaims);
   api.post('/passport/claim', requireAuth, passport.claimDevicePassport);
   api.get('/footprints', footprints.listFootprintsHandler);
   api.post('/footprints/sync', eventLimiter, footprints.syncFootprintsHandler);
@@ -138,12 +144,46 @@ export function buildApiRouter(): Router {
   admin.patch('/reviews/:id/status', adminReviews.updateReviewStatus);
   admin.delete('/reviews/:id', adminReviews.deleteReview);
 
-  // Partner Dedicated Hub (Operational control, QR, Challenges & Badges)
+  // Partner Dedicated Hub (Operational control, full scoped CRUD, Alerts, Export, Audit & AI)
   admin.get('/partner/overview', adminPartner.getPartnerOverview);
   admin.patch('/partner/destination/status', adminPartner.toggleOperationalStatus);
   admin.post('/partner/challenges', adminPartner.createPartnerChallenge);
+  admin.patch('/partner/challenges/:id', adminPartner.updatePartnerChallenge);
+  admin.delete('/partner/challenges/:id', adminPartner.deletePartnerChallenge);
   admin.post('/partner/qr', adminPartner.createPartnerQr);
+  admin.patch('/partner/qr/:id', adminPartner.updatePartnerQr);
+  admin.delete('/partner/qr/:id', adminPartner.deletePartnerQr);
+  admin.get('/partner/qr/:id/image', adminPartner.getPartnerQrImage);
   admin.post('/partner/badges', adminPartner.createPartnerBadge);
+  admin.patch('/partner/badges/:id', adminPartner.updatePartnerBadge);
+  admin.delete('/partner/badges/:id', adminPartner.deletePartnerBadge);
+  admin.get('/partner/alerts', adminPartner.listPartnerAlerts);
+  admin.post('/partner/alerts', adminPartner.createPartnerAlert);
+  admin.delete('/partner/alerts/:id', adminPartner.deactivatePartnerAlert);
+  admin.get('/partner/export', adminPartner.exportPartnerReportCsv);
+  admin.get('/partner/audit-logs', adminPartner.listPartnerAuditLogs);
+  admin.post('/partner/ai/generate-challenge', eventLimiter, adminPartner.generatePartnerChallengeDraft);
+  admin.post('/partner/ai/suggest-review-reply', eventLimiter, adminPartner.suggestPartnerReviewReply);
+
+  // Partner Hub Đợt 2: Vouchers & Counter Redemption, Service Catalog, Group Inquiries, Promo Banner Submissions
+  admin.get('/partner/vouchers/lookup', adminPartnerCommerce.lookupPartnerVoucherClaim);
+  admin.post('/partner/vouchers/redeem', adminPartnerCommerce.redeemPartnerVoucherClaim);
+  admin.get('/partner/vouchers', adminPartnerCommerce.listPartnerVouchers);
+  admin.post('/partner/vouchers', adminPartnerCommerce.createPartnerVoucher);
+  admin.patch('/partner/vouchers/:id', adminPartnerCommerce.updatePartnerVoucher);
+  admin.delete('/partner/vouchers/:id', adminPartnerCommerce.deletePartnerVoucher);
+
+  admin.get('/partner/services', adminPartnerCommerce.listPartnerServices);
+  admin.post('/partner/services', adminPartnerCommerce.createPartnerService);
+  admin.patch('/partner/services/:serviceId', adminPartnerCommerce.updatePartnerService);
+  admin.delete('/partner/services/:serviceId', adminPartnerCommerce.deletePartnerService);
+
+  admin.get('/partner/inquiries', adminPartnerCommerce.listPartnerInquiries);
+  admin.patch('/partner/inquiries/:id', adminPartnerCommerce.updatePartnerInquiry);
+
+  admin.get('/partner/banners', adminPartnerCommerce.listPartnerBanners);
+  admin.post('/partner/banners', adminPartnerCommerce.submitPartnerBanner);
+  admin.delete('/partner/banners/:id', adminPartnerCommerce.withdrawPartnerBanner);
 
   // Audit Logs (Admin only)
   admin.get('/audit-logs', requireAdmin, adminAuditLogs.listAuditLogs);
@@ -177,6 +217,7 @@ export function buildApiRouter(): Router {
   admin.post('/banners', requireAdmin, adminBanners.createBanner);
   admin.get('/banners/:id', requireAdmin, adminBanners.getBanner);
   admin.patch('/banners/:id', requireAdmin, adminBanners.updateBanner);
+  admin.patch('/banners/:id/review', requireAdmin, adminBanners.reviewPartnerBanner);
   admin.delete('/banners/:id', requireAdmin, adminBanners.deleteBanner);
 
   // Users & Permissions management (Admin only)

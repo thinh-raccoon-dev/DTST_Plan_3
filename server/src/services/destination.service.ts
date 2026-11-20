@@ -53,6 +53,19 @@ export function toDestinationDetail(d: LeanDestination) {
     })),
     openingHours: d.openingHours ?? null,
     referencePrice: d.referencePrice ?? null,
+    services: (d.services ?? [])
+      .filter((s) => s.isAvailable !== false)
+      .map((s) => ({
+        id: String(s._id),
+        name: s.name,
+        category: s.category,
+        priceVnd: s.priceVnd,
+        unit: s.unit ?? 'người',
+        durationMinutes: s.durationMinutes ?? null,
+        description: s.description ?? '',
+        includesVat: s.includesVat !== false,
+        isAvailable: s.isAvailable !== false,
+      })),
     contactInfo: cleanObject(d.contactInfo ?? null),
     estimatedVisitDuration: d.estimatedVisitDuration
       ? {
@@ -69,6 +82,8 @@ export function toDestinationDetail(d: LeanDestination) {
       contactInfo: d.verification?.contactInfo ?? 'unknown',
     },
     lastVerifiedAt: d.lastVerifiedAt ?? null,
+    partnerNotice: d.partnerNotice ?? null,
+    partnerNoticeUpdatedAt: d.partnerNoticeUpdatedAt ?? null,
     updatedAt: (d as { updatedAt?: Date }).updatedAt ?? null,
   };
 }

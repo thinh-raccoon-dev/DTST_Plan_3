@@ -10,6 +10,11 @@ export const AUDIT_TARGET_TYPES = [
   'banner',
   'system',
   'itinerary',
+  'safety_alert',
+  'report',
+  'voucher',
+  'service',
+  'inquiry',
 ] as const;
 export type AuditTargetType = (typeof AUDIT_TARGET_TYPES)[number];
 
