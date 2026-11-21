@@ -326,19 +326,38 @@ export function ItineraryCreatePage() {
       newDest: SwapDestinationCandidate,
       explicitStopId?: string,
     ) => {
-      const targetDay = itineraryObj.days.find((d) => d.day === dayNumber) ?? itineraryObj.days[0];
+      const normQuery = stripViAccents(targetStopQuery);
+      let targetDay = itineraryObj.days.find((d) => d.day === dayNumber) ?? itineraryObj.days[0];
       if (!targetDay) return;
 
-      const normQuery = stripViAccents(targetStopQuery);
-      const actionableStops = targetDay.activities.filter((s) => Boolean(s.stop_id));
-
-      let matchedStep = explicitStopId
-        ? actionableStops.find((s) => s.stop_id === explicitStopId)
-        : actionableStops.find((s) => {
+      const findInDay = (d: V9ItineraryObject['days'][number]) => {
+        const stops = d.activities.filter((s) => Boolean(s.stop_id));
+        if (explicitStopId) {
+          const byId = stops.find((s) => s.stop_id === explicitStopId);
+          if (byId) return byId;
+        }
+        if (normQuery) {
+          return stops.find((s) => {
             const normName = stripViAccents(s.name);
             return normName.includes(normQuery) || normQuery.includes(normName);
           });
+        }
+        return undefined;
+      };
 
+      let matchedStep = findInDay(targetDay);
+      if (!matchedStep) {
+        for (const candidateDay of itineraryObj.days) {
+          const found = findInDay(candidateDay);
+          if (found) {
+            targetDay = candidateDay;
+            matchedStep = found;
+            break;
+          }
+        }
+      }
+
+      const actionableStops = targetDay.activities.filter((s) => Boolean(s.stop_id));
       // Fallback to first visit stop in the target day if fuzzy match didn't hit exact name
       if (!matchedStep) {
         matchedStep = actionableStops.find((s) => s.type === 'visit') ?? actionableStops[0];
@@ -379,10 +398,11 @@ export function ItineraryCreatePage() {
     [scrollToPlan],
   );
 
-  // Listen for Pé Meko SWAP_ITINERARY_STOP commands
+  // Listen for Pé Meko SWAP_ITINERARY_STOP & REMOVE_ITINERARY_STOP commands
   useEffect(() => {
     const processSwapPayload = async (payload: {
       dayNumber?: number;
+      targetStopId?: string;
       targetStopName?: string;
       newDestination?: SwapDestinationCandidate;
     }) => {
@@ -434,8 +454,115 @@ export function ItineraryCreatePage() {
       }
 
       if (currentItinerary) {
-        evaluateAndOpenSwapModal(currentItinerary, dayNum, targetName, newDest);
+        evaluateAndOpenSwapModal(currentItinerary, dayNum, targetName, newDest, payload.targetStopId);
       }
+    };
+
+    const processRemovePayload = (payload: {
+      dayNumber?: number;
+      targetStopId?: string;
+      targetStopName?: string;
+    }) => {
+      const currentItinerary = useItineraryDraft.getState().v9Itinerary;
+      if (!currentItinerary) {
+        toast.info('Chưa có lịch trình nháp để gỡ điểm.');
+        return;
+      }
+      const next: V9ItineraryObject = JSON.parse(JSON.stringify(currentItinerary));
+      const normQuery = stripViAccents(payload.targetStopName || '');
+      let removedName: string | null = null;
+      let removedDayNum = payload.dayNumber || 1;
+
+      const orderedDays = payload.dayNumber
+        ? [
+            ...next.days.filter((d) => d.day === payload.dayNumber),
+            ...next.days.filter((d) => d.day !== payload.dayNumber),
+          ]
+        : next.days;
+
+      for (const day of orderedDays) {
+        const idx = day.activities.findIndex((act) => {
+          if (!act.stop_id) return false;
+          if (payload.targetStopId && act.stop_id === payload.targetStopId) return true;
+          if (normQuery) {
+            const actNorm = stripViAccents(act.name);
+            return actNorm.includes(normQuery) || normQuery.includes(actNorm);
+          }
+          return false;
+        });
+        if (idx !== -1) {
+          removedName = day.activities[idx]!.name;
+          removedDayNum = day.day;
+          day.activities.splice(idx, 1);
+          day.visit_count = day.activities.filter((a) => a.type === 'visit').length;
+          break;
+        }
+      }
+
+      if (removedName) {
+        useItineraryDraft.getState().setV9Itinerary(next);
+        scrollToPlan();
+        toast.success(`Đã gỡ "${removedName}" khỏi Ngày ${removedDayNum}`);
+        window.dispatchEvent(
+          new CustomEvent('pe-meko:bot-notice', {
+            detail: {
+              text: `✅ Đã gỡ bỏ **${removedName}** khỏi **Ngày ${removedDayNum}** trong lịch trình của bạn!`,
+            },
+          }),
+        );
+      } else {
+        toast.info('Không tìm thấy điểm dừng phù hợp trong lịch trình hiện tại.');
+      }
+    };
+
+    const processAddPayload = (payload: {
+      dayNumber?: number;
+      newDestination?: SwapDestinationCandidate;
+    }) => {
+      if (!payload?.newDestination) return;
+      const currentItinerary = useItineraryDraft.getState().v9Itinerary;
+      if (!currentItinerary || currentItinerary.days.length === 0) {
+        toast.info('Chưa có lịch trình nháp để thêm điểm.');
+        return;
+      }
+      const next: V9ItineraryObject = JSON.parse(JSON.stringify(currentItinerary));
+      const requestedDay = Math.max(1, payload.dayNumber || 1);
+      const targetDay = next.days.find((d) => d.day === requestedDay) ?? next.days[0]!;
+      const dest = payload.newDestination;
+
+      const lastAct = targetDay.activities[targetDay.activities.length - 1];
+      const newStart = lastAct?.end || '15:30';
+      const [hh = 15, mm = 30] = newStart.split(':').map((n) => Number(n) || 0);
+      const endMins = Math.min(22 * 60, hh * 60 + mm + 90);
+      const endH = String(Math.floor(endMins / 60)).padStart(2, '0');
+      const endM = String(endMins % 60).padStart(2, '0');
+
+      const addedStep: V9ActivityStep = {
+        stop_id: `meko-add-d${targetDay.day}-${Date.now()}`,
+        type: 'visit',
+        status: 'pending',
+        place_id: dest.slug,
+        name: dest.name,
+        start: newStart,
+        end: `${endH}:${endM}`,
+        duration_minutes: 90,
+        latitude: dest.coordinates?.lat,
+        longitude: dest.coordinates?.lng,
+        note: `🦊 Được thêm vào Ngày ${targetDay.day} theo yêu cầu của bạn (${dest.area || 'Đồng Tháp'}).`,
+      };
+      targetDay.activities.push(addedStep);
+      targetDay.visit_count = targetDay.activities.filter((a) => a.type === 'visit').length;
+
+      useItineraryDraft.getState().setV9Itinerary(next);
+      scrollToPlan();
+      toast.success(`Đã thêm "${dest.name}" vào Ngày ${targetDay.day}`);
+      window.dispatchEvent(
+        new CustomEvent('pe-meko:bot-notice', {
+          detail: {
+            text: `✅ Đã thêm **${dest.name}** (${dest.area || 'Đồng Tháp'}) vào **Ngày ${targetDay.day}** trong lịch trình của bạn!`,
+          },
+        }),
+      );
     };
 
     // Check if there is a pending swap stored in sessionStorage on page navigation
@@ -450,6 +577,28 @@ export function ItineraryCreatePage() {
       }
     }
 
+    const pendingAddRaw = sessionStorage.getItem('pe_meko_pending_add');
+    if (pendingAddRaw) {
+      sessionStorage.removeItem('pe_meko_pending_add');
+      try {
+        const parsed = JSON.parse(pendingAddRaw);
+        processAddPayload(parsed);
+      } catch {
+        // ignore
+      }
+    }
+
+    const pendingRemoveRaw = sessionStorage.getItem('pe_meko_pending_remove');
+    if (pendingRemoveRaw) {
+      sessionStorage.removeItem('pe_meko_pending_remove');
+      try {
+        const parsed = JSON.parse(pendingRemoveRaw);
+        processRemovePayload(parsed);
+      } catch {
+        // ignore
+      }
+    }
+
     const handleCustomSwapEvent = (evt: Event) => {
       const customEvt = evt as CustomEvent;
       if (customEvt.detail) {
@@ -458,9 +607,31 @@ export function ItineraryCreatePage() {
       }
     };
 
+    const handleCustomAddEvent = (evt: Event) => {
+      const customEvt = evt as CustomEvent;
+      if (customEvt.detail) {
+        sessionStorage.removeItem('pe_meko_pending_add');
+        processAddPayload(customEvt.detail);
+      }
+    };
+
+    const handleCustomRemoveEvent = (evt: Event) => {
+      const customEvt = evt as CustomEvent;
+      if (customEvt.detail) {
+        sessionStorage.removeItem('pe_meko_pending_remove');
+        processRemovePayload(customEvt.detail);
+      }
+    };
+
     window.addEventListener('pe-meko:swap-stop', handleCustomSwapEvent);
-    return () => window.removeEventListener('pe-meko:swap-stop', handleCustomSwapEvent);
-  }, [evaluateAndOpenSwapModal, startDate]);
+    window.addEventListener('pe-meko:add-stop', handleCustomAddEvent);
+    window.addEventListener('pe-meko:remove-stop', handleCustomRemoveEvent);
+    return () => {
+      window.removeEventListener('pe-meko:swap-stop', handleCustomSwapEvent);
+      window.removeEventListener('pe-meko:add-stop', handleCustomAddEvent);
+      window.removeEventListener('pe-meko:remove-stop', handleCustomRemoveEvent);
+    };
+  }, [evaluateAndOpenSwapModal, scrollToPlan, startDate]);
 
   // Execute choice 1: Force swap into current requested day (e.g. Day 1)
   const handleConfirmForceSwapInCurrentDay = () => {

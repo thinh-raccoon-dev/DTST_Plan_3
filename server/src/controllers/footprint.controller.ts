@@ -1,12 +1,14 @@
 import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { DestinationModel } from '../models/Destination.js';
+import { FootprintPhotoModel } from '../models/FootprintPhoto.js';
 import { PassportEntryModel } from '../models/PassportEntry.js';
 import { TravelFootprintModel } from '../models/TravelFootprint.js';
 import { identityFromRequest, ownerFields, ownerFilter } from '../services/identity.js';
 import { checkIn } from '../services/passport.service.js';
 import { haversineKm, haversineMeters, MAX_CHECKIN_METERS } from '../utils/geo.js';
 import { logger } from '../utils/logger.js';
+import { buildPhotoPlaceCollections, serializeFootprintPhoto } from './footprintPhotos.controller.js';
 
 const pointSchema = z.object({
   lat: z.number().min(-90).max(90),
@@ -59,15 +61,21 @@ export async function listFootprintsHandler(req: Request, res: Response): Promis
     const identity = identityFromRequest(req);
     const filter = ownerFilter(identity);
 
-    // If user is authenticated and also has an anonymousSessionId cookie, merge any unclaimed device tracks automatically
+    // If user is authenticated and also has an anonymousSessionId cookie, merge any unclaimed device tracks & photos automatically
     if (identity.userId && identity.anonymousSessionId) {
-      await TravelFootprintModel.updateMany(
-        { anonymousSessionId: identity.anonymousSessionId, userId: { $exists: false } },
-        { $set: { userId: identity.userId }, $unset: { anonymousSessionId: 1 } },
-      );
+      await Promise.all([
+        TravelFootprintModel.updateMany(
+          { anonymousSessionId: identity.anonymousSessionId, userId: { $exists: false } },
+          { $set: { userId: identity.userId }, $unset: { anonymousSessionId: 1 } },
+        ),
+        FootprintPhotoModel.updateMany(
+          { anonymousSessionId: identity.anonymousSessionId, userId: { $exists: false } },
+          { $set: { userId: identity.userId }, $unset: { anonymousSessionId: 1 } },
+        ),
+      ]);
     }
 
-    const [tracks, checkInEntries, allDestinations] = await Promise.all([
+    const [tracks, checkInEntries, allDestinations, photoDocs] = await Promise.all([
       TravelFootprintModel.find(filter).sort({ startedAt: -1 }).limit(100).lean(),
       PassportEntryModel.find({ ...filter, entryType: 'check_in' })
         .sort({ createdAt: -1 })
@@ -80,7 +88,11 @@ export async function listFootprintsHandler(req: Request, res: Response): Promis
       })
         .select('_id name slug area category coordinates images summary')
         .lean(),
+      FootprintPhotoModel.find(filter).sort({ takenAt: -1, createdAt: -1 }).limit(300).lean(),
     ]);
+
+    const photos = photoDocs.map(serializeFootprintPhoto);
+    const photoPlaces = buildPhotoPlaceCollections(photos);
 
     const totalDestinations = Math.max(1, allDestinations.length);
     const destById = new Map(allDestinations.map((d) => [String(d._id), d]));
@@ -145,6 +157,11 @@ export async function listFootprintsHandler(req: Request, res: Response): Promis
         );
       }
     }
+    for (const ph of photos) {
+      unlockedCells.add(
+        `${(ph.coordinates.lat * 50).toFixed(0)}:${(ph.coordinates.lng * 50).toFixed(0)}`,
+      );
+    }
 
     const baseTargetCells = Math.max(60, totalDestinations * 2);
     const rawPercent = ((unlockedCells.size + checkInPins.length * 2) / baseTargetCells) * 100;
@@ -157,6 +174,8 @@ export async function listFootprintsHandler(req: Request, res: Response): Promis
         totalDistanceKm,
         totalTracks: tracks.length,
         totalMemories,
+        totalPhotos: photos.length,
+        totalPhotoPlaces: photoPlaces.length,
         totalCheckIns: checkInPins.length,
         unlockedZonesCount: unlockedCells.size,
         exploredPercent,
@@ -174,6 +193,8 @@ export async function listFootprintsHandler(req: Request, res: Response): Promis
         memories: t.memories,
         isDemoRoute: t.isDemoRoute,
       })),
+      photos,
+      photoPlaces,
       checkInPins,
       geofenceTargets,
       maxCheckInMeters: MAX_CHECKIN_METERS,

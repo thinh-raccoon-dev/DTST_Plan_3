@@ -3,6 +3,8 @@ import { Types } from 'mongoose';
 import { z } from 'zod';
 import { DestinationModel } from '../models/Destination.js';
 import { FavoriteModel } from '../models/Favorite.js';
+import { FootprintPhotoModel } from '../models/FootprintPhoto.js';
+import { TravelFootprintModel } from '../models/TravelFootprint.js';
 import { objectIdSchema } from '../schemas/common.js';
 import {
   PUBLIC_DESTINATION_FILTER,
@@ -26,7 +28,18 @@ export async function claimDevicePassport(req: Request, res: Response) {
     res.json({ claimed: 0, skipped: 0, newBadges: [] });
     return;
   }
-  const result = await claimDeviceEntries(new Types.ObjectId(req.user!.id), req.anonymousSessionId);
+  const userObjId = new Types.ObjectId(req.user!.id);
+  const [result] = await Promise.all([
+    claimDeviceEntries(userObjId, req.anonymousSessionId),
+    TravelFootprintModel.updateMany(
+      { anonymousSessionId: req.anonymousSessionId, userId: { $exists: false } },
+      { $set: { userId: userObjId }, $unset: { anonymousSessionId: 1 } },
+    ),
+    FootprintPhotoModel.updateMany(
+      { anonymousSessionId: req.anonymousSessionId, userId: { $exists: false } },
+      { $set: { userId: userObjId }, $unset: { anonymousSessionId: 1 } },
+    ),
+  ]);
   res.json(result);
 }
 

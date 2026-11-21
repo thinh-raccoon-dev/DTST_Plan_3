@@ -1,6 +1,6 @@
 import { Mail, Phone } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { Link, Outlet, ScrollRestoration } from 'react-router-dom';
+import { Link, Outlet, ScrollRestoration, useLocation } from 'react-router-dom';
 import { AiCopilotWidget } from '../ai/AiCopilotWidget';
 import { ScrollProgressBar } from '../ui/MotionPrimitives';
 import { Header } from './Header';
@@ -115,16 +115,25 @@ function Footer() {
 }
 
 export function PublicLayout() {
+  const { pathname } = useLocation();
+  const isFullBleedMap = pathname === '/footprints';
+
   return (
-    <div className="relative flex min-h-dvh flex-col overflow-x-clip">
-      <ScrollProgressBar />
-      <PetalBackdrop />
+    <div
+      className={
+        isFullBleedMap
+          ? 'relative flex h-dvh flex-col overflow-hidden'
+          : 'relative flex min-h-dvh flex-col overflow-x-clip'
+      }
+    >
+      {!isFullBleedMap && <ScrollProgressBar />}
+      {!isFullBleedMap && <PetalBackdrop />}
       <SystemAnnouncementBar />
       <Header />
-      <main id="main" className="flex-1">
+      <main id="main" className={isFullBleedMap ? 'min-h-0 flex-1 overflow-hidden' : 'flex-1'}>
         <Outlet />
       </main>
-      <Footer />
+      {!isFullBleedMap && <Footer />}
       <MobileBottomNav />
       <AiCopilotWidget />
       <ScrollRestoration />

@@ -1,9 +1,12 @@
 import {
   ArrowRight,
+  ArrowRightLeft,
   Camera,
   CheckCircle2,
   Compass,
+  Eye,
   HelpCircle,
+  MapPin,
   Mic,
   MicOff,
   Minimize2,
@@ -28,12 +31,22 @@ interface MatchedDestination {
   slug: string;
   summary?: string;
   category?: string;
+  categoryLabel?: string;
   area?: string;
   areaLabel?: string;
   vibeScore?: number;
   distanceKm?: number;
   matchReason?: string;
   coordinates?: { lat: number; lng: number };
+}
+
+interface SwapSelectionPayload {
+  dayNumber: number;
+  targetStopId?: string;
+  targetStopName: string;
+  criteriaLabel?: string;
+  notFoundQuery?: string;
+  candidates: MatchedDestination[];
 }
 
 interface DomAutomationStep {
@@ -62,6 +75,9 @@ interface CopilotAction {
     | 'DOM_AUTOMATION'
     | 'SECURITY_BLOCKED'
     | 'SWAP_ITINERARY_STOP'
+    | 'CHOOSE_SWAP_CANDIDATE'
+    | 'ADD_ITINERARY_STOP'
+    | 'REMOVE_ITINERARY_STOP'
     | 'ASK_CLARIFICATION';
   payload: {
     path?: string;
@@ -90,8 +106,10 @@ interface CopilotAction {
     domSteps?: DomAutomationStep[];
     securityReason?: string;
     dayNumber?: number;
+    targetStopId?: string;
     targetStopName?: string;
     newDestination?: MatchedDestination;
+    swapSelection?: SwapSelectionPayload;
     missingFields?: string[];
     contextType?: string;
   };
@@ -128,9 +146,57 @@ const INITIAL_MESSAGE: Message = {
  * so Pé Meko can automatically understand and operate UI features without hardcoding.
  * Security rule: Never read or transmit password field values or hidden tokens.
  */
-function captureLivePageContext() {
+function captureLivePageContext(
+  pendingSwap?: SwapSelectionPayload | null,
+  lastDiscussedDestination?: MatchedDestination | null,
+) {
   const authUser = useAuthStore.getState().user;
   const draft = useItineraryDraft.getState();
+
+  const primaryCoordsById = new Map<string, { lat: number; lng: number }>();
+  for (const pp of draft.v9Response?.primary_places || []) {
+    if (
+      pp.id &&
+      Array.isArray(pp.coordinates) &&
+      pp.coordinates.length >= 2 &&
+      typeof pp.coordinates[0] === 'number' &&
+      typeof pp.coordinates[1] === 'number'
+    ) {
+      // GeoJSON coordinates are [lng, lat]; auto-normalize safely to { lat, lng }
+      const [c0, c1] = pp.coordinates;
+      const lat = Math.abs(c0) > 90 || (c0 > 50 && c1 <= 30) ? c1 : c0;
+      const lng = Math.abs(c0) > 90 || (c0 > 50 && c1 <= 30) ? c0 : c1;
+      if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+        primaryCoordsById.set(pp.id, { lat, lng });
+      }
+    }
+  }
+
+  const draftItinerary = draft.v9Itinerary?.days?.length
+    ? {
+        title: draft.title || undefined,
+        totalDays: draft.v9Itinerary.days.length,
+        days: draft.v9Itinerary.days.map((d) => ({
+          day: d.day,
+          date: d.date,
+          stops: (d.activities || [])
+            .filter((act) => act.type === 'visit' || act.type === 'meal')
+            .map((act) => {
+              const fallbackCoord = act.place_id ? primaryCoordsById.get(act.place_id) : undefined;
+              return {
+                stopId: act.stop_id,
+                placeId: act.place_id,
+                name: act.name,
+                type: act.type,
+                start: act.start,
+                end: act.end,
+                lat: typeof act.latitude === 'number' ? act.latitude : fallbackCoord?.lat,
+                lng: typeof act.longitude === 'number' ? act.longitude : fallbackCoord?.lng,
+              };
+            }),
+        })),
+      }
+    : null;
 
   const controls: Array<{
     id: string;
@@ -212,6 +278,33 @@ function captureLivePageContext() {
       : null,
     hasDraftItinerary: Boolean(draft.v9Itinerary),
     draftTitle: draft.title,
+    draftItinerary,
+    pendingSwap: pendingSwap
+      ? {
+          dayNumber: pendingSwap.dayNumber,
+          targetStopId: pendingSwap.targetStopId,
+          targetStopName: pendingSwap.targetStopName,
+          candidates: pendingSwap.candidates.map((c) => ({
+            id: c.id,
+            slug: c.slug,
+            name: c.name,
+            area: c.area,
+            category: c.category,
+            summary: c.summary,
+            coordinates: c.coordinates,
+          })),
+        }
+      : null,
+    lastDiscussedDestination: lastDiscussedDestination
+      ? {
+          id: lastDiscussedDestination.id,
+          slug: lastDiscussedDestination.slug,
+          name: lastDiscussedDestination.name,
+          area: lastDiscussedDestination.area || lastDiscussedDestination.areaLabel,
+          category: lastDiscussedDestination.category,
+          coordinates: lastDiscussedDestination.coordinates,
+        }
+      : null,
     controls,
   };
 }
@@ -287,6 +380,9 @@ export function AiCopilotWidget() {
   const [isListening, setIsListening] = useState(false);
   const [speechError, setSpeechError] = useState<string | null>(null);
   const [pendingImage, setPendingImage] = useState<{ file: File; previewUrl: string } | null>(null);
+  const [activePendingSwap, setActivePendingSwap] = useState<SwapSelectionPayload | null>(null);
+  const [lastDiscussedDest, setLastDiscussedDest] = useState<MatchedDestination | null>(null);
+  const [pickedSwapSlugByMsg, setPickedSwapSlugByMsg] = useState<Record<string, string>>({});
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
@@ -408,6 +504,13 @@ export function AiCopilotWidget() {
   const executeAction = useCallback(
     async (action?: CopilotAction) => {
       if (!action || action.type === 'ASK_CLARIFICATION') {
+        return;
+      }
+
+      if (action.type === 'CHOOSE_SWAP_CANDIDATE') {
+        if (action.payload.swapSelection) {
+          setActivePendingSwap(action.payload.swapSelection);
+        }
         return;
       }
 
@@ -627,10 +730,33 @@ export function AiCopilotWidget() {
 
       // 7. Route Stop Swap with Inconvenience Check
       if (action.type === 'SWAP_ITINERARY_STOP') {
+        setActivePendingSwap(null);
         sessionStorage.setItem('pe_meko_pending_swap', JSON.stringify(action.payload));
         navigate(action.payload.path || '/itinerary/create#plan');
         setTimeout(() => {
           window.dispatchEvent(new CustomEvent('pe-meko:swap-stop', { detail: action.payload }));
+        }, 200);
+        return;
+      }
+
+      // 7b. Add Stop to Itinerary
+      if (action.type === 'ADD_ITINERARY_STOP') {
+        setActivePendingSwap(null);
+        sessionStorage.setItem('pe_meko_pending_add', JSON.stringify(action.payload));
+        navigate(action.payload.path || '/itinerary/create#plan');
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('pe-meko:add-stop', { detail: action.payload }));
+        }, 200);
+        return;
+      }
+
+      // 7c. Remove Stop from Itinerary
+      if (action.type === 'REMOVE_ITINERARY_STOP') {
+        setActivePendingSwap(null);
+        sessionStorage.setItem('pe_meko_pending_remove', JSON.stringify(action.payload));
+        navigate(action.payload.path || '/itinerary/create#plan');
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('pe-meko:remove-stop', { detail: action.payload }));
         }, 200);
         return;
       }
@@ -721,12 +847,12 @@ export function AiCopilotWidget() {
         return;
       }
 
-      const historyPayload = messages.slice(-6).map((m) => ({
+      const historyPayload = messages.slice(-12).map((m) => ({
         role: m.sender,
         content: m.text,
       }));
 
-      const pageContext = captureLivePageContext();
+      const pageContext = captureLivePageContext(activePendingSwap, lastDiscussedDest);
 
       let res;
       try {
@@ -778,6 +904,23 @@ export function AiCopilotWidget() {
 
       setMessages((prev) => [...prev, botMsg]);
 
+      if (data.matchedDestinations && data.matchedDestinations.length > 0) {
+        setLastDiscussedDest(data.matchedDestinations[0]!);
+      } else if (
+        data.action?.type === 'NAVIGATE' &&
+        data.action.payload?.path?.startsWith('/destinations/')
+      ) {
+        const navSlug = data.action.payload.path.replace('/destinations/', '').split('?')[0] || '';
+        if (navSlug) {
+          setLastDiscussedDest({
+            slug: navSlug,
+            name: data.action.payload.label || navSlug,
+          });
+        }
+      } else if (data.action?.payload?.newDestination) {
+        setLastDiscussedDest(data.action.payload.newDestination);
+      }
+
       if (data.action) {
         void executeAction(data.action);
       }
@@ -801,12 +944,18 @@ export function AiCopilotWidget() {
 
   sendMessageRef.current = handleSendMessage;
 
+  const isFootprintsPage = location.pathname === '/footprints';
+
   // Floating trigger button when closed
   if (!isOpen) {
     return (
       <div
         data-meko-widget="true"
-        className="fixed bottom-[5.15rem] right-3.5 z-[1000] flex items-center gap-2.5 lg:bottom-5 lg:right-5"
+        className={
+          isFootprintsPage
+            ? 'fixed bottom-[9.5rem] right-3.5 z-[1000] flex items-center gap-2.5 lg:bottom-5 lg:right-5'
+            : 'fixed bottom-[5.15rem] right-3.5 z-[1000] flex items-center gap-2.5 lg:bottom-5 lg:right-5'
+        }
       >
         <button
           onClick={() => {
@@ -901,7 +1050,12 @@ export function AiCopilotWidget() {
 
             <div className="flex items-center gap-0.5 text-white/80 shrink-0">
               <button
-                onClick={() => setMessages([INITIAL_MESSAGE])}
+                onClick={() => {
+                  setMessages([INITIAL_MESSAGE]);
+                  setActivePendingSwap(null);
+                  setLastDiscussedDest(null);
+                  setPickedSwapSlugByMsg({});
+                }}
                 className="rounded-xl p-1.5 transition-colors hover:bg-white/15 hover:text-white"
                 title="Làm mới cuộc trò chuyện"
               >
@@ -975,6 +1129,7 @@ export function AiCopilotWidget() {
                     {/* Compact Action Pill inside Bot Message */}
                     {m.action &&
                       m.action.type !== 'ASK_CLARIFICATION' &&
+                      m.action.type !== 'CHOOSE_SWAP_CANDIDATE' &&
                       m.action.type !== 'SECURITY_BLOCKED' && (
                         <div className="mt-2.5 pt-2 border-t border-sand-100 flex items-center justify-between gap-2">
                           <span className="text-[11px] font-semibold text-emerald-700 flex items-center gap-1 truncate">
@@ -991,6 +1146,136 @@ export function AiCopilotWidget() {
                           </button>
                         </div>
                       )}
+
+                    {/* Interactive Ground-Truth Swap Candidate Picker */}
+                    {m.action?.type === 'CHOOSE_SWAP_CANDIDATE' &&
+                      m.action.payload.swapSelection &&
+                      m.action.payload.swapSelection.candidates.length > 0 && (() => {
+                        const sel = m.action.payload.swapSelection!;
+                        const pickedSlug = pickedSwapSlugByMsg[m.id];
+                        return (
+                          <div className="mt-2.5 pt-2.5 border-t border-sand-200/80 space-y-2">
+                            <div className="flex flex-wrap items-center justify-between gap-1.5">
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-leaf-800">
+                                <ArrowRightLeft className="h-3 w-3 text-leaf-600" />
+                                Thay cho "{sel.targetStopName}" · Ngày {sel.dayNumber}
+                              </span>
+                              {sel.criteriaLabel && (
+                                <span className="rounded-full bg-leaf-100 px-2 py-0.5 text-[10px] font-semibold text-leaf-800">
+                                  {sel.criteriaLabel}
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="space-y-1.5">
+                              {sel.candidates.map((cand, idx) => {
+                                const isPicked = pickedSlug === cand.slug;
+                                const isNear = cand.distanceKm !== undefined && cand.distanceKm <= 15;
+                                return (
+                                  <div
+                                    key={cand.slug}
+                                    className={`rounded-xl border p-2 transition-all ${
+                                      isPicked
+                                        ? 'border-emerald-400 bg-emerald-50/70'
+                                        : 'border-sand-200 bg-sand-50/70 hover:border-leaf-300 hover:bg-leaf-50/40'
+                                    }`}
+                                  >
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div className="min-w-0 flex-1">
+                                        <div className="flex items-center gap-1.5">
+                                          <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-leaf-700 text-[10px] font-bold text-white">
+                                            {idx + 1}
+                                          </span>
+                                          <span className="truncate text-xs font-bold text-river-900">
+                                            {cand.name}
+                                          </span>
+                                        </div>
+                                        <div className="mt-1 flex flex-wrap items-center gap-1 text-[10px] text-river-600">
+                                          {cand.area && (
+                                            <span className="inline-flex items-center gap-0.5">
+                                              <MapPin className="h-2.5 w-2.5 text-leaf-600" />
+                                              {cand.area}
+                                            </span>
+                                          )}
+                                          {cand.categoryLabel && (
+                                            <span className="rounded bg-white px-1.5 py-0.2 font-medium text-river-700 ring-1 ring-sand-200">
+                                              {cand.categoryLabel}
+                                            </span>
+                                          )}
+                                          {cand.distanceKm !== undefined && (
+                                            <span
+                                              className={`rounded px-1.5 py-0.2 font-semibold ${
+                                                isNear
+                                                  ? 'bg-emerald-100 text-emerald-800'
+                                                  : 'bg-amber-100 text-amber-800'
+                                              }`}
+                                            >
+                                              ~{cand.distanceKm} km
+                                            </span>
+                                          )}
+                                        </div>
+                                        {cand.matchReason && (
+                                          <p className="mt-0.5 truncate text-[10px] text-leaf-700">
+                                            {cand.matchReason}
+                                          </p>
+                                        )}
+                                      </div>
+
+                                      <div className="flex shrink-0 items-center gap-1">
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            void executeAction({
+                                              type: 'NAVIGATE',
+                                              payload: { path: `/destinations/${cand.slug}`, label: cand.name },
+                                            })
+                                          }
+                                          className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-sand-200 bg-white text-river-600 hover:bg-sand-100 hover:text-river-900"
+                                          title={`Xem chi tiết ${cand.name}`}
+                                        >
+                                          <Eye className="h-3.5 w-3.5" />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setPickedSwapSlugByMsg((prev) => ({ ...prev, [m.id]: cand.slug }));
+                                            void executeAction({
+                                              type: 'SWAP_ITINERARY_STOP',
+                                              payload: {
+                                                path: '/itinerary/create#plan',
+                                                label: `Đổi "${sel.targetStopName}" → "${cand.name}" (Ngày ${sel.dayNumber})`,
+                                                dayNumber: sel.dayNumber,
+                                                targetStopId: sel.targetStopId,
+                                                targetStopName: sel.targetStopName,
+                                                newDestination: cand,
+                                              },
+                                            });
+                                          }}
+                                          className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[11px] font-bold transition ${
+                                            isPicked
+                                              ? 'bg-emerald-600 text-white'
+                                              : 'bg-leaf-700 text-white hover:bg-leaf-800 shadow-2xs'
+                                          }`}
+                                        >
+                                          {isPicked ? (
+                                            <>
+                                              <CheckCircle2 className="h-3 w-3" /> Đã chọn
+                                            </>
+                                          ) : (
+                                            <>
+                                              <ArrowRightLeft className="h-3 w-3" /> Chọn đổi
+                                            </>
+                                          )}
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })()}
 
                     {/* Matched destinations preview cards */}
                     {m.matchedDestinations && m.matchedDestinations.length > 0 && (

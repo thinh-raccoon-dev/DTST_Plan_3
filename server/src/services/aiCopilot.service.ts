@@ -11,8 +11,50 @@ export interface CopilotDestinationInfo {
   slug: string;
   summary?: string;
   category?: string;
+  categoryLabel?: string;
   area?: string;
+  distanceKm?: number;
+  matchReason?: string;
   coordinates?: { lat: number; lng: number };
+}
+
+export interface DraftItineraryStopSnapshot {
+  stopId?: string;
+  placeId?: string;
+  name: string;
+  type?: string;
+  start?: string;
+  end?: string;
+  lat?: number;
+  lng?: number;
+}
+
+export interface DraftItineraryDaySnapshot {
+  day: number;
+  date?: string;
+  stops: DraftItineraryStopSnapshot[];
+}
+
+export interface DraftItinerarySnapshot {
+  title?: string;
+  totalDays?: number;
+  days: DraftItineraryDaySnapshot[];
+}
+
+export interface PendingSwapSnapshot {
+  dayNumber: number;
+  targetStopId?: string;
+  targetStopName: string;
+  candidates?: CopilotDestinationInfo[];
+}
+
+export interface SwapSelectionPayload {
+  dayNumber: number;
+  targetStopId?: string;
+  targetStopName: string;
+  criteriaLabel?: string;
+  notFoundQuery?: string;
+  candidates: CopilotDestinationInfo[];
 }
 
 export interface DomControlSnapshot {
@@ -33,6 +75,9 @@ export interface PageContextSnapshot {
   } | null;
   hasDraftItinerary?: boolean;
   draftTitle?: string;
+  draftItinerary?: DraftItinerarySnapshot | null;
+  pendingSwap?: PendingSwapSnapshot | null;
+  lastDiscussedDestination?: CopilotDestinationInfo | null;
   controls?: DomControlSnapshot[];
 }
 
@@ -57,6 +102,9 @@ export interface CopilotAction {
     | 'TOGGLE_FAVORITE'
     | 'SYNC_PASSPORT'
     | 'SWAP_ITINERARY_STOP'
+    | 'CHOOSE_SWAP_CANDIDATE'
+    | 'ADD_ITINERARY_STOP'
+    | 'REMOVE_ITINERARY_STOP'
     | 'DOM_AUTOMATION'
     | 'ASK_CLARIFICATION'
     | 'SECURITY_BLOCKED';
@@ -90,10 +138,12 @@ export interface CopilotAction {
     destinationSlug?: string;
     destinationName?: string;
     favoriteMode?: 'add' | 'remove';
-    // SWAP_ITINERARY_STOP
+    // SWAP_ITINERARY_STOP / CHOOSE_SWAP_CANDIDATE / REMOVE_ITINERARY_STOP
     dayNumber?: number;
+    targetStopId?: string;
     targetStopName?: string;
     newDestination?: CopilotDestinationInfo;
+    swapSelection?: SwapSelectionPayload;
     // DOM_AUTOMATION (Future-proof Universal UI Controller)
     domSteps?: DomAutomationStep[];
     // ASK_CLARIFICATION / SECURITY_BLOCKED
@@ -158,7 +208,8 @@ const CACHE_TTL_MS = 60_000;
 
 async function getDestinationsCatalog(): Promise<DestinationSummary[]> {
   const now = Date.now();
-  if (cachedDestinations.length > 0 && now - cacheTimestamp < CACHE_TTL_MS) {
+  const ttl = process.env.NODE_ENV === 'test' ? 0 : CACHE_TTL_MS;
+  if (ttl > 0 && cachedDestinations.length > 0 && now - cacheTimestamp < ttl) {
     return cachedDestinations;
   }
   try {
@@ -331,12 +382,84 @@ const GENERIC_CATEGORY_NOUNS = new Set([
   'sen',
   'cu lao',
   'con',
+  'bien',
+  'bai bien',
+  'nui',
+  'trong nha',
+  'mai che',
+  'an uong',
+  'tam linh',
+  'diem khac',
+  'dia diem khac',
+  'cho khac',
+  'noi khac',
+  'diem moi',
+  'dia diem moi',
+  'cho moi',
+  'bat ky',
+  'tuy ban',
+  'ngau nhien',
+  'diem nao do',
+  'dia diem nao do',
+  'cho nao do',
+  'noi nao do',
+  'cho nao dep',
+  'cho nao hay',
+  'diem nao hay',
+  'gan hon',
+  'dep hon',
+  'hay hon',
+  'do met',
+  'cao lanh',
+  'sa dec',
+  'thap muoi',
+  'tam nong',
+  'lai vung',
+  'hong ngu',
+  'my tho',
+  'cai be',
+  'thoi son',
+  'can tho',
+  'vinh long',
 ]);
 
-function findDestinationByText(text: string, catalog: DestinationSummary[]): CopilotDestinationInfo | null {
-  const norm = normalizeText(text)
+const VAGUE_PLACEHOLDER_PATTERN =
+  /^(?:mot\s+|1\s+|cai\s+|cac\s+)?(?:dia\s+diem|diem|cho|noi|quan|khu)\s+(?:khac|moi|nao\s+do|nao\s+khac|nao\s+dep|nao\s+hay|nao\s+gan|bat\s+ky|ngau\s+nhien|tuy\s+y|tuy\s+ban|thien\s+nhien|sinh\s+thai|van\s+hoa|lich\s+su|am\s+thuc|an\s+uong|tam\s+linh|trai\s+nghiem|trong\s+nha|chup\s+anh|song\s+ao|thu\s+gian|vui\s+choi|mat\s+me|gan\s+hon|dep\s+hon|hay\s+hon)|^(?:khac|cho\s+khac|noi\s+khac|diem\s+khac|gi\s+do|tuy\s+ban|tuy\s+meko|ngau\s+nhien|bat\s+ky|goi\s+y|de\s+xuat)/;
+
+function haversineRoadKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371;
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  const straight = 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.round(straight * 1.25 * 10) / 10;
+}
+
+function toCopilotDestinationInfo(
+  item: DestinationSummary,
+  extra?: { distanceKm?: number; matchReason?: string },
+): CopilotDestinationInfo {
+  return {
+    id: item.id,
+    name: item.name,
+    slug: item.slug,
+    summary: item.summary,
+    category: item.category,
+    categoryLabel: formatCategoryLabel(item.category),
+    area: item.area,
+    distanceKm: extra?.distanceKm,
+    matchReason: extra?.matchReason,
+    coordinates: item.coordinates || { lat: 10.4562, lng: 105.6324 },
+  };
+}
+
+function stripConversationalEdges(norm: string): string {
+  return norm
     .replace(
-      /^(mo|xem|chi tiet|gioi thieu|tham quan|di|den|ghe|diem|dia diem|luu|them|bo|xoa)\s+/g,
+      /^(?:day\s+ne|nay\s+ne|ua\s+|ok\s+|vang\s+|da\s+)?(?:mo|xem|chi tiet|gioi thieu|tham quan|di|den|ghe|diem|dia diem|luu|them|bo|xoa|chon|lay|doi sang|doi qua|thay sang|thay qua|chuyen sang|chuyen qua)\s+/g,
       '',
     )
     .replace(
@@ -344,41 +467,73 @@ function findDestinationByText(text: string, catalog: DestinationSummary[]): Cop
       '',
     )
     .replace(/^(yeu thich|bo yeu thich|luu yeu thich)\s+/g, '')
+    .replace(/\s+(nhe|nha|di|luon|giup|voi|a|nhen|ne|ngay)$/g, '')
     .trim();
-  if (!norm || GENERIC_CATEGORY_NOUNS.has(norm)) return null;
+}
+
+function findDestinationByText(text: string, catalog: DestinationSummary[]): CopilotDestinationInfo | null {
+  const norm = stripConversationalEdges(normalizeText(text));
+  if (!norm || GENERIC_CATEGORY_NOUNS.has(norm) || VAGUE_PLACEHOLDER_PATTERN.test(norm)) return null;
 
   for (const alias of DESTINATION_ALIASES) {
     if (alias.keywords.some((kw) => norm.includes(kw))) {
       const dbMatch = catalog.find((c) => c.slug === alias.slug);
-      return {
-        id: dbMatch?.id,
-        name: dbMatch?.name || alias.name,
-        slug: alias.slug,
-        summary: dbMatch?.summary || `Địa điểm nổi bật tại ${alias.area}`,
-        category: dbMatch?.category || 'culture',
-        area: dbMatch?.area || alias.area,
-        coordinates: dbMatch?.coordinates || alias.coordinates,
-      };
+      // Only return destinations that genuinely exist in the live DB catalog (or match a known alias when DB has it)
+      if (dbMatch) {
+        return toCopilotDestinationInfo(dbMatch);
+      }
+      if (catalog.length === 0) {
+        return {
+          name: alias.name,
+          slug: alias.slug,
+          summary: `Địa điểm nổi bật tại ${alias.area}`,
+          category: 'culture',
+          categoryLabel: 'Văn hóa',
+          area: alias.area,
+          coordinates: alias.coordinates,
+        };
+      }
     }
   }
 
-  for (const item of catalog) {
+  // Exact or substring match against real catalog items (prefer longest name match first)
+  const sortedCatalog = [...catalog].sort((a, b) => b.name.length - a.name.length);
+  for (const item of sortedCatalog) {
     const itemNorm = normalizeText(item.name);
     const slugNorm = normalizeText(item.slug.replace(/-/g, ' '));
     if (
+      norm === itemNorm ||
+      norm === slugNorm ||
       norm.includes(itemNorm) ||
       norm.includes(slugNorm) ||
-      (norm.length >= 10 && !GENERIC_CATEGORY_NOUNS.has(norm) && itemNorm.includes(norm))
+      (norm.length >= 8 && !GENERIC_CATEGORY_NOUNS.has(norm) && itemNorm.includes(norm))
     ) {
-      return {
-        id: item.id,
-        name: item.name,
-        slug: item.slug,
-        summary: item.summary,
-        category: item.category,
-        area: item.area,
-        coordinates: item.coordinates || { lat: 10.4562, lng: 105.6324 },
-      };
+      return toCopilotDestinationInfo(item);
+    }
+  }
+
+  // Token-overlap fuzzy match (strict threshold to prevent false positives on vague words)
+  const queryTokens = norm
+    .split(/\s+/)
+    .filter((w) => w.length >= 2 && !['diem', 'dia', 'khu', 'du', 'lich', 'tham', 'quan', 'tai', 'o', 'mot', 'cai', 'di', 'sang', 'thanh'].includes(w));
+
+  if (queryTokens.length >= 2) {
+    let best: { item: DestinationSummary; score: number } | null = null;
+    for (const item of catalog) {
+      const nameNorm = normalizeText(item.name);
+      const nameTokens = new Set(nameNorm.split(/\s+/).filter((w) => w.length >= 2));
+      const matchedCount = queryTokens.filter((t) => nameTokens.has(t) || nameNorm.includes(t)).length;
+      const queryCoverage = matchedCount / queryTokens.length;
+      const nameCoverage = matchedCount / Math.max(1, nameTokens.size);
+      const score = queryCoverage * 0.72 + nameCoverage * 0.28;
+      if (queryCoverage >= 0.8 && matchedCount >= 2 && score >= 0.72) {
+        if (!best || score > best.score) {
+          best = { item, score };
+        }
+      }
+    }
+    if (best) {
+      return toCopilotDestinationInfo(best.item);
     }
   }
 
@@ -568,60 +723,1568 @@ function extractAuthSlots(text: string): {
   return { email, password, displayName };
 }
 
-/**
- * Parses a stop-swap request in the itinerary.
- */
-function parseStopSwapIntent(
+interface SwapCriteria {
+  categories: string[];
+  topic?:
+    | 'chua'
+    | 'bao_tang'
+    | 'nha_co'
+    | 'lang_hoa'
+    | 'dong_sen'
+    | 'vuon_trai_cay'
+    | 'bien'
+    | 'nui'
+    | 'cho'
+    | 'indoor';
+  areaSlug?: string;
+  areaLabel?: string;
+  preferNear?: boolean;
+  criteriaLabel?: string;
+  hasExplicitCriteria: boolean;
+}
+
+const SWAP_AREA_OPTIONS: Array<{ kw: string; slug: string; label: string }> = [
+  { kw: 'cao lanh', slug: 'cao-lanh', label: 'Cao Lãnh' },
+  { kw: 'sa dec', slug: 'sa-dec', label: 'Sa Đéc' },
+  { kw: 'thap muoi', slug: 'thap-muoi', label: 'Tháp Mười' },
+  { kw: 'tam nong', slug: 'tam-nong', label: 'Tam Nông' },
+  { kw: 'lai vung', slug: 'lai-vung', label: 'Lai Vung' },
+  { kw: 'hong ngu', slug: 'hong-ngu', label: 'Hồng Ngự' },
+  { kw: 'my tho', slug: 'my-tho', label: 'Mỹ Tho' },
+  { kw: 'cai be', slug: 'cai-be', label: 'Cái Bè' },
+  { kw: 'thoi son', slug: 'thoi-son', label: 'Cù lao Thới Sơn' },
+  { kw: 'can tho', slug: 'can-tho', label: 'Cần Thơ' },
+  { kw: 'vinh long', slug: 'vinh-long', label: 'Vĩnh Long' },
+  { kw: 'lap vo', slug: 'lap-vo', label: 'Lấp Vò' },
+  { kw: 'chau thanh', slug: 'chau-thanh', label: 'Châu Thành' },
+];
+
+function hasVietnameseDiacritics(text: string): boolean {
+  return /[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]/i.test(text);
+}
+
+function hasAccentedWord(rawLower: string, accentedWord: string): boolean {
+  const escaped = accentedWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(
+    `(?:^|[\\s,.;:!?()\\[\\]"'“”/\\-])${escaped}(?:$|[\\s,.;:!?()\\[\\]"'“”/\\-])`,
+    'i',
+  ).test(rawLower);
+}
+
+function extractSwapCriteria(text: string): SwapCriteria {
+  const rawLower = text.toLowerCase();
+  const hasDiacritics = hasVietnameseDiacritics(rawLower);
+  const norm = normalizeText(text);
+  const categories: string[] = [];
+  let topic: SwapCriteria['topic'];
+  let areaSlug: string | undefined;
+  let areaLabel: string | undefined;
+  const labelParts: string[] = [];
+
+  const mentionsForest =
+    hasAccentedWord(rawLower, 'rừng') ||
+    norm.includes('rung tram') ||
+    norm.includes('vuon quoc gia') ||
+    (!hasDiacritics && /\brung\b/.test(norm));
+
+  if (
+    norm.includes('thien nhien') ||
+    norm.includes('hoang so') ||
+    norm.includes('canh dep') ||
+    mentionsForest ||
+    norm.includes('san may')
+  ) {
+    categories.push('nature', 'eco');
+    labelParts.push('Thiên nhiên & Sinh thái');
+  } else if (
+    norm.includes('sinh thai') ||
+    norm.includes('song nuoc') ||
+    norm.includes('mat me') ||
+    norm.includes('dong que') ||
+    norm.includes('thu gian') ||
+    norm.includes('cu lao')
+  ) {
+    categories.push('eco', 'nature');
+    labelParts.push('Sinh thái & Sông nước');
+  }
+
+  if (
+    norm.includes('am thuc') ||
+    norm.includes('an uong') ||
+    norm.includes('quan an') ||
+    norm.includes('nha hang') ||
+    norm.includes('dac san') ||
+    norm.includes('mon ngon') ||
+    norm.includes('an trua') ||
+    norm.includes('an toi') ||
+    norm.includes('an sang') ||
+    norm.includes('hu tieu') ||
+    norm.includes('banh xeo') ||
+    norm.includes('ca loc')
+  ) {
+    categories.push('food');
+    labelParts.push('Ẩm thực & Đặc sản');
+  }
+
+  if (norm.includes('lich su') || norm.includes('di tich') || norm.includes('chien khu')) {
+    categories.push('history', 'culture');
+    labelParts.push('Lịch sử & Di tích');
+  } else if (norm.includes('van hoa') || norm.includes('tam linh') || norm.includes('kien truc')) {
+    categories.push('culture');
+    labelParts.push('Văn hóa & Tâm linh');
+  }
+
+  if (
+    norm.includes('trai nghiem') ||
+    norm.includes('lang nghe') ||
+    norm.includes('check in') ||
+    norm.includes('chup anh') ||
+    norm.includes('chup hinh') ||
+    norm.includes('song ao')
+  ) {
+    categories.push('local_experience');
+    labelParts.push('Trải nghiệm & Check-in');
+  }
+
+  // Specific sub-topics (diacritic-safe to prevent Vietnamese homograph bugs:
+  // "chưa" ≠ "chùa", "cho/chỗ" ≠ "chợ", "biến/biên" ≠ "biển", "núi" vs unaccented)
+  const mentionsPagoda =
+    hasAccentedWord(rawLower, 'chùa') ||
+    norm.includes('co tu') ||
+    norm.includes('thien vien') ||
+    norm.includes('ngoi chua') ||
+    norm.includes('cac chua') ||
+    norm.includes('danh sach chua') ||
+    norm.includes('chua co') ||
+    (!hasDiacritics &&
+      /\bchua\b/.test(norm) &&
+      !/\bchua\s+(?:di|co|biet|tung|muon|thay|chon|doi|den|ghe)\b/.test(norm));
+
+  const mentionsSea =
+    hasAccentedWord(rawLower, 'biển') ||
+    norm.includes('bai bien') ||
+    norm.includes('du lich bien') ||
+    (!hasDiacritics && /\bbien\b/.test(norm));
+
+  const mentionsMountain =
+    hasAccentedWord(rawLower, 'núi') ||
+    norm.includes('leo nui') ||
+    norm.includes('doi nui') ||
+    norm.includes('khu du lich nui') ||
+    norm.includes('san may') ||
+    (!hasDiacritics && /\bnui\b/.test(norm));
+
+  const mentionsMarket =
+    hasAccentedWord(rawLower, 'chợ') ||
+    norm.includes('cho dem') ||
+    norm.includes('cho noi') ||
+    norm.includes('cho am thuc') ||
+    norm.includes('cho my tho') ||
+    norm.includes('cho sa dec') ||
+    (!hasDiacritics &&
+      (norm.includes('khu cho') ||
+        (/\bdi\s+cho\b/.test(norm) &&
+          !/\bdi\s+cho\s+(?:nao|khac|do|nay|kia|dep|gan|mat|thien|sinh|am|van)\b/.test(norm))));
+
+  if (mentionsPagoda) {
+    topic = 'chua';
+    labelParts.push('Chùa & Tâm linh');
+  } else if (norm.includes('bao tang')) {
+    topic = 'bao_tang';
+    labelParts.push('Bảo tàng');
+  } else if (norm.includes('nha co')) {
+    topic = 'nha_co';
+    labelParts.push('Nhà cổ di sản');
+  } else if (norm.includes('lang hoa') || norm.includes('vuon hoa')) {
+    topic = 'lang_hoa';
+    labelParts.push('Làng hoa');
+  } else if (norm.includes('dong sen') || norm.includes('hoa sen')) {
+    topic = 'dong_sen';
+    labelParts.push('Đồng sen');
+  } else if (norm.includes('vuon trai cay') || norm.includes('miet vuon') || norm.includes('hai trai')) {
+    topic = 'vuon_trai_cay';
+    labelParts.push('Miệt vườn trái cây');
+  } else if (mentionsSea) {
+    topic = 'bien';
+    if (!categories.includes('nature')) categories.push('nature');
+    labelParts.push('Biển');
+  } else if (mentionsMountain) {
+    topic = 'nui';
+    if (!categories.includes('nature')) categories.push('nature');
+    labelParts.push('Núi non');
+  } else if (mentionsMarket) {
+    topic = 'cho';
+    labelParts.push('Chợ & Phố đêm');
+  } else if (
+    norm.includes('trong nha') ||
+    norm.includes('mai che') ||
+    norm.includes('tranh mua') ||
+    norm.includes('tranh nang')
+  ) {
+    topic = 'indoor';
+    labelParts.push('Trong nhà / Có mái che');
+  }
+
+  for (const a of SWAP_AREA_OPTIONS) {
+    if (norm.includes(a.kw)) {
+      areaSlug = a.slug;
+      areaLabel = a.label;
+      labelParts.push(`Khu vực ${a.label}`);
+      break;
+    }
+  }
+
+  const preferNear =
+    norm.includes('gan hon') ||
+    norm.includes('gan nhat') ||
+    norm.includes('gan do') ||
+    norm.includes('gan tuyen') ||
+    norm.includes('thuan tuyen') ||
+    norm.includes('do met') ||
+    norm.includes('it di chuyen');
+
+  if (preferNear) {
+    labelParts.push('Gần tuyến đường nhất');
+  }
+
+  const dedupLabels = Array.from(new Set(labelParts));
+  const hasExplicitCriteria = Boolean(categories.length > 0 || topic || areaSlug || preferNear);
+
+  return {
+    categories: Array.from(new Set(categories)),
+    topic,
+    areaSlug,
+    areaLabel,
+    preferNear,
+    criteriaLabel: dedupLabels.length > 0 ? dedupLabels.join(' · ') : undefined,
+    hasExplicitCriteria,
+  };
+}
+
+interface ResolvedDraftStop {
+  dayNumber: number;
+  stopId?: string;
+  stopName: string;
+  refCoords?: { lat: number; lng: number };
+  existingStopNamesNorm: Set<string>;
+}
+
+function getAllExistingStopNamesNorm(draft?: DraftItinerarySnapshot | null): Set<string> {
+  const set = new Set<string>();
+  if (!draft?.days) return set;
+  for (const d of draft.days) {
+    for (const s of d.stops || []) {
+      if (s.name) set.add(normalizeText(s.name));
+      if (s.placeId && s.placeId.length >= 5) set.add(normalizeText(s.placeId.replace(/-/g, ' ')));
+    }
+  }
+  return set;
+}
+
+function normalizeStopCore(name: string): string {
+  return normalizeText(name)
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/^(?:an\s+(?:sang|trua|toi)\s*[-–—:]?\s*)/i, '')
+    .replace(
+      /^(?:diem\s+du\s+lich\s+sinh\s+thai|khu\s+du\s+lich\s+sinh\s+thai|khu\s+du\s+lich|diem\s+du\s+lich|nha\s+hang\s+sinh\s+thai|nha\s+hang|quan\s+an|quan)\s+/i,
+      '',
+    )
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function isDuplicateStopName(candidateName: string, existingNamesRawOrNorm: Set<string>): boolean {
+  const candNorm = normalizeText(candidateName);
+  const candBase = normalizeText(candidateName.replace(/\([^)]*\)/g, ' '));
+  const candCore = normalizeStopCore(candidateName);
+
+  for (const ex of existingNamesRawOrNorm) {
+    if (!ex) continue;
+    const exNorm = normalizeText(ex);
+    if (candNorm === exNorm) return true;
+    const exBase = normalizeText(ex.replace(/\([^)]*\)/g, ' '));
+    const exCore = normalizeStopCore(ex);
+    if (
+      candBase.length >= 5 &&
+      exBase.length >= 5 &&
+      (candBase === exBase || candBase.includes(exBase) || exBase.includes(candBase))
+    ) {
+      return true;
+    }
+    if (
+      candCore.length >= 6 &&
+      exCore.length >= 6 &&
+      (candCore === exCore || candCore.includes(exCore) || exCore.includes(candCore))
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+const TOOL_CATEGORY_CONFIG: Record<string, { categories: string[]; label: string }> = {
+  nature: { categories: ['nature', 'eco'], label: 'Thiên nhiên & Sinh thái' },
+  'thien-nhien': { categories: ['nature', 'eco'], label: 'Thiên nhiên & Sinh thái' },
+  eco: { categories: ['eco', 'nature'], label: 'Sinh thái & Sông nước' },
+  'sinh-thai': { categories: ['eco', 'nature'], label: 'Sinh thái & Sông nước' },
+  food: { categories: ['food'], label: 'Ẩm thực & Đặc sản' },
+  'am-thuc': { categories: ['food'], label: 'Ẩm thực & Đặc sản' },
+  culture: { categories: ['culture', 'history'], label: 'Văn hóa & Tâm linh' },
+  'van-hoa': { categories: ['culture', 'history'], label: 'Văn hóa & Tâm linh' },
+  history: { categories: ['history', 'culture'], label: 'Lịch sử & Di tích' },
+  'lich-su': { categories: ['history', 'culture'], label: 'Lịch sử & Di tích' },
+  local_experience: { categories: ['local_experience'], label: 'Trải nghiệm & Check-in' },
+  'trai-nghiem': { categories: ['local_experience'], label: 'Trải nghiệm & Check-in' },
+};
+
+function buildSwapCriteriaFromToolArgs(
+  args: {
+    category?: unknown;
+    area?: unknown;
+    topicHint?: unknown;
+    preferNear?: unknown;
+  },
+  rawMessage: string,
+): SwapCriteria {
+  const rawCat = typeof args.category === 'string' ? args.category.trim().toLowerCase() : '';
+  const rawArea = typeof args.area === 'string' ? args.area.trim() : '';
+  const rawTopic = typeof args.topicHint === 'string' ? args.topicHint.trim() : '';
+  const rawPreferNear = Boolean(args.preferNear);
+
+  const hasStructuredArgs = Boolean(rawCat || rawArea || rawTopic || rawPreferNear);
+  if (!hasStructuredArgs) {
+    // Only extract from the positive clause after "đổi/thay/chuyển" so negated old stops never leak
+    const positivePartMatch = rawMessage.match(
+      /(?:[đd][ổo]i|thay(?:\s*th[ếe])?|chuy[ểe]n)\s+(?:(?:cho\s+(?:t[ôo]i|m[ìi]nh|em|anh|ch[ịi])|gi[úu]p\s+(?:t[ôo]i|m[ìi]nh|em)|gi[ùu]m)\s+)?(?:(?:sang|qua|th[àa]nh|b[ằa]ng)\s+)?(.+)$/i,
+    );
+    return extractSwapCriteria(positivePartMatch?.[1] || rawMessage);
+  }
+
+  const categories: string[] = [];
+  const labelParts: string[] = [];
+  let topic: SwapCriteria['topic'];
+  let areaSlug: string | undefined;
+  let areaLabel: string | undefined;
+
+  if (rawCat) {
+    const mapped =
+      TOOL_CATEGORY_CONFIG[rawCat] || TOOL_CATEGORY_CONFIG[normalizeText(rawCat).replace(/\s+/g, '-')];
+    if (mapped) {
+      categories.push(...mapped.categories);
+      labelParts.push(mapped.label);
+    } else {
+      const catCrit = extractSwapCriteria(rawCat);
+      categories.push(...catCrit.categories);
+      if (catCrit.criteriaLabel) labelParts.push(catCrit.criteriaLabel);
+    }
+  }
+
+  if (rawTopic) {
+    const topicCrit = extractSwapCriteria(rawTopic);
+    if (topicCrit.topic) {
+      topic = topicCrit.topic;
+      if (topicCrit.criteriaLabel) labelParts.push(topicCrit.criteriaLabel);
+    }
+    for (const c of topicCrit.categories) {
+      if (!categories.includes(c)) categories.push(c);
+    }
+    if (!topicCrit.topic && topicCrit.criteriaLabel && labelParts.length === 0) {
+      labelParts.push(topicCrit.criteriaLabel);
+    }
+  }
+
+  if (rawArea) {
+    const normArea = normalizeText(rawArea);
+    const matchedArea = SWAP_AREA_OPTIONS.find(
+      (a) => normArea.includes(a.kw) || a.slug === normArea || normalizeText(a.label) === normArea,
+    );
+    if (matchedArea) {
+      areaSlug = matchedArea.slug;
+      areaLabel = matchedArea.label;
+      labelParts.push(`Khu vực ${matchedArea.label}`);
+    }
+  }
+
+  const msgNorm = normalizeText(rawMessage);
+  const userAskedNear =
+    msgNorm.includes('gan hon') ||
+    msgNorm.includes('gan nhat') ||
+    msgNorm.includes('gan do') ||
+    msgNorm.includes('gan tuyen') ||
+    msgNorm.includes('thuan tuyen') ||
+    msgNorm.includes('do met') ||
+    msgNorm.includes('it di chuyen');
+
+  const preferNear = rawPreferNear || userAskedNear;
+  if (userAskedNear || (rawPreferNear && labelParts.length === 0)) {
+    labelParts.push('Gần tuyến đường nhất');
+  }
+
+  const dedupLabels = Array.from(new Set(labelParts));
+  const hasExplicitCriteria = Boolean(categories.length > 0 || topic || areaSlug || preferNear);
+
+  return {
+    categories: Array.from(new Set(categories)),
+    topic,
+    areaSlug,
+    areaLabel,
+    preferNear,
+    criteriaLabel: dedupLabels.length > 0 ? dedupLabels.join(' · ') : undefined,
+    hasExplicitCriteria,
+  };
+}
+
+function sanitizeNotFoundQuery(
+  rawNotFound: unknown,
+  context: {
+    targetStopName: string;
+    rawTarget: string;
+    existingNamesNorm: Set<string>;
+  },
+): string | undefined {
+  const cleaned = typeof rawNotFound === 'string' ? rawNotFound.trim() : '';
+  if (!cleaned) return undefined;
+
+  const nfNorm = normalizeText(cleaned);
+  if (!nfNorm || nfNorm.length < 2) return undefined;
+
+  // Never treat generic category phrases or vague placeholders as a "not found destination"
+  if (
+    GENERIC_CATEGORY_NOUNS.has(nfNorm) ||
+    VAGUE_PLACEHOLDER_PATTERN.test(nfNorm) ||
+    /^(?:mot\s+|1\s+)?(?:dia\s*diem|diem|cho|noi)\b/.test(nfNorm)
+  ) {
+    return undefined;
+  }
+
+  // NEVER treat the OLD stop being replaced or ANY stop already in draftItinerary as "not found"
+  const checkSet = new Set<string>(context.existingNamesNorm);
+  if (context.targetStopName) checkSet.add(normalizeText(context.targetStopName));
+  if (context.rawTarget) checkSet.add(normalizeText(context.rawTarget));
+
+  if (isDuplicateStopName(cleaned, checkSet)) {
+    return undefined;
+  }
+
+  // Also reject significant token overlap with targetStopName (e.g. "Trà mật ong" vs "Trà mật ong Kỳ Lân")
+  const nfTokens = nfNorm.split(/\s+/).filter((t) => t.length >= 2);
+  const targetTokens = normalizeText(context.targetStopName)
+    .split(/\s+/)
+    .filter((t) => t.length >= 2);
+  if (nfTokens.length > 0 && targetTokens.length > 0) {
+    const overlap = nfTokens.filter((t) => targetTokens.includes(t)).length;
+    if (overlap / Math.min(nfTokens.length, targetTokens.length) >= 0.5) {
+      return undefined;
+    }
+  }
+
+  return cleaned;
+}
+
+function inferCoordsForStop(
+  stop: DraftItineraryStopSnapshot,
+  catalog: DestinationSummary[],
+): { lat: number; lng: number } | undefined {
+  if (typeof stop.lat === 'number' && typeof stop.lng === 'number') {
+    return { lat: stop.lat, lng: stop.lng };
+  }
+  const stopNorm = normalizeText(stop.name);
+  const matched = catalog.find((c) => {
+    const cn = normalizeText(c.name);
+    return cn === stopNorm || cn.includes(stopNorm) || stopNorm.includes(cn);
+  });
+  if (matched?.coordinates) return matched.coordinates;
+
+  if (
+    stopNorm.includes('thoi son') ||
+    stopNorm.includes('my tho') ||
+    stopNorm.includes('ky lan') ||
+    stopNorm.includes('vinh trang') ||
+    stopNorm.includes('dong tam')
+  ) {
+    return { lat: 10.354, lng: 106.362 };
+  }
+  if (stopNorm.includes('sa dec') || stopNorm.includes('huynh thuy le')) {
+    return { lat: 10.301, lng: 105.755 };
+  }
+  if (stopNorm.includes('cao lanh') || stopNorm.includes('xeo quyt') || stopNorm.includes('gao giong')) {
+    return { lat: 10.456, lng: 105.633 };
+  }
+  return undefined;
+}
+
+function getDayRefCoords(
+  day: DraftItineraryDaySnapshot | undefined,
+  excludeStopId?: string,
+  catalog: DestinationSummary[] = [],
+): { lat: number; lng: number } | undefined {
+  if (!day?.stops?.length) return undefined;
+  const coords = day.stops
+    .filter((s) => !excludeStopId || s.stopId !== excludeStopId)
+    .map((s) => inferCoordsForStop(s, catalog))
+    .filter((p): p is { lat: number; lng: number } => Boolean(p));
+  const pool =
+    coords.length > 0
+      ? coords
+      : day.stops
+          .map((s) => inferCoordsForStop(s, catalog))
+          .filter((p): p is { lat: number; lng: number } => Boolean(p));
+  if (pool.length === 0) return undefined;
+  const avgLat = pool.reduce((sum, p) => sum + p.lat, 0) / pool.length;
+  const avgLng = pool.reduce((sum, p) => sum + p.lng, 0) / pool.length;
+  return { lat: avgLat, lng: avgLng };
+}
+
+function resolveTargetStopInDraft(
+  rawTarget: string | undefined,
+  requestedDay: number | undefined,
+  draft?: DraftItinerarySnapshot | null,
+  catalog: DestinationSummary[] = [],
+): ResolvedDraftStop | null {
+  const existingStopNamesNorm = getAllExistingStopNamesNorm(draft);
+  if (!draft?.days?.length) {
+    if (!rawTarget) return null;
+    return {
+      dayNumber: requestedDay || 1,
+      stopName: rawTarget,
+      existingStopNamesNorm,
+    };
+  }
+
+  const orderedDays = requestedDay
+    ? [
+        ...draft.days.filter((d) => d.day === requestedDay),
+        ...draft.days.filter((d) => d.day !== requestedDay),
+      ]
+    : draft.days;
+
+  if (!rawTarget || !rawTarget.trim()) {
+    return null;
+  }
+
+  const normTarget = normalizeText(rawTarget)
+    .replace(/^(dia diem|diem|quan|khu|chua)\s+/g, '')
+    .trim();
+
+  // Check ordinal references: "điểm đầu tiên", "điểm thứ 2", "điểm cuối"
+  const ordinalMatch = normTarget.match(/^(?:thu\s*)?(\d+)$|^dau\s*tien$|^cuoi(?:\s*cung)?$/);
+  if (ordinalMatch) {
+    const targetDay = orderedDays[0];
+    if (targetDay && targetDay.stops.length > 0) {
+      let chosen: DraftItineraryStopSnapshot | undefined;
+      if (normTarget.includes('dau')) chosen = targetDay.stops[0];
+      else if (normTarget.includes('cuoi')) chosen = targetDay.stops[targetDay.stops.length - 1];
+      else {
+        const idx = Number(ordinalMatch[1]) - 1;
+        if (idx >= 0 && idx < targetDay.stops.length) chosen = targetDay.stops[idx];
+      }
+      if (chosen) {
+        return {
+          dayNumber: targetDay.day,
+          stopId: chosen.stopId,
+          stopName: chosen.name,
+          refCoords: getDayRefCoords(targetDay, chosen.stopId, catalog),
+          existingStopNamesNorm,
+        };
+      }
+    }
+  }
+
+  // Fuzzy match stop name across days (prioritizing requestedDay if provided)
+  const targetTokens = normTarget.split(/\s+/).filter((w) => w.length >= 2);
+  let bestMatch: {
+    day: DraftItineraryDaySnapshot;
+    stop: DraftItineraryStopSnapshot;
+    score: number;
+  } | null = null;
+
+  for (const day of orderedDays) {
+    const dayBonus = requestedDay && day.day === requestedDay ? 0.12 : 0;
+    for (const stop of day.stops || []) {
+      const stopNorm = normalizeText(stop.name);
+      if (stopNorm === normTarget) {
+        return {
+          dayNumber: day.day,
+          stopId: stop.stopId,
+          stopName: stop.name,
+          refCoords: getDayRefCoords(day, stop.stopId, catalog),
+          existingStopNamesNorm,
+        };
+      }
+      if (stopNorm.includes(normTarget) || (normTarget.length >= 4 && normTarget.includes(stopNorm))) {
+        const score = 0.92 + dayBonus;
+        if (!bestMatch || score > bestMatch.score) {
+          bestMatch = { day, stop, score };
+        }
+        continue;
+      }
+      if (targetTokens.length > 0) {
+        const hits = targetTokens.filter((t) => stopNorm.includes(t)).length;
+        const coverage = hits / targetTokens.length;
+        if (coverage >= 0.6 && hits >= Math.min(2, targetTokens.length)) {
+          const score = coverage * 0.8 + dayBonus;
+          if (!bestMatch || score > bestMatch.score) {
+            bestMatch = { day, stop, score };
+          }
+        }
+      }
+    }
+  }
+
+  if (bestMatch) {
+    return {
+      dayNumber: bestMatch.day.day,
+      stopId: bestMatch.stop.stopId,
+      stopName: bestMatch.stop.name,
+      refCoords: getDayRefCoords(bestMatch.day, bestMatch.stop.stopId, catalog),
+      existingStopNamesNorm,
+    };
+  }
+
+  // Stop name wasn't found verbatim in draft — still pass cleaned name + ref coords of requested day
+  const fallbackDay = orderedDays[0];
+  return {
+    dayNumber: requestedDay || fallbackDay?.day || 1,
+    stopName: rawTarget,
+    refCoords: getDayRefCoords(fallbackDay, undefined, catalog),
+    existingStopNamesNorm,
+  };
+}
+
+function matchesSwapTopic(d: DestinationSummary, topic: NonNullable<SwapCriteria['topic']>): boolean {
+  const rawHay = `${d.name} ${d.summary} ${d.tags.join(' ')}`.toLowerCase();
+  const hay = normalizeText(rawHay);
+  switch (topic) {
+    case 'chua':
+      return (
+        hasAccentedWord(rawHay, 'chùa') ||
+        hay.includes('co tu') ||
+        hay.includes('thien vien') ||
+        hay.includes('kien an cung') ||
+        hasAccentedWord(rawHay, 'miếu') ||
+        hay.includes('ngoi chua') ||
+        hay.includes('chua co')
+      );
+    case 'bao_tang':
+      return hay.includes('bao tang');
+    case 'nha_co':
+      return hay.includes('nha co') || hay.includes('kien an cung');
+    case 'lang_hoa':
+      return hay.includes('lang hoa') || hay.includes('vuon hoa');
+    case 'dong_sen':
+      return hasAccentedWord(rawHay, 'sen') || hay.includes('dong sen') || hay.includes('hoa sen');
+    case 'vuon_trai_cay':
+      return (
+        hasAccentedWord(rawHay, 'vườn') ||
+        hay.includes('trai cay') ||
+        hay.includes('miet vuon') ||
+        hasAccentedWord(rawHay, 'quýt')
+      );
+    case 'bien':
+      return hasAccentedWord(rawHay, 'biển') || hay.includes('bai bien') || hay.includes('bai sao');
+    case 'nui':
+      return hasAccentedWord(rawHay, 'núi') || hay.includes('that son') || hay.includes('nui cam');
+    case 'cho':
+      return (
+        hasAccentedWord(rawHay, 'chợ') ||
+        hay.includes('cho dem') ||
+        hay.includes('cho noi') ||
+        hay.includes('cho am thuc') ||
+        hay.includes('pho am thuc')
+      );
+    case 'indoor':
+      return (
+        d.category === 'culture' ||
+        d.category === 'food' ||
+        hay.includes('bao tang') ||
+        hay.includes('nha co') ||
+        hasAccentedWord(rawHay, 'chùa') ||
+        hasAccentedWord(rawHay, 'quán')
+      );
+  }
+}
+
+function rankSwapCandidates(
+  catalog: DestinationSummary[],
+  criteria: SwapCriteria,
+  options: {
+    excludeNamesNorm: Set<string>;
+    targetStopName: string;
+    refCoords?: { lat: number; lng: number };
+    limit?: number;
+  },
+): { candidates: CopilotDestinationInfo[]; exactMatchCount: number } {
+  const limit = options.limit ?? 6;
+  const fullExcludeSet = new Set<string>(options.excludeNamesNorm);
+  if (options.targetStopName) {
+    fullExcludeSet.add(normalizeText(options.targetStopName));
+  }
+
+  // Exclude destinations already in the user's itinerary (including parenthetical/area variants like "Trại Rắn Đồng Tâm (...)")
+  const eligible = catalog.filter((d) => !isDuplicateStopName(d.name, fullExcludeSet));
+
+  const scored = eligible.map((d) => {
+    const distKm =
+      options.refCoords && d.coordinates
+        ? haversineRoadKm(
+            options.refCoords.lat,
+            options.refCoords.lng,
+            d.coordinates.lat,
+            d.coordinates.lng,
+          )
+        : undefined;
+
+    let score = 0;
+    const reasons: string[] = [];
+    let matchesCategory = criteria.categories.length === 0;
+    let matchesTopic = !criteria.topic;
+    let matchesArea = !criteria.areaSlug;
+
+    // Category match (primary category gets stronger boost than secondary fallback category)
+    if (criteria.categories.length > 0) {
+      const catIdx = criteria.categories.indexOf(d.category);
+      if (catIdx === 0) {
+        score += 55;
+        matchesCategory = true;
+        reasons.push(`Đúng loại ${formatCategoryLabel(d.category)}`);
+      } else if (catIdx > 0) {
+        score += 38;
+        matchesCategory = true;
+        reasons.push(`Tương đồng · ${formatCategoryLabel(d.category)}`);
+      } else {
+        score -= 45;
+      }
+    }
+
+    // Topic match
+    if (criteria.topic) {
+      if (matchesSwapTopic(d, criteria.topic)) {
+        score += 50;
+        matchesTopic = true;
+        reasons.push('Khớp đúng chủ đề yêu cầu');
+      }
+    }
+
+    // Area match
+    if (criteria.areaSlug) {
+      const areaMatch =
+        d.areaSlug === criteria.areaSlug ||
+        (criteria.areaLabel && normalizeText(d.area).includes(normalizeText(criteria.areaLabel)));
+      if (areaMatch) {
+        score += 45;
+        matchesArea = true;
+        reasons.push(`Tại ${d.area}`);
+      } else {
+        score -= 30;
+      }
+    }
+
+    const matchesPrimary = !criteria.hasExplicitCriteria
+      ? true
+      : criteria.categories.length > 0 && criteria.topic
+        ? matchesCategory && matchesTopic && (!criteria.areaSlug || matchesArea)
+        : criteria.categories.length > 0
+          ? matchesCategory && (!criteria.areaSlug || matchesArea)
+          : criteria.topic
+            ? matchesTopic && (!criteria.areaSlug || matchesArea)
+            : criteria.areaSlug
+              ? matchesArea
+              : true;
+
+    // Distance scoring: strongly favor nearby route-convenient destinations, penalize out-of-region 150km+ spots unless explicitly requested (e.g. biển/núi)
+    if (distKm !== undefined) {
+      const distWeight = criteria.preferNear ? 2.4 : criteria.hasExplicitCriteria ? 0.65 : 1.5;
+      score += Math.max(0, 52 - distKm * distWeight);
+      if (distKm > 140 && criteria.topic !== 'bien' && criteria.topic !== 'nui' && !criteria.areaSlug) {
+        score -= 28;
+      }
+      if (distKm <= 15) {
+        reasons.push(`Thuận tuyến (~${distKm} km)`);
+      } else if (distKm <= 45) {
+        reasons.push(`Cách tuyến ~${distKm} km`);
+      }
+    }
+
+    if (reasons.length === 0) {
+      reasons.push(`${formatCategoryLabel(d.category)} · ${d.area}`);
+    }
+
+    return {
+      item: d,
+      distKm,
+      score,
+      matchesCategory,
+      matchesPrimary,
+      reason: reasons.slice(0, 2).join(' · '),
+    };
+  });
+
+  const strictMatches = scored.filter((s) => s.matchesPrimary).sort((a, b) => b.score - a.score);
+  const categoryMatches =
+    criteria.categories.length > 0
+      ? scored.filter((s) => s.matchesCategory).sort((a, b) => b.score - a.score)
+      : [];
+  const pool =
+    strictMatches.length > 0
+      ? strictMatches
+      : categoryMatches.length > 0
+        ? categoryMatches
+        : scored.sort((a, b) => b.score - a.score);
+
+  // When open-ended ("sang điểm khác"), diversify categories so the user sees varied real choices
+  let selected = pool.slice(0, limit);
+  if (!criteria.hasExplicitCriteria && pool.length > limit) {
+    const picked: typeof pool = [];
+    const seenCats = new Set<string>();
+    for (const cand of pool) {
+      if (picked.length >= limit) break;
+      if (!seenCats.has(cand.item.category) || picked.length >= 4) {
+        picked.push(cand);
+        seenCats.add(cand.item.category);
+      }
+    }
+    if (picked.length < limit) {
+      for (const cand of pool) {
+        if (picked.length >= limit) break;
+        if (!picked.some((p) => p.item.id === cand.item.id)) picked.push(cand);
+      }
+    }
+    selected = picked;
+  }
+
+  return {
+    candidates: selected.map((s) =>
+      toCopilotDestinationInfo(s.item, {
+        distanceKm: s.distKm,
+        matchReason: s.reason,
+      }),
+    ),
+    exactMatchCount: strictMatches.length,
+  };
+}
+
+function buildChooseSwapCandidateResponse(params: {
+  dayNumber: number;
+  targetStopId?: string;
+  targetStopName: string;
+  criteriaLabel?: string;
+  notFoundQuery?: string;
+  candidates: CopilotDestinationInfo[];
+}): CopilotResponse {
+  const { dayNumber, targetStopId, targetStopName, criteriaLabel, notFoundQuery, candidates } = params;
+
+  const listLines = candidates
+    .map(
+      (c, idx) =>
+        `${idx + 1}. **${c.name}** *(${c.area}${c.categoryLabel ? ` · ${c.categoryLabel}` : ''}${c.distanceKm !== undefined ? ` · ~${c.distanceKm} km` : ''})*`,
+    )
+    .join('\n');
+
+  let headerText: string;
+  if (notFoundQuery) {
+    headerText =
+      `Dạ **Pé Meko** đã kiểm tra dữ liệu hệ thống nhưng **chưa có địa điểm "${notFoundQuery}"** trong danh mục Đồng Tháp Smart Travel, nên Pé Meko sẽ không tự tạo điểm ảo vào lịch trình của bạn nhé! 🦊🛡️\n\n` +
+      `Thay vào đó, dưới đây là **${candidates.length} địa điểm thật đang có trong hệ thống** phù hợp để thay cho **${targetStopName}** (Ngày ${dayNumber}):`;
+  } else if (criteriaLabel) {
+    headerText =
+      `Dạ **Pé Meko** đã lọc sẵn **${candidates.length} địa điểm thật thuộc nhóm "${criteriaLabel}"** (chưa có trong lịch trình) để thay cho **${targetStopName}** (Ngày ${dayNumber})! 🦊🌿`;
+  } else {
+    headerText =
+      `Dạ **Pé Meko** đã chọn ra **${candidates.length} địa điểm thật trong hệ thống** (ưu tiên gần tuyến & chưa trùng lịch trình) để bạn đổi thay cho **${targetStopName}** (Ngày ${dayNumber})! 🦊🧭`;
+  }
+
+  return {
+    reply:
+      `${headerText}\n\n${listLines}\n\n` +
+      `👉 Bạn chỉ cần bấm nút **"Đổi sang điểm này"** ngay trên thẻ bên dưới (hoặc nhắn *"chọn số 1"* / *"đổi sang điểm ẩm thực"* để lọc lại) nhé!`,
+    action: {
+      type: 'CHOOSE_SWAP_CANDIDATE',
+      payload: {
+        label: `Chọn điểm thay cho "${targetStopName}" (Ngày ${dayNumber})`,
+        dayNumber,
+        targetStopId,
+        targetStopName,
+        swapSelection: {
+          dayNumber,
+          targetStopId,
+          targetStopName,
+          criteriaLabel,
+          notFoundQuery,
+          candidates,
+        },
+      },
+    },
+    suggestions: [
+      'Đổi sang điểm thiên nhiên',
+      'Đổi sang điểm ẩm thực',
+      'Đổi sang chùa / văn hóa',
+      'Tìm điểm gần tuyến nhất',
+    ],
+  };
+}
+
+function buildDirectSwapResponse(params: {
+  dayNumber: number;
+  targetStopId?: string;
+  targetStopName: string;
+  newDestination: CopilotDestinationInfo;
+}): CopilotResponse {
+  const { dayNumber, targetStopId, targetStopName, newDestination } = params;
+  return {
+    reply:
+      `Dạ **Pé Meko** đã xác nhận đổi **${targetStopName}** (Ngày ${dayNumber}) sang **${newDestination.name}** (${newDestination.area || 'Đồng Tháp'})! 🧭✨\n\n` +
+      `⚠️ **Kiểm tra tuyến đường thông minh**:\n` +
+      `Pé Meko đang tính khoảng cách thực tế giữa **${newDestination.name}** và các điểm lân cận trong **Ngày ${dayNumber}**. Nếu nằm xa tuyến hiện tại, hộp thoại sẽ mở ra để bạn chọn dời sang ngày kế tiếp hoặc vẫn giữ ở Ngày ${dayNumber}!`,
+    action: {
+      type: 'SWAP_ITINERARY_STOP',
+      payload: {
+        path: '/itinerary/create#plan',
+        label: `Đổi "${targetStopName}" → "${newDestination.name}" (Ngày ${dayNumber})`,
+        dayNumber,
+        targetStopId,
+        targetStopName,
+        newDestination,
+      },
+    },
+    suggestions: [
+      `Xem chi tiết ${newDestination.name}`,
+      'Lưu lịch trình này vào tài khoản',
+      'Lịch trình hiện tại của tôi gồm những điểm nào?',
+    ],
+  };
+}
+
+function resolveLastDiscussedDestination(
+  pageContext: PageContextSnapshot | undefined,
+  history: Array<{ role: 'user' | 'assistant'; content: string }>,
+  catalog: DestinationSummary[],
+): CopilotDestinationInfo | null {
+  if (pageContext?.lastDiscussedDestination?.slug) {
+    const db = catalog.find((c) => c.slug === pageContext.lastDiscussedDestination!.slug);
+    return db ? toCopilotDestinationInfo(db) : pageContext.lastDiscussedDestination;
+  }
+
+  // Infer from current destination detail URL (/destinations/:slug)
+  const pathMatch = pageContext?.currentPath?.match(/^\/destinations\/([^/?#]+)/i);
+  if (pathMatch?.[1]) {
+    const slug = decodeURIComponent(pathMatch[1]);
+    const db = catalog.find((c) => c.slug === slug);
+    if (db) return toCopilotDestinationInfo(db);
+  }
+
+  // Fallback: inspect latest messages in conversation history for an unambiguously mentioned destination
+  for (const h of [...history].reverse().slice(0, 6)) {
+    const textNorm = normalizeText(h.content);
+    const sorted = [...catalog].sort((a, b) => b.name.length - a.name.length);
+    for (const item of sorted) {
+      if (item.name.length >= 6 && textNorm.includes(normalizeText(item.name))) {
+        return toCopilotDestinationInfo(item);
+      }
+    }
+  }
+
+  return null;
+}
+
+function tryInstantPendingSwapIndexPick(
   message: string,
   catalog: DestinationSummary[],
-): {
-  isSwapIntent: boolean;
-  dayNumber: number;
-  targetStopName?: string;
-  newDestination?: CopilotDestinationInfo | null;
-} {
+  pageContext?: PageContextSnapshot,
+): CopilotResponse | null {
+  const pending = pageContext?.pendingSwap;
+  const candidates = pending?.candidates || [];
+  if (!pending?.targetStopName || candidates.length === 0) return null;
+
   const norm = normalizeText(message);
+  let pickedIndex: number | null = null;
+  const explicitNum = norm.match(
+    /^(?:chon|lay|doi\s+(?:sang|qua)|thay\s+(?:sang|qua)|chuyen\s+(?:sang|qua)|so|diem|cai|phuong\s+an)?\s*(?:so|thu)?\s*(\d+)(?:\s*(?:di|nhe|nha|luon|ne))?$/,
+  );
+  if (explicitNum?.[1]) {
+    pickedIndex = Number(explicitNum[1]) - 1;
+  } else if (/^(?:chon\s+|lay\s+|doi\s+(?:sang|qua)\s+)?(?:cai\s+|diem\s+)?dau\s*tien(?:\s*(?:di|nhe|nha|luon|ne))?$/.test(norm)) {
+    pickedIndex = 0;
+  } else if (/^(?:chon\s+|lay\s+|doi\s+(?:sang|qua)\s+)?(?:cai\s+|diem\s+)?cuoi(?:\s*cung)?(?:\s*(?:di|nhe|nha|luon|ne))?$/.test(norm)) {
+    pickedIndex = candidates.length - 1;
+  }
+
+  if (pickedIndex === null || pickedIndex < 0 || pickedIndex >= candidates.length) {
+    return null;
+  }
+
+  const picked = candidates[pickedIndex]!;
+  const verified = catalog.find((c) => c.slug === picked.slug);
+  const realDest = verified ? toCopilotDestinationInfo(verified) : picked;
+  return buildDirectSwapResponse({
+    dayNumber: pending.dayNumber,
+    targetStopId: pending.targetStopId,
+    targetStopName: pending.targetStopName,
+    newDestination: realDest,
+  });
+}
+
+/**
+ * Multi-turn follow-up handler when user already has an active swap candidate picker open (for offline/test deterministic mode).
+ */
+function handlePendingSwapFollowUp(
+  message: string,
+  catalog: DestinationSummary[],
+  pageContext?: PageContextSnapshot,
+): CopilotResponse | null {
+  const instantPick = tryInstantPendingSwapIndexPick(message, catalog, pageContext);
+  if (instantPick) return instantPick;
+
+  const pending = pageContext?.pendingSwap;
+  if (!pending || !pending.targetStopName) return null;
+
+  const norm = normalizeText(message);
+  const cleanedNorm = stripConversationalEdges(norm);
+  const candidates = pending.candidates || [];
+
+  // 1. User names one of the shown candidates directly (even abbreviated, e.g., "đổi qua biển tân thành đi" or "đây nè Biển Tân Thành (Gò Công Đông)")
+  if (candidates.length > 0 && cleanedNorm.length >= 3) {
+    const matchedShown = candidates.find((c) => {
+      const cn = normalizeText(c.name);
+      const cnBase = cn.replace(/\([^)]*\)/g, '').trim();
+      return (
+        norm.includes(cn) ||
+        (cnBase.length >= 5 && norm.includes(cnBase)) ||
+        (cleanedNorm.length >= 5 && (cn.includes(cleanedNorm) || cnBase.includes(cleanedNorm)))
+      );
+    });
+    if (matchedShown) {
+      const verified = catalog.find((c) => c.slug === matchedShown.slug);
+      return buildDirectSwapResponse({
+        dayNumber: pending.dayNumber,
+        targetStopId: pending.targetStopId,
+        targetStopName: pending.targetStopName,
+        newDestination: verified ? toCopilotDestinationInfo(verified) : matchedShown,
+      });
+    }
+  }
+
+  // 2. User directly names any real DB destination while pendingSwap picker is active (e.g., "đây nè Biển Tân Thành", "đổi qua Chùa Vĩnh Tràng đi")
+  const looksLikeOtherAction =
+    norm.includes('tao tai khoan') ||
+    norm.includes('dang ky') ||
+    norm.includes('dang nhap') ||
+    norm.includes('yeu thich') ||
+    norm.includes('luu lich trinh') ||
+    norm.includes('xoa diem') ||
+    norm.includes('bo diem') ||
+    norm.includes('bo dia diem');
+  if (!looksLikeOtherAction) {
+    const directReal = findDestinationByText(message, catalog);
+    if (directReal) {
+      return buildDirectSwapResponse({
+        dayNumber: pending.dayNumber,
+        targetStopId: pending.targetStopId,
+        targetStopName: pending.targetStopName,
+        newDestination: directReal,
+      });
+    }
+  }
+
+  // 3. User refines the swap filter without repeating the target stop:
+  // e.g., "đổi qua điểm thiên nhiên", "có điểm ẩm thực không", "tìm điểm gần hơn", "điểm ở Sa Đéc"
+  const isRefinementPhrase =
+    norm.startsWith('doi sang') ||
+    norm.startsWith('doi qua') ||
+    norm.startsWith('thay sang') ||
+    norm.startsWith('thay qua') ||
+    norm.startsWith('chuyen sang') ||
+    norm.startsWith('chuyen qua') ||
+    norm.startsWith('tim diem') ||
+    norm.startsWith('chon diem') ||
+    norm.startsWith('goi y diem') ||
+    norm.startsWith('co diem') ||
+    norm.includes('gan tuyen') ||
+    norm.includes('gan hon') ||
+    norm.includes('diem khac') ||
+    norm.includes('cho khac');
+
+  if (isRefinementPhrase) {
+    const criteria = extractSwapCriteria(message);
+    const resolved = resolveTargetStopInDraft(
+      pending.targetStopName,
+      pending.dayNumber,
+      pageContext?.draftItinerary,
+      catalog,
+    );
+    const { candidates: nextCandidates } = rankSwapCandidates(catalog, criteria, {
+      excludeNamesNorm: resolved?.existingStopNamesNorm ?? getAllExistingStopNamesNorm(pageContext?.draftItinerary),
+      targetStopName: pending.targetStopName,
+      refCoords: resolved?.refCoords,
+      limit: 6,
+    });
+    return buildChooseSwapCandidateResponse({
+      dayNumber: pending.dayNumber,
+      targetStopId: pending.targetStopId ?? resolved?.stopId,
+      targetStopName: pending.targetStopName,
+      criteriaLabel: criteria.criteriaLabel,
+      candidates: nextCandidates,
+    });
+  }
+
+  return null;
+}
+
+/**
+ * Matches a stop mentioned inside the user's draft itinerary from free-form text
+ * (handles cases where stop comes BEFORE "đổi", e.g., "tôi không muốn tham quan bảo tàng đổi qua thiên nhiên").
+ */
+function findMentionedStopInText(
+  text: string,
+  requestedDay: number | undefined,
+  draft?: DraftItinerarySnapshot | null,
+): { dayNumber: number; stopId?: string; stopName: string } | null {
+  if (!draft?.days?.length) return null;
+  const norm = normalizeText(text);
+  const stopWords = new Set(['khu', 'du', 'lich', 'diem', 'dia', 'tham', 'quan', 'ngay', 'toi', 'khong', 'muon', 'doi', 'qua', 'sang', 'voi', 'mot', 'cai', 'khac']);
+
+  const orderedDays = requestedDay
+    ? [...draft.days.filter((d) => d.day === requestedDay), ...draft.days.filter((d) => d.day !== requestedDay)]
+    : draft.days;
+
+  let best: { dayNumber: number; stopId?: string; stopName: string; score: number } | null = null;
+  for (const day of orderedDays) {
+    for (const stop of day.stops || []) {
+      const stopNorm = normalizeText(stop.name);
+      if (stopNorm.length >= 4 && norm.includes(stopNorm)) {
+        return { dayNumber: day.day, stopId: stop.stopId, stopName: stop.name };
+      }
+      const meaningfulTokens = stopNorm
+        .split(/\s+/)
+        .filter((t) => t.length >= 3 && !stopWords.has(t));
+      if (meaningfulTokens.length === 0) continue;
+
+      // Distinctive 2+ token phrases like "bao tang", "tra mat", "vinh trang", "lang hoa", "tram chim"
+      const matchedTokens = meaningfulTokens.filter((t) => norm.includes(t));
+      if (matchedTokens.length >= 2) {
+        const score = matchedTokens.length / meaningfulTokens.length + (requestedDay === day.day ? 0.2 : 0);
+        if (!best || score > best.score) {
+          best = { dayNumber: day.day, stopId: stop.stopId, stopName: stop.name, score };
+        }
+      }
+    }
+  }
+  return best ? { dayNumber: best.dayNumber, stopId: best.stopId, stopName: best.stopName } : null;
+}
+
+/**
+ * Ground-Truth Stop-Swap Intent Parser & Resolver for offline/test mode (NEVER fabricates fake destinations!).
+ */
+function handleSmartSwapIntent(
+  message: string,
+  history: Array<{ role: 'user' | 'assistant'; content: string }>,
+  catalog: DestinationSummary[],
+  pageContext?: PageContextSnapshot,
+): CopilotResponse | null {
+  const norm = normalizeText(message);
+
+  // Exclude profile/account edits like "đổi tên", "đổi mật khẩu"
+  if (norm.includes('doi ten') || norm.includes('doi mat khau')) {
+    return null;
+  }
+
   const hasSwapVerb =
     norm.includes('doi dia diem') ||
     norm.includes('thay dia diem') ||
     norm.includes('doi diem') ||
+    norm.includes('thay diem') ||
     norm.includes('thay the dia diem') ||
-    (norm.includes('doi ') && (norm.includes('lo trinh') || norm.includes('lich trinh') || norm.includes('ngay ')));
+    norm.includes('thay the diem') ||
+    norm.includes('doi qua') ||
+    norm.includes('doi sang') ||
+    norm.includes('doi no') ||
+    /\b(?:doi|thay(?:\s+the)?|chuyen)\b.+\b(?:sang|thanh|bang|qua|voi)\b/.test(norm) ||
+    /\b(?:doi|thay(?:\s+the)?|chuyen)\b.+\b(?:dia\s*diem|diem|cho|noi)\b/.test(norm) ||
+    ((norm.includes('doi ') || norm.includes('thay ')) &&
+      (norm.includes('lo trinh') ||
+        norm.includes('lich trinh') ||
+        norm.includes('ngay ') ||
+        norm.includes('diem khac') ||
+        norm.includes('cho khac') ||
+        norm.includes('noi khac')));
 
   if (!hasSwapVerb) {
-    return { isSwapIntent: false, dayNumber: 1 };
+    return null;
   }
 
   const dayMatch = message.match(/ng[àa]y\s*(\d+)/i);
-  const dayNumber = dayMatch?.[1] ? Math.max(1, Number(dayMatch[1])) : 1;
+  const requestedDay = dayMatch?.[1] ? Math.max(1, Number(dayMatch[1])) : undefined;
 
-  const swapRegex =
-    /(?:đ[ổo]i|thay(?:\s*th[ếe])?)\s*(?:đ[ịi]a\s*đi[ểe]m|đi[ểe]m)?\s+(.+?)\s+(?:trong\s+(?:l[ộo]\s*tr[ìi]nh|l[ịi]ch\s*tr[ìi]nh)(?:\s+ng[àa]y\s*\d+)?\s+)?(?:th[àa]nh|sang|b[ằa]ng|qua)\s+(?:tham\s*quan\s+|đi\s+|gh[ée]\s+)?(.+)$/i;
+  let rawTarget: string | undefined;
+  let rawNew: string | undefined;
 
-  const match = message.match(swapRegex);
-  if (match && match[1] && match[2]) {
-    const rawTarget = match[1]
-      .replace(/\s+trong\s+(?:l[ộo]\s*tr[ìi]nh|l[ịi]ch\s*tr[ìi]nh).*$/i, '')
-      .replace(/\s+[ởo]\s+ng[àa]y\s*\d+.*$/i, '')
+  // 0. Check anaphoric & inverted swap: "ừa dổi nó với địa điểm bảo tàng ở ngày 1 đi"
+  const anaphoraMatch = message.match(
+    /(?:^|\s)[đd][ổo]i\s+(?:n[oó]|đi[ểe]m\s+n[àa]y|ch[ỗo]\s+n[àa]y|c[áa]i\s+n[àa]y|đi[ểe]m\s+đ[oó]|ch[ỗo]\s+đ[oó]|đi[ểe]m\s+v[ừu]a\s+r[ồo]i)\s+(?:v[ớo]i|cho|thay\s+cho|th[ếe]\s+cho)\s+(.+)$/i,
+  );
+  if (anaphoraMatch?.[1]) {
+    const anaphoricDest = resolveLastDiscussedDestination(pageContext, history, catalog);
+    const cleanedTargetSide = anaphoraMatch[1]
+      .replace(/^(?:đ[ịi]a\s*đi[ểe]m|đi[ểe]m|ch[ỗo])\s+/i, '')
+      .replace(/\s+(?:trong|c[ủu]a)\s+(?:l[ộo]\s*tr[ìi]nh|l[ịi]ch\s*tr[ìi]nh).*$/i, '')
+      .replace(/\s+(?:ở|tại|thuộc)?\s*ng[àa]y\s*\d+.*$/i, '')
+      .replace(/\s+(?:đi|nh[ée]|nha|lu[ôo]n|ạ|n[èe])$/i, '')
       .trim();
-    const rawNew = match[2].replace(/[.?]+$/, '').trim();
-    const matchedNew = findDestinationByText(rawNew, catalog) || {
-      name: rawNew,
-      slug: normalizeText(rawNew).replace(/\s+/g, '-'),
-      area: 'Đồng Tháp',
-      summary: `Điểm tham quan ${rawNew}`,
-      coordinates: { lat: 10.4562, lng: 105.6324 },
-    };
+    const resolvedTarget = resolveTargetStopInDraft(
+      cleanedTargetSide,
+      requestedDay,
+      pageContext?.draftItinerary,
+      catalog,
+    );
+    if (anaphoricDest && resolvedTarget) {
+      return buildDirectSwapResponse({
+        dayNumber: resolvedTarget.dayNumber,
+        targetStopId: resolvedTarget.stopId,
+        targetStopName: resolvedTarget.stopName,
+        newDestination: anaphoricDest,
+      });
+    }
+    rawTarget = cleanedTargetSide;
+  }
+
+  // 1a. Check direct command without pre-verb target: e.g. "đổi qua biển tân thành đi" or "tôi không muốn tham quan bảo tàng đổi qua thiên nhiên"
+  if (!rawTarget) {
+    const preTargetDirectMatch = message.match(
+      /^(.*?)[đd][ổo]i\s+(?:qua|sang|th[àa]nh|b[ằa]ng)\s+(?:tham\s*quan\s+|đi\s+|gh[ée]\s+|m[ộo]t\s+|1\s+)?(.+)$/i,
+    );
+    if (preTargetDirectMatch && preTargetDirectMatch[2]) {
+      const beforeSwapClause = (preTargetDirectMatch[1] || '').trim();
+      const afterSwapClause = preTargetDirectMatch[2]
+        .replace(/[?!.]+$/, '')
+        .replace(/\s+(?:gi[úu]p\s+t[ôo]i|gi[úu]p\s+m[ìi]nh|nh[ée]|nha|đi|lu[ôo]n|v[ớo]i|ạ|n[èe])$/i, '')
+        .trim();
+
+      const mentionedStopBefore = findMentionedStopInText(
+        beforeSwapClause,
+        requestedDay,
+        pageContext?.draftItinerary,
+      );
+      if (mentionedStopBefore) {
+        rawTarget = mentionedStopBefore.stopName;
+        rawNew = afterSwapClause;
+      } else if (!beforeSwapClause || beforeSwapClause.length <= 12) {
+        // User wrote "đổi qua <X>" without repeating target (maybe target is in pendingSwap)
+        rawTarget = pageContext?.pendingSwap?.targetStopName;
+        rawNew = afterSwapClause;
+      }
+    }
+  }
+
+  // 1b. Natural benefactive pattern: "tôi không muốn đi Trà mật ong đổi cho tôi một địa điểm tham quan về thiên nhiên khác đi"
+  if (!rawTarget) {
+    const preTargetBenefactiveMatch = message.match(
+      /^(.+?)\s+(?:[đd][ổo]i|thay(?:\s*th[ếe])?)\s+(?:(?:cho\s+(?:t[ôo]i|m[ìi]nh|em|anh|ch[ịi])|gi[úu]p\s+(?:t[ôo]i|m[ìi]nh|em)|gi[ùu]m)\s+)(?:(?:qua|sang|th[àa]nh|b[ằa]ng)\s+)?(.+)$/i,
+    );
+    if (preTargetBenefactiveMatch?.[1] && preTargetBenefactiveMatch[2]) {
+      const mentionedStopBefore = findMentionedStopInText(
+        preTargetBenefactiveMatch[1],
+        requestedDay,
+        pageContext?.draftItinerary,
+      );
+      if (mentionedStopBefore) {
+        rawTarget = mentionedStopBefore.stopName;
+        rawNew = preTargetBenefactiveMatch[2]
+          .replace(/[?!.]+$/, '')
+          .replace(/\s+(?:gi[úu]p\s+t[ôo]i|gi[úu]p\s+m[ìi]nh|nh[ée]|nha|đi|lu[ôo]n|v[ớo]i|ạ|n[èe])$/i, '')
+          .trim();
+      }
+    }
+  }
+
+  // 2. Classic inline A -> B syntax: "đổi X sang/qua/bằng/thành Y"
+  // NOTE: avoid splitting inside place names like "Biển Tân Thành" by only splitting on "thành" when preceded by X of length >= 2 and X doesn't start with qua/sang/thanh/bang
+  if (!rawTarget && !rawNew) {
+    const swapRegex =
+      /(?:[đd][ổo]i|thay(?:\s*th[ếe])?)\s*(?:đ[ịi]a\s*đi[ểe]m|đi[ểe]m|ch[ỗo]|n[ơo]i)?\s+(?!(?:qua|sang|th[àa]nh|b[ằa]ng)\b)(.+?)\s+(?:trong\s+(?:l[ộo]\s*tr[ìi]nh|l[ịi]ch\s*tr[ìi]nh)(?:\s+ng[àa]y\s*\d+)?\s+)?(?:sang|qua|b[ằa]ng|th[àa]nh)\s+(?:tham\s*quan\s+|đi\s+|gh[ée]\s+|m[ộo]t\s+|1\s+)?(.+)$/i;
+
+    const match = message.match(swapRegex);
+    if (match && match[1] && match[2]) {
+      rawTarget = match[1]
+        .replace(/^(?:đ[ịi]a\s*đi[ểe]m|đi[ểe]m|ch[ỗo])\s+/i, '')
+        .replace(/\s+(?:trong|c[ủu]a)\s+(?:l[ộo]\s*tr[ìi]nh|l[ịi]ch\s*tr[ìi]nh).*$/i, '')
+        .replace(/\s+[ởo]?\s*ng[àa]y\s*\d+.*$/i, '')
+        .replace(/["'“”]/g, '')
+        .trim();
+      rawNew = match[2]
+        .replace(/[?!.]+$/, '')
+        .replace(/\s+(?:gi[úu]p\s+t[ôo]i|gi[úu]p\s+m[ìi]nh|nh[ée]|nha|đi|lu[ôo]n|v[ớo]i|ạ|n[èe])$/i, '')
+        .trim();
+    } else {
+      const targetOnlyMatch = message.match(
+        /(?:[đd][ổo]i|thay(?:\s*th[ếe])?)\s+(?:đ[ịi]a\s*đi[ểe]m|đi[ểe]m)\s+(.+?)(?:\s+(?:trong|ở)\s+(?:l[ộo]\s*tr[ìi]nh|l[ịi]ch\s*tr[ìi]nh|ng[àa]y\s*\d+)|\s+(?:đi|nh[ée]|nha|gi[úu]p)|$)/i,
+      );
+      if (targetOnlyMatch?.[1]) {
+        const candidateTarget = targetOnlyMatch[1].trim();
+        const candNorm = normalizeText(candidateTarget);
+        if (candNorm.length >= 2 && !GENERIC_CATEGORY_NOUNS.has(candNorm) && !VAGUE_PLACEHOLDER_PATTERN.test(candNorm)) {
+          rawTarget = candidateTarget;
+        }
+      }
+    }
+  }
+
+  // Last try: scan full message for a draft stop if target is still unset
+  if (!rawTarget) {
+    const inferredStop = findMentionedStopInText(message, requestedDay, pageContext?.draftItinerary);
+    if (inferredStop) {
+      rawTarget = inferredStop.stopName;
+    }
+  }
+
+  // Filter out generic non-targets like "1 địa điểm", "một điểm", "địa điểm trong lịch trình"
+  if (rawTarget) {
+    const rtNorm = normalizeText(rawTarget);
+    if (
+      /^(?:1|mot|cac|nhung)?\s*(?:dia\s*diem|diem|cho|noi)?(?:\s*(?:trong|cua|o))?$/.test(rtNorm) ||
+      rtNorm === 'trong lich trinh' ||
+      rtNorm === 'trong lo trinh'
+    ) {
+      rawTarget = undefined;
+    }
+  }
+
+  // Case 1: User didn't specify which stop to replace -> show actual stops from their draft itinerary!
+  if (!rawTarget) {
+    const draft = pageContext?.draftItinerary;
+    const realStops =
+      draft?.days?.flatMap((d) =>
+        (d.stops || []).map((s) => ({ day: d.day, name: s.name, start: s.start })),
+      ) || [];
+
+    if (realStops.length > 0) {
+      const stopListText = realStops
+        .slice(0, 8)
+        .map((s, i) => `${i + 1}. **${s.name}** *(Ngày ${s.day}${s.start ? ` · ${s.start}` : ''})*`)
+        .join('\n');
+
+      return {
+        reply:
+          `Dạ **Pé Meko** thấy lịch trình hiện tại của bạn đang có các điểm dừng sau:\n\n${stopListText}\n\n` +
+          `Bạn muốn **đổi điểm nào** ạ? Bấm chọn nhanh bên dưới hoặc nhắn *"Đổi [tên điểm] sang điểm thiên nhiên / điểm khác"* để Pé Meko xổ danh sách gợi ý thật cho bạn chọn nhé! 🦊🧭`,
+        action: {
+          type: 'ASK_CLARIFICATION',
+          payload: {
+            missingFields: ['targetStopName'],
+            contextType: 'swap_stop',
+          },
+        },
+        suggestions: realStops
+          .slice(0, 4)
+          .map((s) => `Đổi ${s.name} (Ngày ${s.day}) sang điểm khác`),
+      };
+    }
 
     return {
-      isSwapIntent: true,
-      dayNumber,
-      targetStopName: rawTarget,
-      newDestination: matchedNew,
+      reply:
+        `Dạ **Pé Meko** sẵn sàng đổi địa điểm trong lộ trình giúp bạn ngay! 🦊\n\n` +
+        `Bạn cho Pé Meko biết **tên điểm muốn đổi** (và tùy chọn **loại địa điểm mới**, ví dụ *thiên nhiên*, *ẩm thực*, *chùa* hoặc *tên điểm cụ thể*) nhé!`,
+      action: {
+        type: 'ASK_CLARIFICATION',
+        payload: {
+          missingFields: ['targetStopName'],
+          contextType: 'swap_stop',
+        },
+      },
+      suggestions: [
+        'Lập lịch trình đi 2 ngày cho 2 người với chi phí 2 tr',
+        'Đổi điểm Trà mật ong Kỳ Lân sang điểm thiên nhiên',
+        'Đổi điểm Trà mật ong Kỳ Lân sang điểm khác',
+      ],
     };
   }
 
-  return { isSwapIntent: true, dayNumber };
+  // Resolve target stop accurately against live draftItinerary
+  const resolvedStop = resolveTargetStopInDraft(rawTarget, requestedDay, pageContext?.draftItinerary, catalog);
+  const finalDay = resolvedStop?.dayNumber ?? requestedDay ?? 1;
+  const finalStopName = resolvedStop?.stopName ?? rawTarget;
+  const finalStopId = resolvedStop?.stopId;
+  const excludeNamesNorm =
+    resolvedStop?.existingStopNamesNorm ?? getAllExistingStopNamesNorm(pageContext?.draftItinerary);
+
+  // Case 2: Check if user named a SPECIFIC REAL destination in the database
+  if (rawNew) {
+    const exactRealDest = findDestinationByText(rawNew, catalog);
+    if (exactRealDest) {
+      return buildDirectSwapResponse({
+        dayNumber: finalDay,
+        targetStopId: finalStopId,
+        targetStopName: finalStopName,
+        newDestination: exactRealDest,
+      });
+    }
+  }
+
+  // Case 3 & 4: User asked for "điểm khác", criteria ("thiên nhiên", "ẩm thực", "ở Sa Đéc"),
+  // OR named a place that does NOT exist in the database -> NEVER fabricate a fake place!
+  let criteria = extractSwapCriteria(rawNew || '');
+  const normNew = rawNew ? normalizeText(rawNew) : '';
+  const isDemonstrativeNew = /^(?:do|day|nay|cho\s+do|noi\s+do|diem\s+do|cho\s+nay|diem\s+nay|noi\s+nay)$/.test(
+    normNew,
+  );
+  if (!criteria.hasExplicitCriteria && (!normNew || isDemonstrativeNew)) {
+    const beforeSwap = message.split(/(?:[đd][ổo]i|thay(?:\s*th[ếe])?)\b/i)[0] || '';
+    if (beforeSwap.trim().length >= 4) {
+      criteria = extractSwapCriteria(beforeSwap);
+    }
+  }
+
+  const isVagueOrGeneric =
+    !normNew ||
+    isDemonstrativeNew ||
+    GENERIC_CATEGORY_NOUNS.has(normNew) ||
+    VAGUE_PLACEHOLDER_PATTERN.test(normNew) ||
+    criteria.hasExplicitCriteria;
+
+  const { candidates } = rankSwapCandidates(catalog, criteria, {
+    excludeNamesNorm,
+    targetStopName: finalStopName,
+    refCoords: resolvedStop?.refCoords,
+    limit: 6,
+  });
+
+  if (candidates.length === 0) {
+    return {
+      reply:
+        `Dạ hiện tại Pé Meko chưa tìm thấy địa điểm thay thế phù hợp trong cơ sở dữ liệu. Bạn thử mở trang **Khám phá điểm đến** để xem toàn bộ điểm hiện có nhé! 🦊`,
+      action: {
+        type: 'OPEN_PAGE',
+        payload: { path: '/destinations', label: 'Khám phá địa điểm' },
+      },
+    };
+  }
+
+  const sanitizedNotFound =
+    !isVagueOrGeneric && rawNew
+      ? sanitizeNotFoundQuery(rawNew, {
+          targetStopName: finalStopName,
+          rawTarget,
+          existingNamesNorm: excludeNamesNorm,
+        })
+      : undefined;
+
+  return buildChooseSwapCandidateResponse({
+    dayNumber: finalDay,
+    targetStopId: finalStopId,
+    targetStopName: finalStopName,
+    criteriaLabel: criteria.criteriaLabel,
+    notFoundQuery: sanitizedNotFound,
+    candidates,
+  });
+}
+
+/**
+ * Remove a stop cleanly from the active draft itinerary ("bỏ điểm X khỏi lịch trình").
+ */
+function handleRemoveStopIntent(
+  message: string,
+  pageContext?: PageContextSnapshot,
+): CopilotResponse | null {
+  const norm = normalizeText(message);
+  if (norm.includes('yeu thich')) return null;
+
+  const isRemoveTrigger =
+    (norm.includes('xoa diem') ||
+      norm.includes('bo diem') ||
+      norm.includes('bo dia diem') ||
+      norm.includes('xoa dia diem') ||
+      norm.includes('cat bo') ||
+      norm.includes('bo khoi lich trinh') ||
+      norm.includes('xoa khoi lich trinh')) &&
+    (norm.includes('lich trinh') || norm.includes('lo trinh') || norm.includes('ngay ') || Boolean(pageContext?.hasDraftItinerary));
+
+  if (!isRemoveTrigger) return null;
+
+  const dayMatch = message.match(/ng[àa]y\s*(\d+)/i);
+  const requestedDay = dayMatch?.[1] ? Math.max(1, Number(dayMatch[1])) : undefined;
+
+  const targetMatch = message.match(
+    /(?:x[óo]a|b[ỏo]|c[ắa]t\s*b[ỏo])\s+(?:đ[ịi]a\s*đi[ểe]m|đi[ểe]m)?\s*(.+?)(?:\s+(?:kh[ỏo]i|trong)\s+(?:l[ộo]\s*tr[ìi]nh|l[ịi]ch\s*tr[ìi]nh)|\s+[ởo]?\s*ng[àa]y\s*\d+|\s+(?:đi|nh[ée]|gi[úu]p)|$)/i,
+  );
+  const rawTarget = targetMatch?.[1]?.trim();
+  const resolved = resolveTargetStopInDraft(rawTarget, requestedDay, pageContext?.draftItinerary);
+  if (!resolved) return null;
+
+  return {
+    reply: `Dạ **Pé Meko** đang gỡ điểm **${resolved.stopName}** khỏi **Ngày ${resolved.dayNumber}** trong lịch trình của bạn ngay đây ạ! 🦊✂️`,
+    action: {
+      type: 'REMOVE_ITINERARY_STOP',
+      payload: {
+        path: '/itinerary/create#plan',
+        label: `Bỏ "${resolved.stopName}" (Ngày ${resolved.dayNumber})`,
+        dayNumber: resolved.dayNumber,
+        targetStopId: resolved.stopId,
+        targetStopName: resolved.stopName,
+      },
+    },
+    suggestions: ['Lịch trình hiện tại của tôi gồm những điểm nào?', 'Lưu lịch trình này vào tài khoản'],
+  };
+}
+
+function buildItinerarySummaryResponse(
+  pageContext?: PageContextSnapshot,
+  requestedDay?: number,
+): CopilotResponse {
+  const draft = pageContext?.draftItinerary;
+  if (!draft || !draft.days?.length) {
+    return {
+      reply:
+        `Hiện tại bạn chưa có bản nháp lịch trình nào trên máy ạ! 🦊\n` +
+        `Bạn chỉ cần nhắn số ngày, số người và ngân sách (ví dụ: *"Lập lịch trình 2 ngày cho 2 người chi phí 2 triệu"*) để **Pé Meko** lập ngay giúp bạn nhé!`,
+      suggestions: ['Lập lịch trình đi 2 ngày cho 2 người với chi phí 2 tr'],
+    };
+  }
+
+  const daysToShow = requestedDay ? draft.days.filter((d) => d.day === requestedDay) : draft.days;
+  const targetDays = daysToShow.length > 0 ? daysToShow : draft.days;
+
+  const summaryBlocks = targetDays.map((d) => {
+    const lines = d.stops.map(
+      (s, idx) =>
+        `  ${idx + 1}. **${s.name}**${s.start && s.end ? ` *(${s.start} – ${s.end})*` : ''}`,
+    );
+    return `📅 **Ngày ${d.day}** (${d.stops.length} điểm):\n${lines.join('\n')}`;
+  });
+
+  const firstStop = targetDays[0]?.stops[0];
+  return {
+    reply:
+      `Dạ đây là lịch trình hiện tại của bạn${draft.title ? ` (**${draft.title}**)` : ''}: 🦊🗺️\n\n` +
+      `${summaryBlocks.join('\n\n')}\n\n` +
+      `Bạn muốn **đổi điểm nào** (theo thể loại thiên nhiên, ẩm thực, chùa hay gần tuyến), **thêm điểm** hay **bỏ điểm nào** thì nhắn Pé Meko xử lý ngay nhé!`,
+    suggestions: firstStop
+      ? [
+          `Đổi ${firstStop.name} sang điểm thiên nhiên`,
+          `Đổi ${firstStop.name} sang điểm khác`,
+          'Lưu lịch trình này vào tài khoản',
+        ]
+      : ['Lưu lịch trình này vào tài khoản'],
+  };
+}
+
+/**
+ * Inspects and summarizes the user's active draft itinerary when asked.
+ */
+function handleItineraryInspectionIntent(
+  message: string,
+  pageContext?: PageContextSnapshot,
+): CopilotResponse | null {
+  const norm = normalizeText(message);
+  const asksCurrentPlan =
+    norm.includes('lich trinh hien tai') ||
+    (norm.includes('lich trinh cua toi') &&
+      (norm.includes('nhung diem nao') || norm.includes('di dau') || norm.includes('co gi'))) ||
+    ((norm.includes('ngay 1') || norm.includes('ngay 2') || norm.includes('ngay 3') || norm.includes('hom nay')) &&
+      (norm.includes('di dau') || norm.includes('nhung diem nao') || norm.includes('co nhung diem')));
+
+  if (!asksCurrentPlan) return null;
+
+  const dayMatch = message.match(/ng[àa]y\s*(\d+)/i);
+  const requestedDay = dayMatch?.[1] ? Number(dayMatch[1]) : undefined;
+  return buildItinerarySummaryResponse(pageContext, requestedDay);
 }
 
 /**
@@ -865,53 +2528,26 @@ function handleSmartIntent(
   }
 
   // ============================================================================
-  // 1. STOP SWAP IN ITINERARY (Requirement #2)
+  // 1. STOP SWAP, MULTI-TURN PICKER, REMOVE STOP & ITINERARY INSPECTION
   // ============================================================================
-  const swapParsed = parseStopSwapIntent(message, catalog);
-  if (swapParsed.isSwapIntent) {
-    if (!swapParsed.targetStopName || !swapParsed.newDestination) {
-      return {
-        reply:
-          `Dạ **Pé Meko** sẵn sàng đổi địa điểm trong lộ trình giúp bạn ngay! 🦊\n\n` +
-          `Tuy nhiên thông tin còn thiếu một chút, bạn cho Pé Meko biết rõ:\n` +
-          `• **Địa điểm hiện tại muốn đổi** (ví dụ: *Trà mật ong Kỳ Lân*)\n` +
-          `• **Thuộc Ngày mấy** (ví dụ: *Ngày 1*)\n` +
-          `• **Địa điểm mới muốn thay vào** (ví dụ: *Bảo tàng Tổng hợp Đồng Tháp*)\n\n` +
-          `Bạn có thể bấm chọn mẫu câu bên dưới hoặc gõ lại cho Pé Meko nhé!`,
-        action: {
-          type: 'ASK_CLARIFICATION',
-          payload: {
-            missingFields: ['targetStopName', 'newDestination'],
-            contextType: 'swap_stop',
-          },
-        },
-        suggestions: [
-          'Đổi địa điểm Trà mật ong Kỳ Lân trong lộ trình ngày 1 thành tham quan Bảo tàng Tổng hợp Đồng Tháp',
-          'Đổi địa điểm Trại rắn Đồng Tâm trong lộ trình ngày 1 thành Làng hoa Sa Đéc',
-        ],
-      };
-    }
+  const pendingSwapFollowUp = handlePendingSwapFollowUp(message, catalog, pageContext);
+  if (pendingSwapFollowUp) {
+    return pendingSwapFollowUp;
+  }
 
-    const { dayNumber, targetStopName, newDestination } = swapParsed;
-    return {
-      reply:
-        `Dạ **Pé Meko** đã nhận lệnh đổi địa điểm **${targetStopName}** (Ngày ${dayNumber}) sang **${newDestination.name}** (${newDestination.area})! 🧭\n\n` +
-        `⚠️ **Phân tích lộ trình từ Pé Meko**:\n` +
-        `Pé Meko đang kiểm tra khoảng cách di chuyển thực tế giữa **${newDestination.name}** và các điểm trong **Ngày ${dayNumber}**. Nếu địa điểm mới nằm xa tuyến hiện tại làm tăng thời gian di chuyển, Pé Meko sẽ bật **Hộp thoại Cảnh báo Lộ trình** trên màn hình để bạn chọn:\n` +
-        `1️⃣ Dời sang **Ngày tiếp theo** cho thuận tiện đường đi\n` +
-        `2️⃣ Hoặc **Vẫn xác nhận đổi ngay vào Ngày ${dayNumber}** theo ý bạn!`,
-      action: {
-        type: 'SWAP_ITINERARY_STOP',
-        payload: {
-          path: '/itinerary/create#plan',
-          label: `Đổi "${targetStopName}" → "${newDestination.name}" (Ngày ${dayNumber})`,
-          dayNumber,
-          targetStopName,
-          newDestination,
-        },
-      },
-      suggestions: ['Xem lộ trình Ngày 1', 'Mở Bảo tàng Tổng hợp Đồng Tháp', 'Lưu lịch trình này'],
-    };
+  const smartSwapResult = handleSmartSwapIntent(message, history, catalog, pageContext);
+  if (smartSwapResult) {
+    return smartSwapResult;
+  }
+
+  const removeStopResult = handleRemoveStopIntent(message, pageContext);
+  if (removeStopResult) {
+    return removeStopResult;
+  }
+
+  const itineraryInspectionResult = handleItineraryInspectionIntent(message, pageContext);
+  if (itineraryInspectionResult) {
+    return itineraryInspectionResult;
   }
 
   // ============================================================================
@@ -1537,7 +3173,13 @@ function handleSmartIntent(
   // ============================================================================
   // 8. SPECIFIC DESTINATION NAVIGATION & Q&A (Opening Hours, Ticket Price, Address)
   // ============================================================================
-  const matchedDest = findDestinationByText(message, catalog);
+  // Avoid hijacking nuanced comparison or multi-criteria advisory questions so Gemini LLM can reason deeply!
+  const isComparisonOrAdvisory =
+    /\b(?:hay|hoac|so\s+sanh|khac\s+nhau|nen\s+chon|nen\s+di|co\s+nen|co\s+dep\s+khong|review|danh\s+gia|kinh\s+nghiem|tu\s+van|mat\s+bao\s+lau|cach\s+bao\s+xa|bao\s+nhieu\s+km)\b/.test(
+      normalized,
+    );
+
+  const matchedDest = !isComparisonOrAdvisory ? findDestinationByText(message, catalog) : null;
   if (matchedDest) {
     const fullItem = catalog.find((c) => c.slug === matchedDest.slug);
     const extraDetails: string[] = [];
@@ -1632,6 +3274,7 @@ function searchAndFilterDestinations(
   // 2. Topic / Keyword Groups (Pagodas/Temples, Museums, Historical Sites, Ancient Houses, Flower Villages, Markets, Gardens, Lotus, etc.)
   const topicRules: Array<{
     triggers: string[];
+    rawTriggerCheck?: (rawLower: string) => boolean;
     requireListOrExact?: boolean;
     title: string;
     filterPath: string;
@@ -1651,20 +3294,21 @@ function searchAndFilterDestinations(
         'co tu',
         'thien vien',
         'tam linh',
-        'chua',
       ],
+      rawTriggerCheck: (rawLower) => hasAccentedWord(rawLower, 'chùa'),
       title: 'ngôi chùa & điểm du lịch tâm linh',
       filterPath: '/destinations?q=chùa',
       filterLabel: 'Danh sách các chùa',
       matcher: (d) => {
+        const nameLower = d.name.toLowerCase();
         const nameNorm = normalizeText(d.name);
         const sumNorm = normalizeText(d.summary);
         return (
-          nameNorm.includes('chua') ||
+          hasAccentedWord(nameLower, 'chùa') ||
           nameNorm.includes('co tu') ||
           nameNorm.includes('thien vien') ||
-          nameNorm.includes('mieu') ||
-          nameNorm.includes('dinh ') ||
+          hasAccentedWord(nameLower, 'miếu') ||
+          hasAccentedWord(nameLower, 'đình') ||
           nameNorm.includes('kien an cung') ||
           sumNorm.includes('ngoi chua') ||
           sumNorm.includes('chua co')
@@ -1741,7 +3385,10 @@ function searchAndFilterDestinations(
       title: 'khu chợ & phố đêm ẩm thực',
       filterPath: '/destinations?q=chợ',
       filterLabel: 'Chợ & Phố ẩm thực',
-      matcher: (d) => normalizeText(d.name).includes('cho ') || normalizeText(d.summary).includes('cho dem'),
+      matcher: (d) =>
+        hasAccentedWord(d.name.toLowerCase(), 'chợ') ||
+        normalizeText(d.name).includes('cho dem') ||
+        normalizeText(d.summary).includes('cho dem'),
     },
     {
       triggers: [
@@ -1862,12 +3509,14 @@ function searchAndFilterDestinations(
     },
   ];
 
+  const rawLowerMsg = rawMessage.toLowerCase();
   for (const rule of topicRules) {
-    const matchedTrigger = rule.triggers.some((t) =>
-      rule.requireListOrExact
-        ? normalized === t || (isExplicitListOrSearch && normalized.includes(t))
-        : normalized === t || normalized.includes(t),
-    );
+    const matchedTrigger =
+      rule.triggers.some((t) =>
+        rule.requireListOrExact
+          ? normalized === t || (isExplicitListOrSearch && normalized.includes(t))
+          : normalized === t || normalized.includes(t),
+      ) || Boolean(rule.rawTriggerCheck && rule.rawTriggerCheck(rawLowerMsg));
     if (matchedTrigger) {
       // Do not intercept if the user typed a specific full destination name (e.g. "Mở Chùa Phước Kiển")
       // unless they explicitly asked for a list ("danh sách", "các", "tìm")
@@ -2105,18 +3754,94 @@ function buildSmartLocalFallback(
   };
 }
 
+function buildContextualSuggestions(
+  action: CopilotAction | undefined,
+  pageContext: PageContextSnapshot | undefined,
+  matchedDestinations: DestinationSummary[],
+): string[] {
+  if (action?.type === 'CHOOSE_SWAP_CANDIDATE') {
+    return [
+      'Đổi sang điểm thiên nhiên',
+      'Đổi sang điểm ẩm thực',
+      'Đổi sang chùa / văn hóa',
+      'Tìm điểm gần tuyến nhất',
+    ];
+  }
+  if (action?.type === 'SWAP_ITINERARY_STOP' || action?.type === 'ADD_ITINERARY_STOP') {
+    const destName = action.payload.newDestination?.name;
+    return [
+      destName ? `Xem chi tiết ${destName}` : 'Xem lịch trình hiện tại',
+      'Lịch trình hiện tại của tôi gồm những điểm nào?',
+      'Lưu lịch trình này vào tài khoản',
+    ];
+  }
+  if (action?.type === 'NAVIGATE' && matchedDestinations[0]) {
+    const d = matchedDestinations[0];
+    const hasDraft = Boolean(pageContext?.draftItinerary?.days?.length);
+    const hasPending = Boolean(pageContext?.pendingSwap?.targetStopName);
+    if (hasPending) {
+      return [
+        `Đổi ${pageContext!.pendingSwap!.targetStopName} sang ${d.name}`,
+        `Lưu yêu thích ${d.name}`,
+        'Mở lại trang Lập lịch trình',
+      ];
+    }
+    if (hasDraft) {
+      const firstStop = pageContext?.draftItinerary?.days?.[0]?.stops?.[0];
+      return [
+        firstStop ? `Đổi ${d.name} với ${firstStop.name} ngày 1` : `Thêm ${d.name} vào lịch trình ngày 1`,
+        `Lưu yêu thích ${d.name}`,
+        'Lịch trình hiện tại của tôi gồm những điểm nào?',
+      ];
+    }
+    return [
+      `Lưu yêu thích ${d.name}`,
+      'Lập lịch trình đi 2 ngày cho 2 người với chi phí 2 tr',
+      'Danh sách các chùa',
+    ];
+  }
+  if (pageContext?.draftItinerary?.days?.length) {
+    return [
+      'Lịch trình hiện tại của tôi gồm những điểm nào?',
+      'Lưu lịch trình này vào tài khoản',
+      'Kiểm tra cảnh báo thời tiết & an toàn lịch trình',
+    ];
+  }
+  return [
+    'Danh sách các chùa',
+    'Lập lịch trình đi 2 ngày cho 2 người với chi phí 2 tr',
+    'Dự án này là gì và có những tính năng nào?',
+  ];
+}
+
+function runOfflineDeterministicFallback(
+  message: string,
+  history: Array<{ role: 'user' | 'assistant'; content: string }>,
+  catalog: DestinationSummary[],
+  pageContext?: PageContextSnapshot,
+): CopilotResponse {
+  const smartResult = handleSmartIntent(message, history, catalog, pageContext);
+  if (smartResult) {
+    return smartResult;
+  }
+  return buildSmartLocalFallback(message, catalog);
+}
+
 /**
- * Main Copilot Engine ("Pé Meko"):
- * 1. Security Guardrail Check (RBAC + Secret Exfiltration Prevention)
- * 2. High-precision Deterministic System, Search & Slot-Filling Engine
- * 3. Gemini LLM Function Calling with Live DOM Introspection (for dynamic / future UI features)
+ * Main Copilot Engine ("Pé Meko Brain 3.0" — AI-First Agentic Architecture):
+ * - Tier 1: Hard Security & RBAC Guardrails (always first, non-bypassable)
+ * - Tier 1.5: Instant deterministic index selection ("chọn số 2", "cái đầu tiên") when Swap Picker is open
+ * - Tier 2: Gemini 3.5 Flash Lite AI-First NLU + Function Calling with 12-turn memory, live draft itinerary,
+ *           pendingSwap, lastDiscussedDestination & full ground-truth catalog
+ * - Tier 3: Deterministic Ground-Truth Tool Executor (strictly validates DB slugs/stops, never hallucinates)
+ * - Tier 4: Upgraded Deterministic Fallback (for offline mode, Gemini outage, or NODE_ENV === 'test')
  */
 export async function processCopilotMessage(
   message: string,
   history: Array<{ role: 'user' | 'assistant'; content: string }> = [],
   pageContext?: PageContextSnapshot,
 ): Promise<CopilotResponse> {
-  // Step 1: Enforce Security Guardrails FIRST!
+  // Tier 1: Hard Security Guardrails FIRST!
   const guardrailBlock = evaluateSecurityGuardrails(message, pageContext);
   if (guardrailBlock) {
     return guardrailBlock;
@@ -2124,23 +3849,53 @@ export async function processCopilotMessage(
 
   const catalog = await getDestinationsCatalog();
 
-  // Step 2: Check deterministic system, catalog search & multi-turn slot-filling engine
-  const smartResult = handleSmartIntent(message, history, catalog, pageContext);
-  if (smartResult) {
-    return smartResult;
+  // Tier 1.5: Instant zero-latency index pick when user clicks/types "số 2" / "chọn 1" / "đầu tiên"
+  const instantPick = tryInstantPendingSwapIndexPick(message, catalog, pageContext);
+  if (instantPick) {
+    return instantPick;
   }
 
+  // Fast deterministic path for automated tests (Vitest) or when no Gemini API key is configured
   const apiKey = resolveGeminiApiKey();
-  if (!apiKey) {
-    return buildSmartLocalFallback(message, catalog);
+  const isTestEnv = process.env.NODE_ENV === 'test';
+  if (!apiKey || isTestEnv) {
+    return runOfflineDeterministicFallback(message, history, catalog, pageContext);
   }
 
   try {
     const ai = new GoogleGenAI({ apiKey });
 
+    const lastDiscussed = resolveLastDiscussedDestination(pageContext, history, catalog);
+
     const catalogPrompt = catalog
-      .map((d) => `- ${d.name} (slug: "${d.slug}", khu vực: "${d.area}", loại: "${d.category}")`)
+      .map(
+        (d) =>
+          `- ${d.name} (slug: "${d.slug}", khu vực: "${d.area}", loại: "${d.category}"/${formatCategoryLabel(d.category)}${d.openingHours ? `, giờ: "${d.openingHours}"` : ''}${d.referencePrice ? `, giá: "${d.referencePrice}"` : ''})`,
+      )
       .join('\n');
+
+    const draftItineraryPrompt =
+      pageContext?.draftItinerary?.days && pageContext.draftItinerary.days.length > 0
+        ? pageContext.draftItinerary.days
+            .map((d) => {
+              const stopsText = d.stops
+                .map(
+                  (s, idx) =>
+                    `    ${idx + 1}. "${s.name}"${s.start && s.end ? ` (${s.start}-${s.end})` : ''}${s.stopId ? ` [stopId=${s.stopId}]` : ''}`,
+                )
+                .join('\n');
+              return `  Ngày ${d.day}${d.date ? ` (${d.date})` : ''}:\n${stopsText}`;
+            })
+            .join('\n')
+        : '  (Chưa có bản nháp lịch trình)';
+
+    const pendingSwapPrompt = pageContext?.pendingSwap
+      ? `ĐANG MỞ BỘ CHỌN ĐỔI ĐIỂM cho điểm mục tiêu "${pageContext.pendingSwap.targetStopName}" (Ngày ${pageContext.pendingSwap.dayNumber}${pageContext.pendingSwap.targetStopId ? `, stopId=${pageContext.pendingSwap.targetStopId}` : ''}); danh sách gợi ý đang hiển thị: ${(pageContext.pendingSwap.candidates || []).map((c, i) => `${i + 1}.${c.name} [slug=${c.slug}]`).join('; ')}`
+      : 'Không có';
+
+    const lastDiscussedPrompt = lastDiscussed
+      ? `"${lastDiscussed.name}" (slug: "${lastDiscussed.slug}", khu vực: "${lastDiscussed.area || 'Đồng Tháp'}")`
+      : 'Chưa xác định';
 
     const domControlsPrompt =
       pageContext?.controls && pageContext.controls.length > 0
@@ -2156,47 +3911,48 @@ export async function processCopilotMessage(
       ? `Đã đăng nhập: Tên hiển thị="${pageContext.currentUser.displayName}", Email="${pageContext.currentUser.email}", Quyền="${pageContext.currentUser.role}"`
       : 'Chưa đăng nhập (Khách)';
 
-    const systemInstruction = `Bạn là "Pé Meko" 🦊 - Siêu Trợ lý AI đồng hành & điều khiển toàn diện nền tảng Du lịch Thông minh Đồng Tháp (dongthapgo.com).
-Bạn sở hữu hai năng lực cốt lõi:
-1. HƯỚNG DẪN VIÊN & BOT TRÒ CHUYỆN THÔNG THÁI: Trả lời sâu sắc, am hiểu mọi câu hỏi về dự án, cách sử dụng các tính năng website, văn hóa, danh lam thắng cảnh, ẩm thực và kinh nghiệm du lịch Đồng Tháp & miền Tây. Khi người dùng hỏi danh sách địa điểm (ví dụ các chùa, khu sinh thái, quán ăn), hãy liệt kê cụ thể tên các địa điểm từ DANH SÁCH ĐỊA ĐIỂM TRONG DATABASE trong câu trả lời và gọi hàm "filterDestinations".
-2. ĐIỀU KHIỂN WEB NHƯ NGƯỜI THỨ 3: Tự động bấm nút, điền form, đổi tên, lập lịch trình, đổi điểm, tạo tài khoản và tương tác với các phần tử giao diện trực tiếp (Live DOM Snapshot).
+    const systemInstruction = `Bạn là "Pé Meko" 🦊 - Siêu Trợ lý AI đồng hành & điều khiển toàn diện nền tảng Du lịch Thông minh Đồng Tháp (Đồng Tháp Smart Travel).
+Bạn giao tiếp tự nhiên bằng tiếng Việt như một người bạn am hiểu bản địa: hiểu tiếng nói tắt, lỗi gõ chính tả (vd "dổi" = "đổi"), câu phủ định, đại từ hồi chiếu ("nó", "chỗ này", "điểm đó") và câu đảo trật tự.
 
-BỘ KIẾN THỨC NỀN TẢNG DỰ ÁN (PLATFORM KNOWLEDGE):
-• Tên dự án: Đồng Tháp Smart Travel (DTST).
-• Sứ mệnh: Số hóa 58+ điểm đến di tích lịch sử, văn hóa, sinh thái và ẩm thực trên toàn tỉnh Đồng Tháp (TP. Cao Lãnh, TP. Sa Đéc, TP. Hồng Ngự, Tháp Mười, Tam Nông, Lai Vung, v.v.) cùng các vùng phụ cận miền Tây.
-• Các tính năng chính trên trang web:
-  - Khám phá điểm đến (/destinations): 58+ điểm đến có hình ảnh, thông tin, phân loại trải nghiệm, bản đồ Google Maps & chế độ xem vệ tinh.
-  - Lập lịch trình AI V9 (/itinerary/create): Tự động ráp tuyến đường tối ưu nhiều ngày theo số lượng người, số ngày, ngân sách VND, giờ mở cửa và phương tiện di chuyển. Hỗ trợ tính năng đổi điểm dừng (Stop Swap) với cảnh báo khoảng cách thông minh.
-  - Hộ chiếu Trải nghiệm số (/passport): Hệ thống gamification du lịch — du khách đi thực tế tích lũy con dấu số (digital stamp), nhận điểm kinh nghiệm (XP) và mở khóa các danh hiệu như "Thổ địa Sen Hồng", "Tín đồ Miền Tây"...
-  - Điểm danh GPS & Quét QR (/check-in): 2 cách nhận con dấu số: Bật GPS xác thực trong bán kính hợp lệ hoặc quét mã QR vật lý đặt tại điểm đến.
-  - Quản lý tài khoản & Lịch trình (/account, /my-itineraries, /favorites): Tùy biến hồ sơ cá nhân, đổi tên hiển thị, lưu điểm yêu thích và xem lại các chuyến đi.
+NGUYÊN TẮC CỐT LÕI VỀ DỮ LIỆU THẬT (ZERO HALLUCINATION):
+1. TUYỆT ĐỐI KHÔNG tự bịa tên địa điểm ngoài DANH SÁCH ĐỊA ĐIỂM THẬT TRONG DATABASE bên dưới.
+2. ĐỔI ĐIỂM CHƯA RÕ TÊN CỤ THỂ ("đổi sang điểm khác", "không muốn đi Trà mật ong đổi cho tôi một địa điểm tham quan về thiên nhiên khác đi", "không muốn tham quan bảo tàng, đổi qua thiên nhiên", "chỗ nào mát mẻ / ẩm thực / chùa / gần tuyến"):
+   -> BẮT BUỘC gọi hàm "suggestSwapCandidates" với \`targetStopName\` = điểm CŨ đang nằm trong Bản nháp lịch trình (ví dụ "Trà mật ong Kỳ Lân" hoặc "Bảo tàng Tổng hợp Đồng Tháp") và \`category\` / \`topicHint\` / \`area\`.
+   -> LƯU Ý CỰC KỲ QUAN TRỌNG: Điểm cũ trong lịch trình (như "Trà mật ong Kỳ Lân") có thể đến từ bộ lập lịch V9 nên KHÔNG cần có trong DANH SÁCH DATABASE — TUYỆT ĐỐI KHÔNG điền tên điểm cũ này vào \`notFoundPlaceName\`! Để trống \`notFoundPlaceName\` khi người dùng chỉ muốn đổi theo thể loại (vd thiên nhiên, ẩm thực, chùa) hoặc sang "điểm khác".
+3. ĐỔI ĐIỂM CÓ TÊN ĐỊA DANH MỚI NGOÀI DATABASE (vd user đích danh đòi đổi sang "Đà Lạt", "Nha Trang", "Vũng Tàu"):
+   -> Gọi "suggestSwapCandidates" với \`notFoundPlaceName\` = tên địa danh MỚI đó (TUYỆT ĐỐI KHÔNG phải tên điểm cũ trong lịch trình) để hệ thống báo khéo chưa có và xổ danh sách điểm thật thay thế.
+4. ĐỔI ĐIỂM ĐÃ RÕ TÊN ĐỊA ĐIỂM THẬT ("đổi qua biển tân thành đi", "đây nè Biển Tân Thành", "ừa dổi nó với địa điểm bảo tàng ở ngày 1 đi"):
+   -> Phân biệt rạch ròi:
+      • \`targetStopName\`: điểm ĐANG NẰM TRONG LỊCH TRÌNH bị thay ra (vd "Bảo tàng Tổng hợp Đồng Tháp", hoặc \`pendingSwap.targetStopName\` nếu đang mở phiên đổi điểm).
+      • \`newDestinationSlug\` & \`newDestinationName\`: điểm MỚI muốn đưa VÀO lịch trình (khớp đúng DANH SÁCH DATABASE, hoặc suy từ \`lastDiscussedDestination\` / tên vừa nhắc khi user nói "nó" / "chỗ đó").
+   -> LƯU Ý QUAN TRỌNG: Nếu đang có \`pendingSwap\` (user đang trong luồng chọn điểm thay thế) và user gõ tên một địa điểm mới (vd "đây nè Biển Tân Thành", "đổi qua biển tân thành đi"), HÃY GỌI \`swapItineraryStop\` để đổi điểm đó vào lịch trình cho \`pendingSwap.targetStopName\`, TUYỆT ĐỐI KHÔNG gọi \`navigateToDestination\` làm mất mạch đổi điểm!
+5. THÊM / GỠ / XEM LỊCH TRÌNH:
+   - Muốn thêm 1 địa điểm thật vào ngày X -> gọi \`addItineraryStop\`.
+   - Muốn gỡ/bỏ 1 điểm khỏi lịch trình -> gọi \`removeItineraryStop\`.
+   - Hỏi lịch trình hiện tại gồm những điểm nào -> gọi \`inspectCurrentItinerary\`.
+6. LẬP LỊCH TRÌNH MỚI (\`planItinerary\`):
+   - CHỈ gọi \`planItinerary\` khi ĐÃ CÓ ĐỦ 3 thông tin từ câu hiện tại hoặc lịch sử trò chuyện: \`days\` (số ngày), \`people\` (số người), \`budget_vnd\` (ngân sách).
+   - Nếu còn thiếu bất kỳ thông tin nào trong 3 mục trên -> KHÔNG tự bịa mặc định; hãy trả lời thân thiện liệt kê những mục đã có và hỏi nốt phần còn thiếu.
+7. ĐĂNG KÝ / ĐĂNG NHẬP / HỒ SƠ / YÊU THÍCH / LỌC:
+   - Muốn tìm danh sách (vd "danh sách các chùa", "quán ăn Sa Đéc", "khu sinh thái") -> gọi \`filterDestinations\`.
+   - Muốn xem thông tin một điểm (khi KHÔNG phải đang chọn điểm để swap) -> gọi \`navigateToDestination\` hoặc trả lời chi tiết nếu là câu hỏi so sánh ("nên đi X hay Y").
+   - Hỏi về dự án DTST, Hộ chiếu số (/passport), Điểm danh GPS/QR (/check-in), Bản đồ Dấu chân 3D (/footprints), Cảnh báo Thời tiết & An toàn -> trả lời đầy đủ, thân thiện, kèm \`openPage\` khi phù hợp.
 
-BỘ KIẾN THỨC VĂN HÓA & DU LỊCH ĐỒNG THÁP:
-• Điểm tham quan nức tiếng: Làng hoa Sa Đéc, Vườn quốc gia Tràm Chim (Khu Ramsar thứ 2.000 thế giới, sếu đầu đỏ), Khu di tích Xẻo Quýt, Khu di tích Cụ Phó bảng Nguyễn Sinh Sắc, Kiến An Cung – Chùa Ông Quách, Chùa Phước Kiển (Chùa Lá Sen Vua), Đồng sen Tháp Mười, Khu du lịch sinh thái Gáo Giồng.
-• Ẩm thực trứ danh: Cá lóc nướng trui cuốn lá sen non, nem Lai Vung, hủ tiếu Sa Đéc, bánh xèo Cao Lãnh, vịt nướng Sa Đéc, các món chè/cơm/sữa từ Sen Tháp Mười.
-• Mùa du lịch vàng: Mùa nước nổi (tháng 9-11 âm lịch tại Tràm Chim, Gáo Giồng), Mùa hoa Sa Đéc (tháng 12 âm lịch / giáp Tết), Mùa sen nở (mùa hè).
-
-TRẠNG THÁI MÀN HÌNH HIỆN TẠI CỦA NGƯỜI DÙNG:
+NGỮ CẢNH HIỆN TẠI CỦA NGƯỜI DÙNG:
 - Đường dẫn đang mở: ${pageContext?.currentPath || '/'} (${pageContext?.pageTitle || 'Trang chủ'})
-- Người dùng hiện tại: ${userContextPrompt}
-- Có bản nháp lịch trình: ${pageContext?.hasDraftItinerary ? 'Có' : 'Chưa'}
-- Các nút bấm / ô nhập liệu đang hiển thị trực tiếp trên màn hình (Live DOM Controls):
+- Người dùng: ${userContextPrompt}
+- Địa điểm vừa thảo luận / đang xem gần nhất ("nó" / "chỗ đó"): ${lastDiscussedPrompt}
+- Phiên đổi điểm đang mở: ${pendingSwapPrompt}
+- Bản nháp lịch trình hiện tại (${pageContext?.draftTitle || 'Chưa đặt tên'}):
+${draftItineraryPrompt}
+- Phần tử UI hiển thị (Live DOM Controls):
 ${domControlsPrompt}
 
-RÀO CHẮN BẢO MẬT BẮT BUỘC (SECURITY GUARDRAILS):
-1. TUYỆT ĐỐI KHÔNG BAO GIỜ tiết lộ mật khẩu Admin, mật khẩu người dùng khác, API Key, JWT Secret, thông tin nhạy cảm hoặc cho phép leo thang đặc quyền trái phép. Nếu người dùng hỏi các thông tin này, hãy từ chối ngay lập tức.
-2. Không cho phép người dùng không phải Admin truy cập trang /admin.
+RÀO CHẮN BẢO MẬT (TUYỆT ĐỐI TUÂN THỦ):
+1. Không bao giờ tiết lộ mật khẩu Admin, user khác, API Key, JWT Secret, .env hay DB URI.
+2. Không gọi \`openPage\` tới \`/admin\` nếu vai trò không phải \`admin\` hoặc \`partner\`.
 
-QUY TẮC PHẢN HỒI & ĐIỀU KHIỂN:
-1. Khi người dùng hỏi thông tin, hãy trả lời tự nhiên, thân thiện (xưng Pé Meko, gọi bạn/anh/chị), giải thích rõ ràng và nếu liên quan đến tính năng trên web thì có thể gọi hàm mở trang hoặc gợi ý họ trải nghiệm.
-2. Nếu người dùng muốn ĐỔI TÊN HIỂN THỊ, cập nhật sở thích du lịch, đổi mật khẩu -> Gọi hàm "updateUserProfile".
-3. Nếu người dùng muốn thao tác với nút bấm/ô nhập liệu trên màn hình -> Gọi hàm "performDomAutomation".
-4. Nếu người dùng muốn LƯU YÊU THÍCH một địa điểm -> Gọi hàm "toggleFavoriteDestination".
-5. Nếu người dùng muốn LƯU LỊCH TRÌNH hiện tại -> Gọi hàm "saveCurrentItinerary".
-6. Nếu người dùng muốn ĐĂNG XUẤT -> Gọi hàm "logoutAccount".
-7. Nếu yêu cầu thiếu thông tin bắt buộc, hãy hỏi ngược lại người dùng một cách duyên dáng.
-
-DANH SÁCH ĐỊA ĐIỂM TRONG DATABASE:
+DANH SÁCH ĐỊA ĐIỂM THẬT TRONG DATABASE (${catalog.length} điểm):
 ${catalogPrompt}
 `;
 
@@ -2204,54 +3960,86 @@ ${catalogPrompt}
       {
         functionDeclarations: [
           {
-            name: 'updateUserProfile',
-            description: 'Cập nhật hồ sơ cá nhân của người dùng hiện tại: đổi tên hiển thị (displayName), sở thích du lịch (numberOfDays, hoursPerDay), hoặc đổi mật khẩu',
+            name: 'suggestSwapCandidates',
+            description:
+              'Đề xuất danh sách địa điểm THẬT trong database để người dùng chọn thay thế một điểm dừng trong lịch trình (dùng khi chưa rõ tên điểm mới cụ thể, muốn đổi theo thể loại thiên nhiên/sinh thái/ẩm thực/văn hóa/chùa/gần tuyến, hoặc địa danh MỚI yêu cầu chưa có trong DB)',
             parameters: {
               type: 'OBJECT',
               properties: {
-                newDisplayName: { type: 'STRING', description: 'Tên hiển thị mới cần đổi thành' },
-                numberOfDays: { type: 'INTEGER', description: 'Số ngày du lịch mặc định (1-7)' },
-                hoursPerDay: { type: 'INTEGER', description: 'Số giờ tham quan mỗi ngày (4-10)' },
-                currentPassword: { type: 'STRING', description: 'Mật khẩu hiện tại (nếu đổi mật khẩu)' },
-                newPassword: { type: 'STRING', description: 'Mật khẩu mới (nếu đổi mật khẩu)' },
-              },
-            },
-          },
-          {
-            name: 'performDomAutomation',
-            description: 'Điều khiển trực tiếp bất kỳ nút bấm, tab, hoặc ô nhập liệu nào trên màn hình hiện tại (dựa trên Live DOM Controls) — giúp AI tương tác được với mọi tính năng hiện tại và tương lai',
-            parameters: {
-              type: 'OBJECT',
-              properties: {
-                label: { type: 'STRING', description: 'Mô tả thao tác đang thực hiện trên giao diện' },
-                steps: {
-                  type: 'ARRAY',
-                  items: {
-                    type: 'OBJECT',
-                    properties: {
-                      op: { type: 'STRING', description: 'Loại thao tác: click, fill, hoặc scroll' },
-                      targetId: { type: 'STRING', description: 'ID phần tử từ Live DOM Controls (ví dụ ctrl-0)' },
-                      targetText: { type: 'STRING', description: 'Nhãn hoặc chữ trên nút/ô nhập liệu' },
-                      value: { type: 'STRING', description: 'Giá trị cần điền nếu op là fill' },
-                    },
-                    required: ['op'],
-                  },
+                dayNumber: { type: 'INTEGER', description: 'Số ngày trong lịch trình chứa điểm cần đổi (mặc định suy từ lịch trình hoặc 1)' },
+                targetStopName: { type: 'STRING', description: 'Tên điểm CŨ đang có trong Bản nháp lịch trình cần thay thế ra (được phép không có trong DANH SÁCH DATABASE; để trống nếu hoàn toàn không rõ bỏ điểm nào)' },
+                category: {
+                  type: 'STRING',
+                  description: 'Mã thể loại ưu tiên cho điểm MỚI: nature, eco, culture, history, food, local_experience',
                 },
+                area: { type: 'STRING', description: 'Khu vực mong muốn cho điểm MỚI (vd: Sa Đéc, Cao Lãnh, Mỹ Tho, Tháp Mười...)' },
+                preferNear: { type: 'BOOLEAN', description: 'CHỈ đặt true nếu người dùng yêu cầu ưu tiên điểm gần tuyến / ít di chuyển / đỡ mệt' },
+                topicHint: { type: 'STRING', description: 'CHỈ điền chủ đề phụ cụ thể nếu có: chùa, nhà cổ, làng hoa, biển, núi, trong nhà, chợ; ĐỂ TRỐNG nếu người dùng chỉ nói chung theo category (vd thiên nhiên)' },
+                notFoundPlaceName: { type: 'STRING', description: 'CHỈ điền khi người dùng đích danh đòi đổi sang một địa danh MỚI không tồn tại trong DANH SÁCH DATABASE (vd Đà Lạt, Vũng Tàu). TUYỆT ĐỐI KHÔNG điền tên điểm CŨ (targetStopName) từ lịch trình vào đây!' },
               },
-              required: ['steps'],
             },
           },
           {
-            name: 'toggleFavoriteDestination',
-            description: 'Thêm hoặc xóa một địa điểm khỏi danh sách Yêu thích của người dùng',
+            name: 'swapItineraryStop',
+            description:
+              'Đổi một điểm dừng trong lịch trình sang MỘT ĐỊA ĐIỂM MỚI CÓ THẬT trong DANH SÁCH ĐỊA ĐIỂM TRONG DATABASE (hỗ trợ cả hồi chiếu "nó" = địa điểm vừa xem/nhắc)',
             parameters: {
               type: 'OBJECT',
               properties: {
-                slug: { type: 'STRING', description: 'Slug của địa điểm' },
-                destinationName: { type: 'STRING', description: 'Tên địa điểm' },
-                mode: { type: 'STRING', description: 'add (thêm yêu thích) hoặc remove (bỏ yêu thích)' },
+                dayNumber: { type: 'INTEGER', description: 'Ngày chứa điểm cần đổi trong lịch trình' },
+                targetStopName: { type: 'STRING', description: 'Tên điểm CŨ đang nằm trong lịch trình sẽ bị thay ra' },
+                newDestinationSlug: { type: 'STRING', description: 'Slug chính xác của điểm MỚI từ DANH SÁCH DATABASE' },
+                newDestinationName: { type: 'STRING', description: 'Tên chính xác của điểm MỚI từ DANH SÁCH DATABASE' },
               },
-              required: ['destinationName'],
+              required: ['targetStopName', 'newDestinationSlug', 'newDestinationName'],
+            },
+          },
+          {
+            name: 'addItineraryStop',
+            description: 'Thêm một địa điểm CÓ THẬT trong database vào ngày X của lịch trình hiện tại',
+            parameters: {
+              type: 'OBJECT',
+              properties: {
+                dayNumber: { type: 'INTEGER', description: 'Ngày muốn thêm điểm vào (mặc định 1)' },
+                destinationSlug: { type: 'STRING', description: 'Slug chính xác của địa điểm cần thêm' },
+                destinationName: { type: 'STRING', description: 'Tên chính xác của địa điểm cần thêm' },
+              },
+              required: ['destinationSlug', 'destinationName'],
+            },
+          },
+          {
+            name: 'removeItineraryStop',
+            description: 'Gỡ/bỏ một điểm dừng khỏi lịch trình hiện tại',
+            parameters: {
+              type: 'OBJECT',
+              properties: {
+                dayNumber: { type: 'INTEGER', description: 'Ngày chứa điểm dừng cần bỏ' },
+                targetStopName: { type: 'STRING', description: 'Tên điểm dừng cần gỡ bỏ' },
+              },
+              required: ['targetStopName'],
+            },
+          },
+          {
+            name: 'inspectCurrentItinerary',
+            description: 'Liệt kê tóm tắt lịch trình nháp hiện tại theo ngày và khung giờ',
+            parameters: {
+              type: 'OBJECT',
+              properties: {
+                dayNumber: { type: 'INTEGER', description: 'Ngày cụ thể muốn xem (bỏ trống để xem tất cả các ngày)' },
+              },
+            },
+          },
+          {
+            name: 'planItinerary',
+            description: 'Tự động điền form và kích hoạt AI Trip Planner V9 lập lịch trình mới KHI ĐÃ ĐỦ days, people, và budget_vnd',
+            parameters: {
+              type: 'OBJECT',
+              properties: {
+                days: { type: 'INTEGER', description: 'Số ngày du lịch (1-7)' },
+                people: { type: 'INTEGER', description: 'Số người tham gia' },
+                budget_vnd: { type: 'INTEGER', description: 'Tổng ngân sách bằng VND (vd 2 triệu = 2000000)' },
+              },
+              required: ['days', 'people', 'budget_vnd'],
             },
           },
           {
@@ -2260,25 +4048,17 @@ ${catalogPrompt}
             parameters: {
               type: 'OBJECT',
               properties: {
-                title: { type: 'STRING', description: 'Tên lịch trình muốn lưu' },
+                title: { type: 'STRING', description: 'Tên lịch trình muốn lưu (nếu người dùng có đặt)' },
               },
             },
           },
           {
-            name: 'logoutAccount',
-            description: 'Đăng xuất tài khoản hiện tại',
-            parameters: {
-              type: 'OBJECT',
-              properties: {},
-            },
-          },
-          {
             name: 'navigateToDestination',
-            description: 'Mở trang chi tiết của một địa điểm cụ thể trên website',
+            description: 'Mở trang thông tin chi tiết của một địa điểm (CHỈ dùng khi người dùng muốn xem thông tin điểm đó, KHÔNG dùng khi đang muốn đổi điểm vào lịch trình)',
             parameters: {
               type: 'OBJECT',
               properties: {
-                slug: { type: 'STRING', description: 'Slug định danh của địa điểm' },
+                slug: { type: 'STRING', description: 'Slug chính xác của địa điểm trong database' },
                 destinationName: { type: 'STRING', description: 'Tên địa điểm hiển thị' },
               },
               required: ['slug'],
@@ -2286,18 +4066,18 @@ ${catalogPrompt}
           },
           {
             name: 'filterDestinations',
-            description: 'Lọc danh sách các địa điểm theo từ khóa, khu vực hoặc thể loại',
+            description: 'Lọc danh sách các địa điểm trên trang Khám phá theo từ khóa, khu vực hoặc thể loại',
             parameters: {
               type: 'OBJECT',
               properties: {
-                query: { type: 'STRING', description: 'Từ khóa tìm kiếm (ví dụ: chùa, bảo tàng, Sa Đéc, Cao Lãnh...)' },
+                query: { type: 'STRING', description: 'Từ khóa tìm kiếm (chùa, bảo tàng, Sa Đéc, hủ tiếu...)' },
                 category: { type: 'STRING', description: 'Mã thể loại: nature, eco, culture, history, food, local_experience' },
               },
             },
           },
           {
             name: 'openPage',
-            description: 'Mở bất kỳ trang chức năng nào trong hệ thống (/account, /passport, /favorites, /my-itineraries, /itinerary/create, /check-in, /destinations)',
+            description: 'Mở trang chức năng trong hệ thống (/account, /passport, /favorites, /my-itineraries, /itinerary/create, /check-in, /destinations, /footprints)',
             parameters: {
               type: 'OBJECT',
               properties: {
@@ -2308,21 +4088,35 @@ ${catalogPrompt}
             },
           },
           {
-            name: 'planItinerary',
-            description: 'Tự động điền form và kích hoạt AI lập lịch trình khi ĐÃ ĐỦ số ngày, số người, ngân sách',
+            name: 'toggleFavoriteDestination',
+            description: 'Thêm hoặc bỏ một địa điểm khỏi danh sách Yêu thích',
             parameters: {
               type: 'OBJECT',
               properties: {
-                days: { type: 'INTEGER', description: 'Số ngày du lịch' },
-                people: { type: 'INTEGER', description: 'Số người tham gia' },
-                budget_vnd: { type: 'INTEGER', description: 'Ngân sách bằng VND' },
+                slug: { type: 'STRING', description: 'Slug của địa điểm' },
+                destinationName: { type: 'STRING', description: 'Tên địa điểm' },
+                mode: { type: 'STRING', description: 'add hoặc remove' },
               },
-              required: ['days', 'people', 'budget_vnd'],
+              required: ['destinationName'],
+            },
+          },
+          {
+            name: 'updateUserProfile',
+            description: 'Cập nhật hồ sơ cá nhân (đổi tên hiển thị, sở thích hoặc đổi mật khẩu)',
+            parameters: {
+              type: 'OBJECT',
+              properties: {
+                newDisplayName: { type: 'STRING', description: 'Tên hiển thị mới' },
+                numberOfDays: { type: 'INTEGER', description: 'Số ngày du lịch mặc định (1-7)' },
+                hoursPerDay: { type: 'INTEGER', description: 'Số giờ tham quan mỗi ngày (4-10)' },
+                currentPassword: { type: 'STRING', description: 'Mật khẩu hiện tại' },
+                newPassword: { type: 'STRING', description: 'Mật khẩu mới' },
+              },
             },
           },
           {
             name: 'registerAccount',
-            description: 'Mở trang đăng ký, điền email và mật khẩu để tạo tài khoản tự động',
+            description: 'Mở trang đăng ký, tự điền email & mật khẩu và tạo tài khoản',
             parameters: {
               type: 'OBJECT',
               properties: {
@@ -2334,17 +4128,48 @@ ${catalogPrompt}
             },
           },
           {
-            name: 'swapItineraryStop',
-            description: 'Đổi một địa điểm trong lộ trình ngày X thành một địa điểm mới và kiểm tra độ thuận tiện đường đi',
+            name: 'loginAccount',
+            description: 'Mở trang đăng nhập và tự điền email & mật khẩu nếu đã có đủ cả hai',
             parameters: {
               type: 'OBJECT',
               properties: {
-                dayNumber: { type: 'INTEGER', description: 'Ngày trong lịch trình (ví dụ 1, 2)' },
-                targetStopName: { type: 'STRING', description: 'Tên địa điểm hiện tại muốn thay thế' },
-                newDestinationSlug: { type: 'STRING', description: 'Slug của địa điểm mới' },
-                newDestinationName: { type: 'STRING', description: 'Tên địa điểm mới' },
+                email: { type: 'STRING', description: 'Email đăng nhập' },
+                password: { type: 'STRING', description: 'Mật khẩu' },
               },
-              required: ['dayNumber', 'targetStopName', 'newDestinationName'],
+            },
+          },
+          {
+            name: 'logoutAccount',
+            description: 'Đăng xuất tài khoản hiện tại',
+            parameters: { type: 'OBJECT', properties: {} },
+          },
+          {
+            name: 'syncPassport',
+            description: 'Đồng bộ Hộ chiếu Trải nghiệm số trên trình duyệt vào tài khoản đăng nhập',
+            parameters: { type: 'OBJECT', properties: {} },
+          },
+          {
+            name: 'performDomAutomation',
+            description: 'Điều khiển trực tiếp nút bấm, tab hoặc ô nhập liệu trên màn hình hiện tại (dựa trên Live DOM Controls)',
+            parameters: {
+              type: 'OBJECT',
+              properties: {
+                label: { type: 'STRING', description: 'Mô tả thao tác trên giao diện' },
+                steps: {
+                  type: 'ARRAY',
+                  items: {
+                    type: 'OBJECT',
+                    properties: {
+                      op: { type: 'STRING', description: 'click, fill, hoặc scroll' },
+                      targetId: { type: 'STRING', description: 'ID phần tử từ Live DOM Controls' },
+                      targetText: { type: 'STRING', description: 'Nhãn nút hoặc tab' },
+                      value: { type: 'STRING', description: 'Giá trị điền nếu op là fill' },
+                    },
+                    required: ['op'],
+                  },
+                },
+              },
+              required: ['steps'],
             },
           },
         ],
@@ -2352,7 +4177,7 @@ ${catalogPrompt}
     ];
 
     const contents = [
-      ...history.slice(-6).map((h) => ({
+      ...history.slice(-12).map((h) => ({
         role: h.role === 'assistant' ? 'model' : 'user',
         parts: [{ text: h.content }],
       })),
@@ -2362,10 +4187,10 @@ ${catalogPrompt}
       },
     ];
 
-    const modelsToTry = ['gemini-3.1-flash-lite', 'gemini-3.5-flash-lite'];
+    const modelsToTry = ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'];
     let response: any = null;
 
-    const callWithTimeout = (promise: Promise<any>, timeoutMs: number = 6500) => {
+    const callWithTimeout = (promise: Promise<any>, timeoutMs: number = 12000) => {
       let timer: NodeJS.Timeout;
       const timeoutPromise = new Promise((_, reject) => {
         timer = setTimeout(() => reject(new Error(`Timeout after ${timeoutMs}ms`)), timeoutMs);
@@ -2382,10 +4207,10 @@ ${catalogPrompt}
             config: {
               systemInstruction,
               tools: tools as any,
-              temperature: 0.25,
+              temperature: 0.2,
             },
           }),
-          6500,
+          12000,
         );
         if (response) break;
       } catch (err: any) {
@@ -2394,9 +4219,10 @@ ${catalogPrompt}
     }
 
     if (!response) {
-      return buildSmartLocalFallback(message, catalog);
+      return runOfflineDeterministicFallback(message, history, catalog, pageContext);
     }
 
+    // Tier 3: Deterministic Ground-Truth Tool Executor
     let action: CopilotAction | undefined;
     let replyText = response.text || '';
     let toolMatchedDestinations: DestinationSummary[] = [];
@@ -2406,7 +4232,179 @@ ${catalogPrompt}
       const call = functionCalls[0];
       const args = call.args || {};
 
-      if (call.name === 'updateUserProfile') {
+      if (call.name === 'suggestSwapCandidates') {
+        const reqDay = args.dayNumber ? Number(args.dayNumber) : undefined;
+        let rawTarget = String(args.targetStopName || '').trim();
+        if (!rawTarget && pageContext?.pendingSwap?.targetStopName) {
+          rawTarget = pageContext.pendingSwap.targetStopName;
+        }
+
+        const resolved = resolveTargetStopInDraft(rawTarget, reqDay, pageContext?.draftItinerary, catalog);
+        const draftStops =
+          pageContext?.draftItinerary?.days?.flatMap((d) =>
+            (d.stops || []).map((s) => ({ day: d.day, name: s.name, start: s.start })),
+          ) || [];
+
+        // If AI still has no target stop and there is a multi-stop itinerary, list real stops politely
+        if (!rawTarget && draftStops.length > 1) {
+          const stopListText = draftStops
+            .slice(0, 8)
+            .map((s, i) => `${i + 1}. **${s.name}** *(Ngày ${s.day}${s.start ? ` · ${s.start}` : ''})*`)
+            .join('\n');
+          return {
+            reply:
+              `Dạ **Pé Meko** thấy lịch trình hiện tại của bạn đang có các điểm dừng sau:\n\n${stopListText}\n\n` +
+              `Bạn muốn **đổi điểm nào** ạ? Bấm chọn nhanh bên dưới hoặc nhắn tên điểm đó cho Pé Meko xổ danh sách gợi ý thật nhé! 🦊🧭`,
+            action: {
+              type: 'ASK_CLARIFICATION',
+              payload: { missingFields: ['targetStopName'], contextType: 'swap_stop' },
+            },
+            suggestions: draftStops.slice(0, 4).map((s) => `Đổi ${s.name} (Ngày ${s.day}) sang điểm khác`),
+          };
+        }
+
+        const finalTarget = resolved?.stopName || rawTarget || draftStops[0]?.name || 'điểm dừng hiện tại';
+        const finalDay = resolved?.dayNumber ?? reqDay ?? draftStops[0]?.day ?? 1;
+        const excludeNamesNorm =
+          resolved?.existingStopNamesNorm ?? getAllExistingStopNamesNorm(pageContext?.draftItinerary);
+        const criteria = buildSwapCriteriaFromToolArgs(args, message);
+
+        const { candidates } = rankSwapCandidates(catalog, criteria, {
+          excludeNamesNorm,
+          targetStopName: finalTarget,
+          refCoords: resolved?.refCoords,
+          limit: 6,
+        });
+
+        const safeNotFoundQuery = sanitizeNotFoundQuery(args.notFoundPlaceName, {
+          targetStopName: finalTarget,
+          rawTarget,
+          existingNamesNorm: excludeNamesNorm,
+        });
+
+        const built = buildChooseSwapCandidateResponse({
+          dayNumber: finalDay,
+          targetStopId: resolved?.stopId,
+          targetStopName: finalTarget,
+          criteriaLabel: criteria.criteriaLabel,
+          notFoundQuery: safeNotFoundQuery,
+          candidates,
+        });
+        action = built.action;
+        replyText = built.reply;
+      } else if (call.name === 'swapItineraryStop') {
+        const reqDay = args.dayNumber ? Number(args.dayNumber) : pageContext?.pendingSwap?.dayNumber || 1;
+        let rawTarget = String(args.targetStopName || '').trim();
+        if (!rawTarget && pageContext?.pendingSwap?.targetStopName) {
+          rawTarget = pageContext.pendingSwap.targetStopName;
+        }
+        const resolved = resolveTargetStopInDraft(rawTarget, reqDay, pageContext?.draftItinerary, catalog);
+        const finalDay = resolved?.dayNumber ?? reqDay;
+        const finalTarget = resolved?.stopName || rawTarget || 'điểm dừng hiện tại';
+
+        const bySlug = args.newDestinationSlug
+          ? catalog.find((c) => c.slug === String(args.newDestinationSlug).trim())
+          : undefined;
+        let verifiedDest = bySlug
+          ? toCopilotDestinationInfo(bySlug)
+          : findDestinationByText(String(args.newDestinationName || args.newDestinationSlug || ''), catalog);
+
+        // Guard against pronoun placeholder passed by LLM
+        if (
+          !verifiedDest &&
+          lastDiscussed &&
+          /^(?:no|diem nay|cho nay|diem do|cho do|it)$/i.test(normalizeText(String(args.newDestinationName || '')))
+        ) {
+          verifiedDest = lastDiscussed;
+        }
+
+        if (!verifiedDest) {
+          const requestedNewText = String(args.newDestinationName || '').trim();
+          const criteria = extractSwapCriteria(requestedNewText || message);
+          const excludeNamesNorm =
+            resolved?.existingStopNamesNorm ?? getAllExistingStopNamesNorm(pageContext?.draftItinerary);
+          const { candidates } = rankSwapCandidates(catalog, criteria, {
+            excludeNamesNorm,
+            targetStopName: finalTarget,
+            refCoords: resolved?.refCoords,
+            limit: 6,
+          });
+          const safeNotFound =
+            requestedNewText && !criteria.hasExplicitCriteria
+              ? sanitizeNotFoundQuery(requestedNewText, {
+                  targetStopName: finalTarget,
+                  rawTarget,
+                  existingNamesNorm: excludeNamesNorm,
+                })
+              : undefined;
+          const fallbackChoose = buildChooseSwapCandidateResponse({
+            dayNumber: finalDay,
+            targetStopId: resolved?.stopId,
+            targetStopName: finalTarget,
+            criteriaLabel: criteria.criteriaLabel,
+            notFoundQuery: safeNotFound,
+            candidates,
+          });
+          action = fallbackChoose.action;
+          replyText = fallbackChoose.reply;
+        } else {
+          const directResp = buildDirectSwapResponse({
+            dayNumber: finalDay,
+            targetStopId: resolved?.stopId,
+            targetStopName: finalTarget,
+            newDestination: verifiedDest,
+          });
+          action = directResp.action;
+          replyText = replyText || directResp.reply;
+        }
+      } else if (call.name === 'addItineraryStop') {
+        const dayNumber = Math.max(1, Number(args.dayNumber) || 1);
+        const bySlug = args.destinationSlug
+          ? catalog.find((c) => c.slug === String(args.destinationSlug).trim())
+          : undefined;
+        const verifiedDest = bySlug
+          ? toCopilotDestinationInfo(bySlug)
+          : findDestinationByText(String(args.destinationName || args.destinationSlug || ''), catalog) ||
+            lastDiscussed;
+
+        if (verifiedDest) {
+          action = {
+            type: 'ADD_ITINERARY_STOP',
+            payload: {
+              path: '/itinerary/create#plan',
+              label: `Thêm "${verifiedDest.name}" vào Ngày ${dayNumber}`,
+              dayNumber,
+              newDestination: verifiedDest,
+            },
+          };
+          replyText =
+            replyText ||
+            `Dạ **Pé Meko** đang thêm **${verifiedDest.name}** (${verifiedDest.area}) vào **Ngày ${dayNumber}** trong lịch trình của bạn ngay đây ạ! 🦊➕`;
+        }
+      } else if (call.name === 'removeItineraryStop') {
+        const reqDay = args.dayNumber ? Number(args.dayNumber) : undefined;
+        const rawTarget = String(args.targetStopName || '').trim();
+        const resolved = resolveTargetStopInDraft(rawTarget, reqDay, pageContext?.draftItinerary, catalog);
+        const finalDay = resolved?.dayNumber ?? reqDay ?? 1;
+        const finalTarget = resolved?.stopName || rawTarget;
+        action = {
+          type: 'REMOVE_ITINERARY_STOP',
+          payload: {
+            path: '/itinerary/create#plan',
+            label: `Bỏ "${finalTarget}" (Ngày ${finalDay})`,
+            dayNumber: finalDay,
+            targetStopId: resolved?.stopId,
+            targetStopName: finalTarget,
+          },
+        };
+        if (!replyText) {
+          replyText = `Dạ **Pé Meko** đang gỡ **${finalTarget}** khỏi **Ngày ${finalDay}** trong lịch trình của bạn! 🦊✂️`;
+        }
+      } else if (call.name === 'inspectCurrentItinerary') {
+        const reqDay = args.dayNumber ? Number(args.dayNumber) : undefined;
+        const summary = buildItinerarySummaryResponse(pageContext, reqDay);
+        replyText = summary.reply;
+      } else if (call.name === 'updateUserProfile') {
         const newDisplayName = args.newDisplayName ? String(args.newDisplayName).trim() : undefined;
         const numberOfDays = args.numberOfDays ? Number(args.numberOfDays) : undefined;
         const hoursPerDay = args.hoursPerDay ? Number(args.hoursPerDay) : undefined;
@@ -2424,9 +4422,7 @@ ${catalogPrompt}
             currentPassword,
             newPassword,
             preferences:
-              numberOfDays || hoursPerDay
-                ? { numberOfDays, hoursPerDay }
-                : undefined,
+              numberOfDays || hoursPerDay ? { numberOfDays, hoursPerDay } : undefined,
           },
         };
         if (!replyText) {
@@ -2453,9 +4449,11 @@ ${catalogPrompt}
           replyText = `Dạ **Pé Meko** đã nhận diện các phần tử trên màn hình và đang tự động thao tác giúp bạn ngay! 🦊⚡`;
         }
       } else if (call.name === 'toggleFavoriteDestination') {
+        const bySlug = args.slug ? catalog.find((c) => c.slug === String(args.slug).trim()) : undefined;
         const dest =
+          (bySlug ? toCopilotDestinationInfo(bySlug) : null) ||
           findDestinationByText(String(args.destinationName || args.slug || ''), catalog) ||
-          catalog[0];
+          lastDiscussed;
         const isRemove = args.mode === 'remove';
         if (dest) {
           action = {
@@ -2489,27 +4487,42 @@ ${catalogPrompt}
       } else if (call.name === 'logoutAccount') {
         action = {
           type: 'LOGOUT_ACCOUNT',
-          payload: {
-            path: '/',
-            label: 'Đăng xuất tài khoản',
-          },
+          payload: { path: '/', label: 'Đăng xuất tài khoản' },
         };
         if (!replyText) {
           replyText = `Dạ **Pé Meko** đã đăng xuất tài khoản cho bạn! 🦊👋`;
         }
-      } else if (call.name === 'navigateToDestination') {
-        const dest = catalog.find((c) => c.slug === args.slug);
-        const name = dest?.name || args.destinationName || args.slug;
+      } else if (call.name === 'syncPassport') {
         action = {
-          type: 'NAVIGATE',
-          payload: {
-            path: `/destinations/${args.slug}`,
-            label: name,
-          },
+          type: 'SYNC_PASSPORT',
+          payload: { path: '/passport', label: 'Đồng bộ Hộ chiếu số vào tài khoản' },
         };
-        if (dest) toolMatchedDestinations = [dest];
         if (!replyText) {
-          replyText = `Dạ **Pé Meko** mở ngay thông tin chi tiết của **${name}** cho bạn xem nhé! 🦊`;
+          replyText = `Dạ **Pé Meko** đang đồng bộ dữ liệu Hộ chiếu trải nghiệm số vào tài khoản của bạn ngay! 🦊🛂`;
+        }
+      } else if (call.name === 'navigateToDestination') {
+        const slugStr = String(args.slug || '').trim();
+        const dest =
+          catalog.find((c) => c.slug === slugStr) ||
+          catalog.find(
+            (c) => normalizeText(c.name) === normalizeText(String(args.destinationName || '')),
+          );
+        if (dest) {
+          action = {
+            type: 'NAVIGATE',
+            payload: { path: `/destinations/${dest.slug}`, label: dest.name },
+          };
+          toolMatchedDestinations = [dest];
+          if (!replyText) {
+            const extraDetails: string[] = [];
+            if (dest.summary) extraDetails.push(`• 📝 **Giới thiệu**: ${dest.summary}`);
+            if (dest.address) extraDetails.push(`• 📍 **Địa chỉ**: ${dest.address}`);
+            if (dest.openingHours) extraDetails.push(`• ⏰ **Giờ mở cửa**: ${dest.openingHours}`);
+            if (dest.referencePrice) extraDetails.push(`• 🎫 **Giá vé**: ${dest.referencePrice}`);
+            replyText =
+              `Dạ **Pé Meko** mở ngay thông tin chi tiết của **${dest.name}** (${dest.area}) cho bạn xem nhé! 🦊📍` +
+              (extraDetails.length > 0 ? `\n\n${extraDetails.join('\n')}` : '');
+          }
         }
       } else if (call.name === 'filterDestinations') {
         const rawQuery = args.query ? String(args.query).trim() : '';
@@ -2553,15 +4566,13 @@ ${catalogPrompt}
         }
       } else if (call.name === 'openPage') {
         const targetPath = String(args.path || '/');
-        // Double-check RBAC before allowing LLM to open /admin
         if (
           targetPath.startsWith('/admin') &&
           pageContext?.currentUser?.role !== 'admin' &&
           pageContext?.currentUser?.role !== 'partner'
         ) {
           return {
-            reply:
-              `🛡️ **Rào chắn Phân quyền (RBAC):** Tài khoản hiện tại của bạn không có quyền Quản trị viên để mở trang \`${targetPath}\`!`,
+            reply: `🛡️ **Rào chắn Phân quyền (RBAC):** Tài khoản hiện tại của bạn không có quyền Quản trị viên để mở trang \`${targetPath}\`!`,
             action: {
               type: 'SECURITY_BLOCKED',
               payload: {
@@ -2573,18 +4584,15 @@ ${catalogPrompt}
         }
         action = {
           type: 'OPEN_PAGE',
-          payload: {
-            path: targetPath,
-            label: String(args.label || targetPath),
-          },
+          payload: { path: targetPath, label: String(args.label || targetPath) },
         };
         if (!replyText) {
           replyText = `Dạ **Pé Meko** chuyển bạn sang trang **${args.label || targetPath}** ngay nhé! 🦊`;
         }
       } else if (call.name === 'planItinerary') {
-        const d = Number(args.days) || 2;
-        const p = Number(args.people) || 2;
-        const b = Number(args.budget_vnd) || 2000000;
+        const d = Math.min(7, Math.max(1, Number(args.days) || 2));
+        const p = Math.min(100, Math.max(1, Number(args.people) || 2));
+        const b = Math.max(100000, Number(args.budget_vnd) || 2000000);
         const runId = Date.now();
         action = {
           type: 'PLAN_ITINERARY',
@@ -2617,28 +4625,31 @@ ${catalogPrompt}
         if (!replyText) {
           replyText = `Dạ **Pé Meko** đang mở trang Đăng ký, điền email \`${email}\` & mật khẩu để khởi tạo tài khoản tự động cho bạn ngay! 🦊`;
         }
-      } else if (call.name === 'swapItineraryStop') {
-        const dayNumber = Number(args.dayNumber) || 1;
-        const targetStopName = String(args.targetStopName || '');
-        const newDest =
-          findDestinationByText(String(args.newDestinationName || args.newDestinationSlug || ''), catalog) || {
-            name: String(args.newDestinationName || 'Địa điểm mới'),
-            slug: String(args.newDestinationSlug || 'bao-tang-tong-hop-dong-thap'),
-            area: 'Cao Lãnh',
-            coordinates: { lat: 10.4562, lng: 105.6324 },
+      } else if (call.name === 'loginAccount') {
+        const email = args.email ? String(args.email).trim() : undefined;
+        const password = args.password ? String(args.password).trim() : undefined;
+        if (email && password) {
+          const runId = Date.now();
+          action = {
+            type: 'LOGIN_ACCOUNT',
+            payload: {
+              path: `/login?email=${encodeURIComponent(email)}&password=${encodeURIComponent(password)}&autoSubmit=true&run=${runId}`,
+              label: `Đăng nhập ${email}`,
+              email,
+              password,
+            },
           };
-        action = {
-          type: 'SWAP_ITINERARY_STOP',
-          payload: {
-            path: '/itinerary/create#plan',
-            label: `Đổi "${targetStopName}" → "${newDest.name}" (Ngày ${dayNumber})`,
-            dayNumber,
-            targetStopName,
-            newDestination: newDest,
-          },
-        };
-        if (!replyText) {
-          replyText = `Dạ **Pé Meko** đang kiểm tra tuyến đường để đổi **${targetStopName}** (Ngày ${dayNumber}) thành **${newDest.name}** cho bạn! 🦊`;
+          replyText =
+            replyText ||
+            `Dạ **Pé Meko** đang mở trang Đăng nhập, điền sẵn email \`${email}\` & mật khẩu để đăng nhập tự động cho bạn ngay! 🦊`;
+        } else {
+          action = {
+            type: 'OPEN_PAGE',
+            payload: { path: '/login', label: 'Trang Đăng nhập' },
+          };
+          replyText =
+            replyText ||
+            `Dạ **Pé Meko** đã mở trang **Đăng nhập** cho bạn rồi ạ! Nếu muốn đăng nhập tự động, bạn nhắn thêm Email và Mật khẩu nhé! 🦊`;
         }
       }
     }
@@ -2646,26 +4657,28 @@ ${catalogPrompt}
     const matchedDestinations =
       toolMatchedDestinations.length > 0
         ? toolMatchedDestinations.slice(0, 6)
-        : catalog
-            .filter(
-              (c) =>
-                replyText.toLowerCase().includes(c.name.toLowerCase()) ||
-                message.toLowerCase().includes(c.name.toLowerCase()),
-            )
-            .slice(0, 5);
+        : action?.type === 'CHOOSE_SWAP_CANDIDATE' ||
+            action?.type === 'SWAP_ITINERARY_STOP' ||
+            action?.type === 'ADD_ITINERARY_STOP'
+          ? []
+          : catalog
+              .filter(
+                (c) =>
+                  replyText.toLowerCase().includes(c.name.toLowerCase()) ||
+                  message.toLowerCase().includes(c.name.toLowerCase()),
+              )
+              .slice(0, 5);
+
+    const suggestions = buildContextualSuggestions(action, pageContext, matchedDestinations);
 
     return {
       reply: replyText || 'Dạ **Pé Meko** có thể giúp gì tiếp theo cho bạn ạ? 🦊',
       action,
       matchedDestinations: matchedDestinations.length > 0 ? matchedDestinations : undefined,
-      suggestions: [
-        'Danh sách các chùa',
-        'Lập lịch trình đi 2 ngày cho 2 người với chi phí 2 tr',
-        'Dự án này là gì và có những tính năng nào?',
-      ],
+      suggestions,
     };
   } catch (err) {
     logger.error({ err }, 'Gemini Copilot execution failed');
-    return buildSmartLocalFallback(message, catalog);
+    return runOfflineDeterministicFallback(message, history, catalog, pageContext);
   }
 }

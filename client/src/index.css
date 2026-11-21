@@ -247,6 +247,68 @@
   animation: tp-grow-x 900ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+/* ── Apple-Photos-style Footprint Map markers ───────────────────────────── */
+@keyframes fp-blue-halo {
+  0% {
+    transform: scale(0.85);
+    opacity: 0.72;
+  }
+  70% {
+    transform: scale(2.15);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(2.15);
+    opacity: 0;
+  }
+}
+
+.fp-user-halo {
+  animation: fp-blue-halo 2.2s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+.fp-photo-pin {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  outline: none;
+}
+
+.fp-photo-pin-inner {
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1), filter 220ms ease;
+  transform-origin: bottom center;
+}
+
+.fp-photo-pin:hover .fp-photo-pin-inner,
+.fp-photo-pin:focus-visible .fp-photo-pin-inner {
+  transform: scale(1.09) translateY(-2px);
+}
+
+.fp-map-canvas .maplibregl-ctrl-bottom-left {
+  pointer-events: none;
+}
+
+.fp-map-canvas .maplibregl-ctrl-attrib {
+  pointer-events: auto;
+  background: rgb(15 23 42 / 0.55) !important;
+  color: rgb(226 232 240 / 0.8) !important;
+  font-size: 9px !important;
+  backdrop-filter: blur(8px);
+  border-radius: 999px !important;
+  margin: 0 0 4px 6px !important;
+}
+
+.fp-map-canvas .maplibregl-ctrl-attrib a {
+  color: rgb(226 232 240 / 0.88) !important;
+}
+
+@media (max-width: 639px) {
+  .fp-map-canvas .maplibregl-ctrl-attrib {
+    display: none !important;
+  }
+}
+
 /* Eyebrow label used across marketing-style sections */
 .eyebrow {
   @apply inline-flex items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.22em] text-river-600;

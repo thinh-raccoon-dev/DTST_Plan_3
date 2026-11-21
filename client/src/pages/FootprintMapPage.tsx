@@ -3,41 +3,34 @@ import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import {
   Camera,
-  CloudOff,
+  Check,
   Compass,
-  Download,
-  Eye,
-  EyeOff,
-  Flag,
-  Flame,
-  Footprints,
+  FolderHeart,
+  Globe2,
+  Images,
   Layers,
-  MapPin,
-  MapPinCheck,
-  MapPinPlus,
-  Maximize2,
+  LocateFixed,
+  Map as MapIcon,
+  Minus,
+  Moon,
   Navigation,
-  Pause,
-  Play,
-  Radio,
-  RefreshCw,
+  Plus,
   Route,
+  Search,
   Sparkles,
-  Square,
-  Stamp,
-  Trash2,
-  Wifi,
-  WifiOff,
-  Zap,
+  Sun,
+  Upload,
+  X,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { announceBadges } from '../components/challenge/ChallengeQuiz';
-import { PageContainer } from '../components/layout/PublicLayout';
-import { Button } from '../components/ui/Button';
-import { Card } from '../components/ui/Card';
+import { JourneyDrawer } from '../components/footprints/JourneyDrawer';
+import { PhotoCaptureModal, type PhotoCaptureInitialMode } from '../components/footprints/PhotoCaptureModal';
+import { PhotoClusterDrawer } from '../components/footprints/PhotoClusterDrawer';
+import { PhotoLibraryOverlay } from '../components/footprints/PhotoLibraryOverlay';
+import { PhotoLightboxModal } from '../components/footprints/PhotoLightboxModal';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
-import { api } from '../lib/api';
+import { api, toApiError } from '../lib/api';
 import {
   calculatePolylineKm,
   deleteLocalTrackById,
@@ -56,6 +49,14 @@ import {
   type PresetJourneyRoute,
   type TrackPoint,
 } from '../lib/footprintOfflineStore';
+import {
+  clusterPhotosByZoom,
+  formatAreaDisplay,
+  type FootprintPhotoItem,
+  type GeofenceTargetItem,
+  type LiveUserLocation,
+  type PhotoCluster,
+} from '../lib/footprintPhotoStore';
 import { downloadFootprintShareCard } from '../lib/footprintShareCard';
 import { toast } from '../stores/toastStore';
 import type { BadgeInfo } from '../types/api';
@@ -63,37 +64,13 @@ import type { BadgeInfo } from '../types/api';
 // Use static self-contained worker from public/ so Vite dev & prod never hit 504
 maplibregl.setWorkerUrl('/maplibre-gl-worker.mjs');
 
-interface GeofenceTargetItem {
-  id: string;
-  name: string;
-  slug: string;
-  area: string;
-  category: string;
-  summary: string;
-  imageUrl?: string;
-  coordinates: { lat: number; lng: number };
-  isCheckedIn: boolean;
-}
-
 const GEOFENCE_CACHE_KEY = 'dtst_geofence_targets_v1';
+const USER_LOC_CACHE_KEY = 'dtst_last_known_user_loc_v1';
 const LIBERTY_STYLE_URL = 'https://tiles.openfreemap.org/styles/liberty';
 
-type MapStyleMode = 'day_3d' | 'night_neon' | 'satellite';
-
-const MAP_STYLE_LABELS: Record<MapStyleMode, { label: string; short: string }> = {
-  day_3d: { label: '☀️ Sáng 3D', short: '☀️ Sáng' },
-  night_neon: { label: '🌙 Đêm Neon', short: '🌙 Đêm' },
-  satellite: { label: '🛰️ Vệ tinh', short: '🛰️ Vệ tinh' },
-};
-
-const MOOD_PRESETS = [
-  { emoji: '🦊', label: 'Tuyệt vời hết nấc' },
-  { emoji: '🌸', label: 'Cảnh đẹp mê hồn' },
-  { emoji: '🍜', label: 'Ngon xuất sắc' },
-  { emoji: '📸', label: 'Góc sống ảo cực chất' },
-  { emoji: '🪷', label: 'Bình yên xứ Sen' },
-  { emoji: '🚣', label: 'Phiêu lưu sông nước' },
-];
+type MapStyleMode = 'atlas' | 'satellite' | 'day_3d' | 'night';
+type DockViewMode = 'map' | 'library' | 'places' | 'routes';
+type GpsStatus = 'locating' | 'active' | 'denied' | 'unavailable';
 
 const TRACK_COLORS = ['#10b981', '#0ea5e9', '#f43f5e', '#f59e0b', '#8b5cf6'];
 
@@ -113,23 +90,26 @@ async function buildFootprintMapStyle(mode: MapStyleMode): Promise<any> {
           attribution: 'Tiles &copy; Esri',
           maxzoom: 19,
         },
+        esri_labels: {
+          type: 'raster',
+          tiles: [
+            'https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+          ],
+          tileSize: 256,
+          maxzoom: 19,
+        },
       },
       layers: [
-        {
-          id: 'esri-satellite-layer',
-          type: 'raster',
-          source: 'esri_satellite',
-          minzoom: 0,
-          maxzoom: 22,
-        },
+        { id: 'esri-satellite-layer', type: 'raster', source: 'esri_satellite', minzoom: 0, maxzoom: 22 },
+        { id: 'esri-labels-layer', type: 'raster', source: 'esri_labels', minzoom: 0, maxzoom: 22 },
       ],
       sky: {
-        'sky-color': '#5fa8e6',
-        'horizon-color': '#d7eeff',
-        'fog-color': '#cfe8fb',
-        'sky-horizon-blend': 0.7,
-        'horizon-fog-blend': 0.6,
-        'fog-ground-blend': 0.5,
+        'sky-color': '#1e4e79',
+        'horizon-color': '#7ab5d6',
+        'fog-color': '#88bad6',
+        'sky-horizon-blend': 0.65,
+        'horizon-fog-blend': 0.5,
+        'fog-ground-blend': 0.4,
       },
     };
   }
@@ -140,7 +120,6 @@ async function buildFootprintMapStyle(mode: MapStyleMode): Promise<any> {
       cachedLibertyStyle = await res.json();
     }
   } catch {
-    // Graceful offline raster OSM fallback if OpenFreeMap style cannot be fetched
     return {
       version: 8,
       sources: {
@@ -180,7 +159,72 @@ async function buildFootprintMapStyle(mode: MapStyleMode): Promise<any> {
     return style;
   }
 
-  // Native WebGL Dark Cyber-Neon 3D Vector style (crisp labels, glowing waterways, zero raster blur!)
+  if (mode === 'atlas') {
+    // Rich emerald-jade land & sapphire ocean palette inspired by Apple Photos Map so white photo cards pop cleanly
+    style.sky = {
+      'sky-color': '#0b2545',
+      'horizon-color': '#184b7a',
+      'fog-color': '#123a63',
+      'sky-horizon-blend': 0.72,
+      'horizon-fog-blend': 0.6,
+      'fog-ground-blend': 0.45,
+    };
+    for (const layer of style.layers ?? []) {
+      const id = String(layer.id || '').toLowerCase();
+      const paint = (layer.paint = layer.paint ?? {});
+      if (layer.type === 'background') {
+        paint['background-color'] = '#206753';
+      } else if (layer.type === 'raster') {
+        paint['raster-opacity'] = 0.16;
+      } else if (layer.type === 'fill-extrusion' || id === 'building-3d') {
+        layer.minzoom = 13.5;
+        paint['fill-extrusion-color'] = '#2c7e68';
+        paint['fill-extrusion-opacity'] = 0.85;
+      } else if (layer.type === 'fill') {
+        if (id.includes('water')) {
+          paint['fill-color'] = '#133572';
+        } else if (
+          id.includes('park') ||
+          id.includes('grass') ||
+          id.includes('wood') ||
+          id.includes('forest') ||
+          id.includes('green') ||
+          id.includes('landcover')
+        ) {
+          paint['fill-color'] = '#1a5a49';
+          if (paint['fill-outline-color']) paint['fill-outline-color'] = '#24735e';
+        } else if (id.includes('residential') || id.includes('urban') || id.includes('landuse')) {
+          paint['fill-color'] = '#25705b';
+        } else if (id.includes('building')) {
+          paint['fill-color'] = '#2a7c66';
+          if (paint['fill-outline-color']) paint['fill-outline-color'] = '#348f77';
+        } else {
+          paint['fill-color'] = '#206753';
+        }
+      } else if (layer.type === 'line') {
+        if (id.includes('water')) {
+          paint['line-color'] = '#1a4a96';
+        } else if (id.includes('boundary')) {
+          paint['line-color'] = '#6bc7b0';
+        } else if (id.includes('casing')) {
+          paint['line-color'] = '#164d3e';
+        } else if (id.includes('motorway') || id.includes('trunk') || id.includes('primary')) {
+          paint['line-color'] = '#78b8ad';
+        } else if (id.includes('secondary') || id.includes('tertiary')) {
+          paint['line-color'] = '#4b8f83';
+        } else {
+          paint['line-color'] = '#35786c';
+        }
+      } else if (layer.type === 'symbol') {
+        paint['text-color'] = id.includes('water') ? '#93c5fd' : '#f8fafc';
+        paint['text-halo-color'] = '#0d2638';
+        paint['text-halo-width'] = 1.6;
+      }
+    }
+    return style;
+  }
+
+  // Deep Midnight Dark Vector style
   style.sky = {
     'sky-color': '#040c16',
     'horizon-color': '#103452',
@@ -189,7 +233,6 @@ async function buildFootprintMapStyle(mode: MapStyleMode): Promise<any> {
     'horizon-fog-blend': 0.7,
     'fog-ground-blend': 0.55,
   };
-
   for (const layer of style.layers ?? []) {
     const id = String(layer.id || '').toLowerCase();
     const paint = (layer.paint = layer.paint ?? {});
@@ -202,45 +245,25 @@ async function buildFootprintMapStyle(mode: MapStyleMode): Promise<any> {
       paint['fill-extrusion-color'] = '#1b3a5c';
       paint['fill-extrusion-opacity'] = 0.9;
     } else if (layer.type === 'fill') {
-      if (id.includes('water')) {
-        paint['fill-color'] = '#0b3354';
-      } else if (
-        id.includes('park') ||
-        id.includes('grass') ||
-        id.includes('wood') ||
-        id.includes('forest') ||
-        id.includes('green') ||
-        id.includes('landcover')
-      ) {
-        paint['fill-color'] = '#0b2b27';
-        if (paint['fill-outline-color']) paint['fill-outline-color'] = '#134940';
+      if (id.includes('water')) paint['fill-color'] = '#0b2a4a';
+      else if (id.includes('park') || id.includes('wood') || id.includes('forest') || id.includes('grass')) {
+        paint['fill-color'] = '#0b2926';
       } else if (id.includes('building')) {
         paint['fill-color'] = '#132942';
-        if (paint['fill-outline-color']) paint['fill-outline-color'] = '#204269';
       } else {
         paint['fill-color'] = '#0c1d2e';
       }
     } else if (layer.type === 'line') {
-      if (id.includes('water')) {
-        paint['line-color'] = '#114a75';
-      } else if (id.includes('boundary')) {
-        paint['line-color'] = '#246273';
-      } else if (id.includes('casing')) {
-        paint['line-color'] = '#0a1622';
-      } else if (id.includes('motorway') || id.includes('trunk') || id.includes('primary')) {
-        paint['line-color'] = '#2e658f';
-      } else if (id.includes('secondary') || id.includes('tertiary')) {
-        paint['line-color'] = '#214866';
-      } else {
-        paint['line-color'] = '#17324b';
-      }
+      if (id.includes('water')) paint['line-color'] = '#114a75';
+      else if (id.includes('boundary')) paint['line-color'] = '#246273';
+      else if (id.includes('motorway') || id.includes('trunk') || id.includes('primary')) paint['line-color'] = '#2e658f';
+      else paint['line-color'] = '#17324b';
     } else if (layer.type === 'symbol') {
       paint['text-color'] = id.includes('water') ? '#67d1ff' : '#eaf6ff';
       paint['text-halo-color'] = '#06111c';
       paint['text-halo-width'] = 1.6;
     }
   }
-
   return style;
 }
 
@@ -249,8 +272,7 @@ function formatDurationClock(seconds: number): string {
   const secs = seconds % 60;
   if (mins < 60) return `${mins}p ${String(secs).padStart(2, '0')}s`;
   const hrs = Math.floor(mins / 60);
-  const remMins = mins % 60;
-  return `${hrs}h ${remMins}p`;
+  return `${hrs}h ${mins % 60}p`;
 }
 
 function escapeHtml(text: string): string {
@@ -262,23 +284,78 @@ function escapeHtml(text: string): string {
 }
 
 export function FootprintMapPage() {
-  useDocumentTitle('Bản đồ Dấu chân & Lộ trình 3D · Đồng Tháp Smart Travel');
+  useDocumentTitle('Bản đồ Dấu chân & Ký ức Ảnh · Đồng Tháp Smart Travel');
 
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const fogCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
-  const markersRef = useRef<maplibregl.Marker[]>([]);
-  const avatarMarkerRef = useRef<maplibregl.Marker | null>(null);
-  const dashAnimRef = useRef<number>(0);
+  const photoMarkersRef = useRef<maplibregl.Marker[]>([]);
+  const stampMarkersRef = useRef<maplibregl.Marker[]>([]);
+  const userLocationMarkerRef = useRef<maplibregl.Marker | null>(null);
+  const replayAvatarMarkerRef = useRef<maplibregl.Marker | null>(null);
+  const bgWatchIdRef = useRef<number | null>(null);
+  const recordWatchIdRef = useRef<number | null>(null);
+  const wakeLockRef = useRef<any>(null);
+  const simTimerRef = useRef<number | null>(null);
+  const replayTimerRef = useRef<number | null>(null);
+  const hasAutoCenteredOnUserRef = useRef(false);
 
+  // Map UI & Dock State
   const [mapReady, setMapReady] = useState(false);
+  const [mapZoom, setMapZoom] = useState(11.6);
+  const [mapStyle, setMapStyle] = useState<MapStyleMode>('atlas');
+  const [is3DView, setIs3DView] = useState(false);
+  const [showRoutesOnMap, setShowRoutesOnMap] = useState(true);
+  const [fogEnabled, setFogEnabled] = useState(false);
+  const [fogRadiusPx, setFogRadiusPx] = useState(54);
+  const [layerPopoverOpen, setLayerPopoverOpen] = useState(false);
+  const [dockMode, setDockMode] = useState<DockViewMode>('map');
+
+  // Search bar state
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Always-On Live Current User Location (Requirement #1 — completely independent of replay/demo!)
+  const [userLocation, setUserLocation] = useState<LiveUserLocation | null>(() => {
+    try {
+      const raw = localStorage.getItem(USER_LOC_CACHE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as LiveUserLocation;
+      if (typeof parsed?.lat === 'number' && typeof parsed?.lng === 'number') return parsed;
+    } catch {
+      // ignore
+    }
+    return null;
+  });
+  const [gpsStatus, setGpsStatus] = useState<GpsStatus>('locating');
+  const [followUserLocation, setFollowUserLocation] = useState(false);
+  const [pickingManualLocation, setPickingManualLocation] = useState(false);
+  const userLocationRef = useRef<LiveUserLocation | null>(userLocation);
+  userLocationRef.current = userLocation;
+
+  // Core Data State (Photos + Tracks + Check-ins + Geofence Targets)
+  const [userPhotos, setUserPhotos] = useState<FootprintPhotoItem[]>([]);
   const [tracks, setTracks] = useState<LocalFootprintTrack[]>([]);
   const [checkInPins, setCheckInPins] = useState<CheckInPinItem[]>([]);
   const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null);
   const [focusedStopIdx, setFocusedStopIdx] = useState<number | null>(null);
-  const [sidebarTab, setSidebarTab] = useState<'timeline' | 'journeys'>('timeline');
 
-  // Hands-free Automatic GPS Check-in state (Geofencing <= 1,000m)
+  // Photo Cluster Drawer, Lightbox & Capture Modal State
+  const [activeClusterId, setActiveClusterId] = useState<string | null>(null);
+  const [lightboxState, setLightboxState] = useState<{
+    photos: FootprintPhotoItem[];
+    index: number;
+  } | null>(null);
+  const [captureModalState, setCaptureModalState] = useState<{
+    open: boolean;
+    coords?: { lat: number; lng: number } | null;
+    placeName?: string;
+    mode?: PhotoCaptureInitialMode;
+    files?: File[] | null;
+  }>({ open: false });
+  const quickUploadInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Geofencing Auto Check-in (<1,000m)
   const [autoCheckInEnabled, setAutoCheckInEnabled] = useState(true);
   const [geofenceTargets, setGeofenceTargets] = useState<GeofenceTargetItem[]>(() => {
     try {
@@ -290,13 +367,7 @@ export function FootprintMapPage() {
   });
   const checkedInSessionRef = useRef<Set<string>>(new Set());
 
-  // Map & Fog-of-War visual controls (Default Daylight 3D so roads, rivers & routes pop immediately!)
-  const [mapStyle, setMapStyle] = useState<MapStyleMode>('day_3d');
-  const [is3DView, setIs3DView] = useState(true);
-  const [fogEnabled, setFogEnabled] = useState(true);
-  const [fogRadiusPx, setFogRadiusPx] = useState(54);
-
-  // Network & Offline Simulation controls
+  // Network & Offline Sync
   const [browserOnline, setBrowserOnline] = useState<boolean>(
     typeof navigator !== 'undefined' ? navigator.onLine : true,
   );
@@ -304,50 +375,29 @@ export function FootprintMapPage() {
   const [isSyncing, setIsSyncing] = useState(false);
   const isEffectiveOnline = browserOnline && !simulateOffline;
 
-  // Live GPS Tracking state
+  // Live GPS Track Recording
   const [isRecordingGps, setIsRecordingGps] = useState(false);
   const [liveTrackTitle, setLiveTrackTitle] = useState('Hành trình Khám phá Đồng Tháp');
   const [livePoints, setLivePoints] = useState<TrackPoint[]>([]);
   const [liveMemories, setLiveMemories] = useState<MemoryPin[]>([]);
   const [liveStartedAt, setLiveStartedAt] = useState<number | null>(null);
   const [liveElapsedSec, setLiveElapsedSec] = useState(0);
-  const watchIdRef = useRef<number | null>(null);
-  const wakeLockRef = useRef<any>(null);
 
-  // Demo Route Simulator state
+  // Demo Route Simulator & 3D Replay
   const [simulatingRouteId, setSimulatingRouteId] = useState<string | null>(null);
-  const simTimerRef = useRef<number | null>(null);
-
-  // Route Replay state
   const [isReplaying, setIsReplaying] = useState(false);
-  const [replayProgress, setReplayProgress] = useState(0); // 0..100
+  const [replayProgress, setReplayProgress] = useState(0);
   const [replaySpeed, setReplaySpeed] = useState<1 | 2 | 4>(2);
-  const [avatarPos, setAvatarPos] = useState<{ lat: number; lng: number; label?: string } | null>(null);
-  const replayTimerRef = useRef<number | null>(null);
-
-  // Drop Memory Pin Modal state
-  const [pinModalOpen, setPinModalOpen] = useState(false);
-  const [pinCoords, setPinCoords] = useState<{ lat: number; lng: number }>({
-    lat: 10.3015,
-    lng: 105.7554,
-  });
-  const [pinEmoji, setPinEmoji] = useState(MOOD_PRESETS[0]!.emoji);
-  const [pinMood, setPinMood] = useState(MOOD_PRESETS[0]!.label);
-  const [pinPlaceName, setPinPlaceName] = useState('');
-  const [pinNote, setPinNote] = useState('');
+  const [replayAvatarPos, setReplayAvatarPos] = useState<{ lat: number; lng: number } | null>(null);
 
   const selectedTrack = useMemo(
     () => tracks.find((t) => t.clientId === selectedTrackId) || tracks[0] || null,
     [tracks, selectedTrackId],
   );
 
-  // Register offline tile caching Service Worker
+  // Register offline tile SW & online listeners
   useEffect(() => {
     registerFootprintServiceWorker();
-  }, []);
-
-  // Listen to real browser online/offline events
-  useEffect(() => {
     const onOnline = () => setBrowserOnline(true);
     const onOffline = () => setBrowserOnline(false);
     window.addEventListener('online', onOnline);
@@ -358,17 +408,135 @@ export function FootprintMapPage() {
     };
   }, []);
 
+  // ── REQUIREMENT #1: Always-On Live Current Location Watcher ────────────────
+  const persistUserLocation = useCallback((loc: LiveUserLocation) => {
+    setUserLocation(loc);
+    try {
+      localStorage.setItem(USER_LOC_CACHE_KEY, JSON.stringify(loc));
+    } catch {
+      // ignore storage quota errors
+    }
+  }, []);
+
+  const requestLiveLocation = useCallback(
+    (flyImmediately = false) => {
+      if (typeof navigator === 'undefined' || !('geolocation' in navigator)) {
+        setGpsStatus('unavailable');
+        if (flyImmediately) {
+          toast.info(
+            'Trình duyệt không có cảm biến GPS',
+            'Bạn có thể chạm vào bản đồ để đặt vị trí hiện tại thủ công.',
+          );
+        }
+        return;
+      }
+
+      setGpsStatus((prev) => (prev === 'active' ? 'active' : 'locating'));
+
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const nextLoc: LiveUserLocation = {
+            lat: Number(pos.coords.latitude.toFixed(6)),
+            lng: Number(pos.coords.longitude.toFixed(6)),
+            accuracyMeters: pos.coords.accuracy || undefined,
+            headingDegrees: typeof pos.coords.heading === 'number' && !Number.isNaN(pos.coords.heading) ? pos.coords.heading : null,
+            speedKmh: pos.coords.speed ? Math.round(pos.coords.speed * 3.6) : undefined,
+            updatedAt: Date.now(),
+            isManualFallback: false,
+          };
+          persistUserLocation(nextLoc);
+          setGpsStatus('active');
+
+          if (flyImmediately || !hasAutoCenteredOnUserRef.current) {
+            hasAutoCenteredOnUserRef.current = true;
+            setFollowUserLocation(true);
+            mapRef.current?.flyTo({
+              center: [nextLoc.lng, nextLoc.lat],
+              zoom: Math.max(mapRef.current.getZoom(), 13.5),
+              duration: 900,
+            });
+          }
+        },
+        (err) => {
+          if (err.code === err.PERMISSION_DENIED) {
+            setGpsStatus('denied');
+            if (flyImmediately) {
+              toast.info(
+                'Chưa cấp quyền vị trí GPS',
+                'Hãy bật quyền Vị trí trên trình duyệt hoặc bấm "Đặt vị trí trên bản đồ".',
+              );
+            }
+          } else {
+            setGpsStatus((prev) => (prev === 'active' ? 'active' : 'unavailable'));
+            if (flyImmediately && userLocation) {
+              mapRef.current?.flyTo({
+                center: [userLocation.lng, userLocation.lat],
+                zoom: 14.5,
+                duration: 800,
+              });
+            }
+          }
+        },
+        { enableHighAccuracy: true, maximumAge: 5000, timeout: 12000 },
+      );
+
+      // Start continuous background location watch so your live blue dot always moves with you
+      if (bgWatchIdRef.current === null) {
+        bgWatchIdRef.current = navigator.geolocation.watchPosition(
+          (pos) => {
+            const nextLoc: LiveUserLocation = {
+              lat: Number(pos.coords.latitude.toFixed(6)),
+              lng: Number(pos.coords.longitude.toFixed(6)),
+              accuracyMeters: pos.coords.accuracy || undefined,
+              headingDegrees: typeof pos.coords.heading === 'number' && !Number.isNaN(pos.coords.heading) ? pos.coords.heading : null,
+              speedKmh: pos.coords.speed ? Math.round(pos.coords.speed * 3.6) : undefined,
+              updatedAt: Date.now(),
+              isManualFallback: false,
+            };
+            persistUserLocation(nextLoc);
+            setGpsStatus('active');
+          },
+          () => {
+            // keep last known location silently
+          },
+          { enableHighAccuracy: true, maximumAge: 4000, timeout: 15000 },
+        );
+      }
+    },
+    [persistUserLocation, userLocation],
+  );
+
+  // Trigger always-on live location immediately on mount!
+  useEffect(() => {
+    requestLiveLocation(false);
+    return () => {
+      if (bgWatchIdRef.current !== null && 'geolocation' in navigator) {
+        navigator.geolocation.clearWatch(bgWatchIdRef.current);
+        bgWatchIdRef.current = null;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Keep map centered smoothly when follow mode is active
+  useEffect(() => {
+    if (!followUserLocation || !userLocation || !mapReady) return;
+    mapRef.current?.easeTo({
+      center: [userLocation.lng, userLocation.lat],
+      duration: 600,
+    });
+  }, [followUserLocation, userLocation, mapReady]);
+
+  // ── Cloud Sync (Photos + Tracks + Check-ins + Geofence Targets) ────────────
   const pendingSyncCount = useMemo(
     () => tracks.filter((t) => t.syncStatus === 'pending').length,
     [tracks],
   );
 
-  // Sync local pending tracks with MongoDB Server when online (+ auto-seed road-snapped starter journey)
   const syncWithCloud = useCallback(
     async (silent = false) => {
       let localList = await getAllLocalTracks();
 
-      // Auto-seed a crisp road-snapped starter journey on first visit so the map is immediately vivid & clear
       if (
         localList.length === 0 &&
         typeof window !== 'undefined' &&
@@ -394,45 +562,6 @@ export function FootprintMapPage() {
         };
         await saveLocalTrack(starterTrack);
         localList = await getAllLocalTracks();
-      } else {
-        // Upgrade old straight-line starter track once to real road-snapped OSRM geometry + photos
-        const starterNeedsSnap =
-          isEffectiveOnline &&
-          typeof window !== 'undefined' &&
-          !window.localStorage.getItem('dtst_starter_snapped_v2');
-
-        let touched = false;
-        const presetMemImages = new Map<string, string>();
-        for (const pr of PRESET_DEMO_JOURNEYS) {
-          for (const wp of pr.waypoints) {
-            if (wp.placeName && wp.imageUrl) presetMemImages.set(wp.placeName, wp.imageUrl);
-          }
-        }
-        for (const tr of localList) {
-          let changed = false;
-          if (starterNeedsSnap && tr.clientId === 'starter-demo-sa-dec-heritage') {
-            const preset = PRESET_DEMO_JOURNEYS[0]!;
-            const snapped = await resolveRoadSnappedJourney(preset.waypoints, true);
-            if (snapped.roadSnapped && snapped.points.length >= 4) {
-              tr.points = snapped.points;
-              tr.memories = snapped.memories;
-              tr.distanceKm = calculatePolylineKm(snapped.points);
-              changed = true;
-              window.localStorage.setItem('dtst_starter_snapped_v2', '1');
-            }
-          }
-          for (const mem of tr.memories || []) {
-            if (!mem.imageUrl && mem.placeName && presetMemImages.has(mem.placeName)) {
-              mem.imageUrl = presetMemImages.get(mem.placeName);
-              changed = true;
-            }
-          }
-          if (changed) {
-            touched = true;
-            await saveLocalTrack(tr);
-          }
-        }
-        if (touched) localList = await getAllLocalTracks();
       }
 
       setTracks(localList);
@@ -444,7 +573,7 @@ export function FootprintMapPage() {
         if (!silent) {
           toast.info(
             'Đang ở chế độ Offline',
-            'Hành trình & các điểm tự động điểm danh đã được lưu an toàn trong IndexedDB và sẽ tự đồng bộ khi có mạng.',
+            'Hành trình đã được lưu an toàn trong IndexedDB và sẽ tự đồng bộ khi có mạng.',
           );
         }
         return;
@@ -457,15 +586,7 @@ export function FootprintMapPage() {
           const syncRes = await api.post<{
             success: boolean;
             syncedCount: number;
-            autoCheckIns?: Array<{
-              id: string;
-              name: string;
-              slug: string;
-              area: string;
-              category: string;
-              pointsAwarded: number;
-              distanceMeters: number;
-            }>;
+            autoCheckIns?: Array<{ name: string; pointsAwarded: number }>;
             newBadges?: BadgeInfo[];
           }>('/footprints/sync', {
             tracks: pending,
@@ -476,18 +597,13 @@ export function FootprintMapPage() {
           const autoList = syncRes.data?.autoCheckIns ?? [];
           if (autoList.length > 0) {
             const totalExp = autoList.reduce((acc, item) => acc + (item.pointsAwarded || 10), 0);
-            const names = autoList.map((a) => a.name).join(', ');
             toast.success(
-              `🛂 Tự động Điểm danh GPS (+${totalExp} EXP)!`,
-              `Hệ thống tự động đóng dấu Hộ chiếu tại ${autoList.length} điểm: ${names}.`,
+              `Tự động Điểm danh GPS (+${totalExp} EXP)`,
+              `Đã đóng dấu Hộ chiếu tại ${autoList.map((a) => a.name).join(', ')}.`,
             );
           } else if (!silent) {
-            toast.success(
-              'Đã đồng bộ lên Cloud!',
-              `Đã sao lưu ${pending.length} hành trình từ bộ nhớ Offline lên máy chủ.`,
-            );
+            toast.success('Đã đồng bộ lên Cloud!', `Sao lưu thành công ${pending.length} hành trình.`);
           }
-
           if (syncRes.data?.newBadges?.length) {
             announceBadges(syncRes.data.newBadges);
           }
@@ -507,6 +623,7 @@ export function FootprintMapPage() {
             memories: MemoryPin[];
             isDemoRoute?: boolean;
           }>;
+          photos?: FootprintPhotoItem[];
           checkInPins: CheckInPinItem[];
           geofenceTargets?: GeofenceTargetItem[];
         }>('/footprints');
@@ -514,15 +631,14 @@ export function FootprintMapPage() {
         if (res.data?.tracks) {
           const merged = await mergeServerTracksWithLocal(res.data.tracks);
           setTracks(merged);
-          if (!selectedTrackId && merged[0]) {
-            setSelectedTrackId(merged[0].clientId);
-          }
+          if (!selectedTrackId && merged[0]) setSelectedTrackId(merged[0].clientId);
+        }
+        if (Array.isArray(res.data?.photos)) {
+          setUserPhotos(res.data.photos);
         }
         if (res.data?.checkInPins) {
           setCheckInPins(res.data.checkInPins);
-          for (const p of res.data.checkInPins) {
-            checkedInSessionRef.current.add(p.destinationId);
-          }
+          for (const p of res.data.checkInPins) checkedInSessionRef.current.add(p.destinationId);
         }
         if (res.data?.geofenceTargets) {
           setGeofenceTargets(res.data.geofenceTargets);
@@ -536,7 +652,7 @@ export function FootprintMapPage() {
           }
         }
       } catch {
-        // Offline or transient network error — local tracks stay safe in IndexedDB
+        // Offline / transient network error — keep local data cleanly
       } finally {
         setIsSyncing(false);
       }
@@ -548,54 +664,127 @@ export function FootprintMapPage() {
     void syncWithCloud(true);
   }, [syncWithCloud]);
 
-  // Compute statistics across all tracks + check-ins
+  // ── Merge Real User/Mobile-App Photos with Journey & Check-in Memories ────
+  const allMapPhotos = useMemo<FootprintPhotoItem[]>(() => {
+    const combined: FootprintPhotoItem[] = [...userPhotos];
+    const seenKeys = new Set(
+      userPhotos.map((p) => `${p.imageUrl}|${p.coordinates.lat.toFixed(3)},${p.coordinates.lng.toFixed(3)}`),
+    );
+
+    // Add check-in destination photos so stamped destinations show on the photo map too
+    for (const chk of checkInPins) {
+      if (!chk.imageUrl) continue;
+      const key = `${chk.imageUrl}|${chk.coordinates.lat.toFixed(3)},${chk.coordinates.lng.toFixed(3)}`;
+      if (seenKeys.has(key)) continue;
+      seenKeys.add(key);
+      combined.push({
+        id: `chk-${chk.id}`,
+        clientPhotoId: `chk-${chk.id}`,
+        imageUrl: chk.imageUrl,
+        thumbnailUrl: chk.imageUrl,
+        coordinates: chk.coordinates,
+        takenAt: chk.checkedInAt || new Date().toISOString(),
+        placeName: chk.name,
+        area: chk.area,
+        destinationId: chk.destinationId,
+        destinationSlug: chk.slug,
+        caption: `Đã đóng dấu Hộ chiếu số (+${chk.pointsAwarded} EXP)`,
+        sourceApp: 'journey',
+        isStarterMemory: true,
+      });
+    }
+
+    // Add track memory photos (e.g. starter Sa Đéc heritage spots) so map is immediately visual & rich
+    for (const tr of tracks) {
+      for (const m of tr.memories || []) {
+        const photoUrl = resolveStopPhoto(m.placeName, m.imageUrl);
+        if (!photoUrl) continue;
+        const key = `${photoUrl}|${m.lat.toFixed(3)},${m.lng.toFixed(3)}`;
+        if (seenKeys.has(key)) continue;
+        seenKeys.add(key);
+        combined.push({
+          id: `mem-${tr.clientId}-${m.clientId}`,
+          clientPhotoId: m.clientId,
+          imageUrl: photoUrl,
+          thumbnailUrl: photoUrl,
+          coordinates: { lat: m.lat, lng: m.lng },
+          takenAt: new Date(m.createdAt || tr.startedAt || Date.now()).toISOString(),
+          placeName: m.placeName || m.moodLabel,
+          area: tr.title.includes('Sa Đéc') ? 'sa-dec' : tr.title.includes('Cao Lãnh') ? 'cao-lanh' : 'dong-thap',
+          trackClientId: tr.clientId,
+          caption: m.note || m.moodLabel,
+          sourceApp: 'journey',
+          isStarterMemory: Boolean(tr.isDemoRoute),
+        });
+      }
+    }
+
+    return combined.sort((a, b) => new Date(b.takenAt).getTime() - new Date(a.takenAt).getTime());
+  }, [userPhotos, checkInPins, tracks]);
+
+  // Filter photos by search bar in real time
+  const visibleMapPhotos = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return allMapPhotos;
+    return allMapPhotos.filter(
+      (p) =>
+        (p.placeName || '').toLowerCase().includes(q) ||
+        (p.caption || '').toLowerCase().includes(q) ||
+        formatAreaDisplay(p.area).toLowerCase().includes(q),
+    );
+  }, [allMapPhotos, searchQuery]);
+
+  // Zoom-responsive Apple Photos spatial clusters
+  const photoClusters = useMemo(
+    () => clusterPhotosByZoom(visibleMapPhotos, mapZoom),
+    [visibleMapPhotos, mapZoom],
+  );
+
+  const activeCluster = useMemo<PhotoCluster | null>(() => {
+    if (!activeClusterId) return null;
+    const direct = photoClusters.find((c) => c.id === activeClusterId);
+    if (direct) return direct;
+    // Fallback if zoom changed and cluster ID regenerated: keep matching by cover photo
+    const coverId = activeClusterId.split('-').slice(2).join('-');
+    return photoClusters.find((c) => c.photos.some((p) => p.id === coverId)) || null;
+  }, [activeClusterId, photoClusters]);
+
+  // Compute aggregate stats
   const stats = useMemo(() => {
     const liveDist = calculatePolylineKm(livePoints);
     const totalKm =
       Math.round((tracks.reduce((s, t) => s + (t.distanceKm || 0), 0) + liveDist) * 100) / 100;
-    const totalMemories =
-      tracks.reduce((s, t) => s + (t.memories?.length || 0), 0) + liveMemories.length;
-
     const unlockedCells = new Set<string>();
     for (const t of tracks) {
-      for (const pt of t.points) {
-        unlockedCells.add(`${(pt.lat * 50).toFixed(0)}:${(pt.lng * 50).toFixed(0)}`);
-      }
+      for (const pt of t.points) unlockedCells.add(`${(pt.lat * 50).toFixed(0)}:${(pt.lng * 50).toFixed(0)}`);
     }
-    for (const pt of livePoints) {
-      unlockedCells.add(`${(pt.lat * 50).toFixed(0)}:${(pt.lng * 50).toFixed(0)}`);
+    for (const ph of allMapPhotos) {
+      unlockedCells.add(`${(ph.coordinates.lat * 50).toFixed(0)}:${(ph.coordinates.lng * 50).toFixed(0)}`);
     }
     for (const pin of checkInPins) {
-      unlockedCells.add(
-        `${(pin.coordinates.lat * 50).toFixed(0)}:${(pin.coordinates.lng * 50).toFixed(0)}`,
-      );
+      unlockedCells.add(`${(pin.coordinates.lat * 50).toFixed(0)}:${(pin.coordinates.lng * 50).toFixed(0)}`);
     }
-
     const exploredPercent = Math.min(
       100,
       Math.round(((unlockedCells.size + checkInPins.length * 2) / 110) * 1000) / 10,
     );
-
     return {
       totalKm,
-      totalTracks: tracks.length + (livePoints.length > 0 ? 1 : 0),
-      totalMemories,
+      totalPhotos: allMapPhotos.length,
+      userPhotoCount: userPhotos.length,
       totalCheckIns: checkInPins.length,
-      unlockedZones: unlockedCells.size,
       exploredPercent,
     };
-  }, [tracks, livePoints, liveMemories, checkInPins]);
+  }, [tracks, livePoints, allMapPhotos, userPhotos.length, checkInPins]);
 
-  // Compute ordered stops with segment distances for the selected track's Route Timeline
+  // Route stops with segment legs for JourneyDrawer
   const routeStopsWithLegs = useMemo(() => {
     if (!selectedTrack) return [];
     const mems = selectedTrack.memories || [];
     if (mems.length > 0) {
       return mems.map((m, idx) => {
         const prev = idx > 0 ? mems[idx - 1]! : null;
-        const legKm = prev
-          ? Math.max(0.2, Math.round(haversineDistanceKm(prev, m) * 1.18 * 10) / 10)
-          : 0;
+        const legKm = prev ? Math.max(0.2, Math.round(haversineDistanceKm(prev, m) * 1.18 * 10) / 10) : 0;
         const legMin = prev ? Math.max(2, Math.round((legKm / 30) * 60)) : 0;
         return {
           idx,
@@ -611,108 +800,55 @@ export function FootprintMapPage() {
         };
       });
     }
-    // If a GPS track has no memory pins yet, create Start & Finish anchors
-    if (selectedTrack.points.length >= 2) {
-      const start = selectedTrack.points[0]!;
-      const end = selectedTrack.points[selectedTrack.points.length - 1]!;
-      return [
-        {
-          idx: 0,
-          lat: start.lat,
-          lng: start.lng,
-          title: 'Điểm xuất phát',
-          emoji: '🚩',
-          moodLabel: 'Bắt đầu hành trình',
-          note: `Tọa độ ${start.lat.toFixed(4)}, ${start.lng.toFixed(4)}`,
-          imageUrl: undefined,
-          legKm: 0,
-          legMin: 0,
-        },
-        {
-          idx: 1,
-          lat: end.lat,
-          lng: end.lng,
-          title: 'Điểm kết thúc',
-          emoji: '🏁',
-          moodLabel: 'Hoàn thành lộ trình',
-          note: `Tổng chiều dài ${selectedTrack.distanceKm} km`,
-          imageUrl: undefined,
-          legKm: selectedTrack.distanceKm,
-          legMin: Math.max(2, Math.round((selectedTrack.durationSeconds || 120) / 60)),
-        },
-      ];
-    }
     return [];
   }, [selectedTrack]);
 
-  // Fit MapLibre camera cleanly to frame 100% of a track's points
+  // Fit bounds helper
   const fitTrackBounds = useCallback(
-    (pts: TrackPoint[], instant = false) => {
+    (pts: TrackPoint[]) => {
       const map = mapRef.current;
       if (!map || pts.length === 0) return;
-
+      setFollowUserLocation(false);
       if (pts.length === 1) {
-        map.flyTo({
-          center: [pts[0]!.lng, pts[0]!.lat],
-          zoom: 14.2,
-          pitch: is3DView ? 46 : 0,
-          duration: instant ? 0 : 900,
-        });
+        map.flyTo({ center: [pts[0]!.lng, pts[0]!.lat], zoom: 14.5, pitch: is3DView ? 45 : 0, duration: 850 });
         return;
       }
-
       const bounds = new maplibregl.LngLatBounds();
-      for (const p of pts) {
-        bounds.extend([p.lng, p.lat]);
-      }
-
+      for (const p of pts) bounds.extend([p.lng, p.lat]);
       map.fitBounds(bounds, {
-        padding: { top: 82, bottom: 112, left: 48, right: 48 },
-        pitch: is3DView ? 44 : 0,
-        bearing: is3DView ? -10 : 0,
-        maxZoom: 15,
-        duration: instant ? 0 : 950,
+        padding: { top: 96, bottom: 120, left: 64, right: 64 },
+        pitch: is3DView ? 42 : 0,
+        maxZoom: 14.8,
+        duration: 900,
       });
     },
     [is3DView],
   );
 
-  // Frame-accurate Fog-of-War Canvas overlay synced to MapLibre GL JS projection
+  // Fog-of-War optional canvas redraw
   const redrawFogOfWar = useCallback(() => {
     const canvas = fogCanvasRef.current;
     const map = mapRef.current;
     if (!canvas || !map) return;
-
     const container = map.getContainer();
     const w = container.clientWidth;
     const h = container.clientHeight;
     if (w === 0 || h === 0) return;
-
     if (canvas.width !== w || canvas.height !== h) {
       canvas.width = w;
       canvas.height = h;
     }
-
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     ctx.clearRect(0, 0, w, h);
-
     if (!fogEnabled) return;
 
-    // 1. Clean translucent mist so map streets & rivers stay recognizable
     ctx.globalCompositeOperation = 'source-over';
-    ctx.fillStyle =
-      mapStyle === 'night_neon'
-        ? 'rgba(5, 16, 28, 0.40)'
-        : mapStyle === 'satellite'
-          ? 'rgba(6, 22, 18, 0.34)'
-          : 'rgba(15, 47, 37, 0.22)';
+    ctx.fillStyle = mapStyle === 'day_3d' ? 'rgba(15, 47, 37, 0.24)' : 'rgba(4, 15, 28, 0.42)';
     ctx.fillRect(0, 0, w, h);
 
-    // 2. Carve glowing clear corridors along GPS trails, live points, memories & check-ins
     ctx.globalCompositeOperation = 'destination-out';
-    const zoom = map.getZoom();
-    const scaleFactor = Math.max(0.65, Math.min(2.3, Math.pow(1.16, zoom - 12)));
+    const scaleFactor = Math.max(0.65, Math.min(2.3, Math.pow(1.16, map.getZoom() - 12)));
     const radius = fogRadiusPx * scaleFactor;
 
     const carveCircle = (lat: number, lng: number, r: number) => {
@@ -728,79 +864,50 @@ export function FootprintMapPage() {
       ctx.fill();
     };
 
-    for (const track of tracks) {
-      for (const p of track.points) {
-        carveCircle(p.lat, p.lng, radius);
-      }
-      for (const m of track.memories) {
-        carveCircle(m.lat, m.lng, radius * 1.28);
-      }
+    if (userLocation) carveCircle(userLocation.lat, userLocation.lng, radius * 1.8);
+    for (const ph of allMapPhotos) carveCircle(ph.coordinates.lat, ph.coordinates.lng, radius * 1.45);
+    for (const tr of tracks) {
+      for (const p of tr.points) carveCircle(p.lat, p.lng, radius);
     }
-    for (const p of livePoints) {
-      carveCircle(p.lat, p.lng, radius * 1.2);
-    }
-    for (const pin of checkInPins) {
-      carveCircle(pin.coordinates.lat, pin.coordinates.lng, radius * 1.4);
-    }
-    if (avatarPos) {
-      carveCircle(avatarPos.lat, avatarPos.lng, radius * 1.55);
-    }
-    if (tracks.length === 0 && livePoints.length === 0 && checkInPins.length === 0) {
-      const c = map.getCenter();
-      carveCircle(c.lat, c.lng, radius * 2.2);
-    }
-
+    for (const p of livePoints) carveCircle(p.lat, p.lng, radius * 1.2);
+    if (replayAvatarPos) carveCircle(replayAvatarPos.lat, replayAvatarPos.lng, radius * 1.5);
     ctx.globalCompositeOperation = 'source-over';
-  }, [fogEnabled, fogRadiusPx, mapStyle, tracks, livePoints, checkInPins, avatarPos]);
+  }, [fogEnabled, fogRadiusPx, mapStyle, userLocation, allMapPhotos, tracks, livePoints, replayAvatarPos]);
 
-  // Synchronize WebGL GeoJSON Route Layers & Numbered Photo Markers
-  const syncMapLayersAndMarkers = useCallback(() => {
+  // ── Sync Route Polyline Layers ─────────────────────────────────────────────
+  const syncRouteLayers = useCallback(() => {
     const map = mapRef.current;
     if (!map || !map.isStyleLoaded()) return;
 
-    const activeTrackColor =
-      livePoints.length >= 2 ? '#f43f5e' : selectedTrack?.color || '#10b981';
+    const activeTrackColor = livePoints.length >= 2 ? '#f43f5e' : selectedTrack?.color || '#34d399';
+    const activePts = showRoutesOnMap
+      ? livePoints.length >= 2
+        ? livePoints
+        : selectedTrack?.points || []
+      : [];
 
-    // Secondary (unselected) tracks GeoJSON
-    const secondaryFeatures: GeoJSON.Feature<GeoJSON.LineString>[] = [];
-    for (const t of tracks) {
-      if (t.points.length < 2) continue;
-      if (livePoints.length < 2 && selectedTrack && t.clientId === selectedTrack.clientId) continue;
-      secondaryFeatures.push({
-        type: 'Feature',
-        properties: { color: t.color || '#10b981' },
-        geometry: {
-          type: 'LineString',
-          coordinates: t.points.map((p) => [p.lng, p.lat]),
-        },
-      });
-    }
-
-    // Active (highlighted) route GeoJSON
-    const activePts = livePoints.length >= 2 ? livePoints : selectedTrack?.points || [];
-    const activeFeatures: GeoJSON.Feature<GeoJSON.LineString>[] =
-      activePts.length >= 2
-        ? [
-            {
-              type: 'Feature',
-              properties: { color: activeTrackColor },
-              geometry: {
-                type: 'LineString',
-                coordinates: activePts.map((p) => [p.lng, p.lat]),
+    const activeData: GeoJSON.FeatureCollection = {
+      type: 'FeatureCollection',
+      features:
+        activePts.length >= 2
+          ? [
+              {
+                type: 'Feature',
+                properties: { color: activeTrackColor },
+                geometry: {
+                  type: 'LineString',
+                  coordinates: activePts.map((p) => [p.lng, p.lat]),
+                },
               },
-            },
-          ]
-        : [];
+            ]
+          : [],
+    };
 
-    // Replayed progress trail GeoJSON (bright gold highlight behind avatar during Replay!)
     const replayFeatures: GeoJSON.Feature<GeoJSON.LineString>[] = [];
     if (isReplaying && selectedTrack && selectedTrack.points.length >= 2 && replayProgress > 1) {
       const cutIdx = Math.max(
         2,
-        Math.min(
-          selectedTrack.points.length,
-          Math.ceil((replayProgress / 100) * selectedTrack.points.length),
-        ),
+        Math.min(selectedTrack.points.length, Math.ceil((replayProgress / 100) * selectedTrack.points.length)),
       );
       replayFeatures.push({
         type: 'Feature',
@@ -812,48 +919,14 @@ export function FootprintMapPage() {
       });
     }
 
-    const secondaryData: GeoJSON.FeatureCollection = {
-      type: 'FeatureCollection',
-      features: secondaryFeatures,
-    };
-    const activeData: GeoJSON.FeatureCollection = {
-      type: 'FeatureCollection',
-      features: activeFeatures,
-    };
-    const replayData: GeoJSON.FeatureCollection = {
-      type: 'FeatureCollection',
-      features: replayFeatures,
-    };
-
     const setOrAddSource = (id: string, data: GeoJSON.FeatureCollection) => {
       const src = map.getSource(id) as maplibregl.GeoJSONSource | undefined;
-      if (src) {
-        src.setData(data);
-      } else {
-        map.addSource(id, { type: 'geojson', data });
-      }
+      if (src) src.setData(data);
+      else map.addSource(id, { type: 'geojson', data });
     };
 
-    setOrAddSource('fp-secondary-routes', secondaryData);
     setOrAddSource('fp-active-route', activeData);
-    setOrAddSource('fp-replay-progress', replayData);
-
-    const casingColor = mapStyle === 'night_neon' ? '#04111d' : '#ffffff';
-
-    if (!map.getLayer('fp-secondary-line')) {
-      map.addLayer({
-        id: 'fp-secondary-line',
-        type: 'line',
-        source: 'fp-secondary-routes',
-        layout: { 'line-cap': 'round', 'line-join': 'round' },
-        paint: {
-          'line-color': ['coalesce', ['get', 'color'], '#10b981'],
-          'line-width': 4,
-          'line-opacity': 0.38,
-          'line-dasharray': [2, 1.8],
-        },
-      });
-    }
+    setOrAddSource('fp-replay-progress', { type: 'FeatureCollection', features: replayFeatures });
 
     if (!map.getLayer('fp-active-glow')) {
       map.addLayer({
@@ -861,32 +934,10 @@ export function FootprintMapPage() {
         type: 'line',
         source: 'fp-active-route',
         layout: { 'line-cap': 'round', 'line-join': 'round' },
-        paint: {
-          'line-color': activeTrackColor,
-          'line-width': 18,
-          'line-blur': 8,
-          'line-opacity': mapStyle === 'night_neon' ? 0.55 : 0.34,
-        },
+        paint: { 'line-color': activeTrackColor, 'line-width': 14, 'line-blur': 7, 'line-opacity': 0.35 },
       });
     } else {
       map.setPaintProperty('fp-active-glow', 'line-color', activeTrackColor);
-      map.setPaintProperty('fp-active-glow', 'line-opacity', mapStyle === 'night_neon' ? 0.55 : 0.34);
-    }
-
-    if (!map.getLayer('fp-active-casing')) {
-      map.addLayer({
-        id: 'fp-active-casing',
-        type: 'line',
-        source: 'fp-active-route',
-        layout: { 'line-cap': 'round', 'line-join': 'round' },
-        paint: {
-          'line-color': casingColor,
-          'line-width': 10,
-          'line-opacity': 0.96,
-        },
-      });
-    } else {
-      map.setPaintProperty('fp-active-casing', 'line-color', casingColor);
     }
 
     if (!map.getLayer('fp-active-core')) {
@@ -895,29 +946,10 @@ export function FootprintMapPage() {
         type: 'line',
         source: 'fp-active-route',
         layout: { 'line-cap': 'round', 'line-join': 'round' },
-        paint: {
-          'line-color': activeTrackColor,
-          'line-width': 5.8,
-          'line-opacity': 1,
-        },
+        paint: { 'line-color': activeTrackColor, 'line-width': 4.5, 'line-opacity': 0.92 },
       });
     } else {
       map.setPaintProperty('fp-active-core', 'line-color', activeTrackColor);
-    }
-
-    if (!map.getLayer('fp-active-energy')) {
-      map.addLayer({
-        id: 'fp-active-energy',
-        type: 'line',
-        source: 'fp-active-route',
-        layout: { 'line-cap': 'round', 'line-join': 'round' },
-        paint: {
-          'line-color': '#ffffff',
-          'line-width': 2.6,
-          'line-opacity': 0.85,
-          'line-dasharray': [0.4, 3.2],
-        },
-      });
     }
 
     if (!map.getLayer('fp-replay-line')) {
@@ -926,164 +958,177 @@ export function FootprintMapPage() {
         type: 'line',
         source: 'fp-replay-progress',
         layout: { 'line-cap': 'round', 'line-join': 'round' },
-        paint: {
-          'line-color': '#fbbf24',
-          'line-width': 6.5,
-          'line-opacity': 0.96,
-        },
+        paint: { 'line-color': '#fbbf24', 'line-width': 5.5, 'line-opacity': 0.98 },
       });
-    }
-
-    // Clear and rebuild crisp Numbered Photo Markers (Zero overlapping pill clutter!)
-    for (const m of markersRef.current) m.remove();
-    markersRef.current = [];
-
-    const activeStops = liveMemories.length > 0 ? liveMemories : selectedTrack?.memories || [];
-
-    // If active route has points but no memory pins, render clear Start & End flags
-    if (activePts.length >= 2 && activeStops.length === 0) {
-      const startPt = activePts[0]!;
-      const endPt = activePts[activePts.length - 1]!;
-      const makeFlag = (emoji: string, label: string, bg: string) => {
-        const el = document.createElement('div');
-        el.innerHTML = `<div style="display:inline-flex;align-items:center;gap:4px;background:${bg};color:#fff;padding:4px 10px;border-radius:999px;border:2px solid #fff;font-size:11px;font-weight:800;box-shadow:0 8px 20px rgba(0,0,0,0.28);white-space:nowrap;">${emoji} ${label}</div>`;
-        return el;
-      };
-      markersRef.current.push(
-        new maplibregl.Marker({ element: makeFlag('🚩', 'Xuất phát', '#059669'), anchor: 'bottom' })
-          .setLngLat([startPt.lng, startPt.lat])
-          .addTo(map),
-        new maplibregl.Marker({ element: makeFlag('🏁', 'Kết thúc', '#0f172a'), anchor: 'bottom' })
-          .setLngLat([endPt.lng, endPt.lat])
-          .addTo(map),
-      );
-    }
-
-    // Render crisp Numbered Stop Pins with Real Thumbnail & Interactive Rich Popup
-    activeStops.forEach((mem, idx) => {
-      const isFocused = focusedStopIdx === idx;
-      const isStart = idx === 0;
-      const isEnd = idx === activeStops.length - 1 && activeStops.length > 1;
-      const stopLabel = escapeHtml(mem.placeName || mem.moodLabel);
-      const photoUrl = resolveStopPhoto(mem.placeName, mem.imageUrl);
-      const roleTag = isStart ? 'XUẤT PHÁT' : isEnd ? 'ĐÍCH ĐẾN' : `CHẶNG ${idx + 1}`;
-
-      const el = document.createElement('button');
-      el.type = 'button';
-      el.className = 'fp-stop-marker group';
-      el.setAttribute('aria-label', `Chặng ${idx + 1}: ${mem.placeName || mem.moodLabel}`);
-      el.innerHTML = `
-        <div style="display:flex;flex-direction:column;align-items:center;cursor:pointer;transition:transform 200ms ease;transform:${isFocused ? 'scale(1.14)' : 'scale(1)'};">
-          ${
-            isFocused
-              ? `<div style="margin-bottom:5px;display:inline-flex;align-items:center;gap:5px;background:rgba(15,47,37,0.95);color:#fff;padding:4px 10px;border-radius:999px;border:1.5px solid ${activeTrackColor};font-size:11px;font-weight:800;white-space:nowrap;max-width:190px;box-shadow:0 10px 24px rgba(0,0,0,0.35);">
-                  <span style="font-size:10px;color:#6ee7b7;flex-shrink:0">${roleTag}</span>
-                  <span style="overflow:hidden;text-overflow:ellipsis">${stopLabel}</span>
-                </div>`
-              : ''
-          }
-          <div style="position:relative;width:${isFocused ? 46 : 38}px;height:${isFocused ? 46 : 38}px;border-radius:999px;border:3px solid ${isFocused ? '#ffffff' : activeTrackColor};background:#fff;box-shadow:0 8px 22px rgba(0,0,0,0.34);overflow:hidden;display:grid;place-items:center;">
-            ${
-              photoUrl
-                ? `<img src="${escapeHtml(photoUrl)}" alt="" style="width:100%;height:100%;object-fit:cover;" />`
-                : `<span style="font-size:18px;line-height:1">${mem.emoji}</span>`
-            }
-          </div>
-          <span style="margin-top:-10px;position:relative;z-index:2;display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 5px;border-radius:999px;background:${isStart ? '#059669' : isEnd ? '#e11d48' : activeTrackColor};color:#fff;border:2px solid #fff;font-size:11px;font-weight:900;box-shadow:0 4px 10px rgba(0,0,0,0.3);">
-            ${idx + 1}
-          </span>
-        </div>
-      `;
-
-      const popupHtml = `
-        <div style="width:220px;font-family:'Be Vietnam Pro',system-ui,sans-serif;">
-          ${
-            photoUrl
-              ? `<img src="${escapeHtml(photoUrl)}" alt="" style="width:100%;height:105px;object-fit:cover;border-radius:12px;margin-bottom:8px;" />`
-              : ''
-          }
-          <div style="font-size:10px;font-weight:800;letter-spacing:0.06em;color:${activeTrackColor};text-transform:uppercase;">
-            ${roleTag} · ${mem.emoji} ${escapeHtml(mem.moodLabel)}
-          </div>
-          <div style="font-size:13px;font-weight:800;color:#0f2f25;margin-top:2px;">${stopLabel}</div>
-          ${
-            mem.note
-              ? `<p style="font-size:11px;line-height:1.45;color:#475569;margin:5px 0 0;">${escapeHtml(mem.note)}</p>`
-              : ''
-          }
-        </div>
-      `;
-
-      const popup = new maplibregl.Popup({ offset: 24, maxWidth: '250px' }).setHTML(popupHtml);
-      const marker = new maplibregl.Marker({ element: el, anchor: 'bottom' })
-        .setLngLat([mem.lng, mem.lat])
-        .setPopup(popup)
-        .addTo(map);
-
-      el.addEventListener('click', () => {
-        setFocusedStopIdx(idx);
-        map.flyTo({
-          center: [mem.lng, mem.lat],
-          zoom: Math.max(map.getZoom(), 14.6),
-          pitch: is3DView ? 48 : 0,
-          duration: 750,
-        });
-      });
-
-      markersRef.current.push(marker);
-    });
-
-    // Render Passport Check-in Stamp Badges as sleek compact 26px emerald seals (never overlapping active numbered route stops!)
-    for (const chk of checkInPins) {
-      const overlapsActiveStop = activeStops.some(
-        (s) =>
-          haversineDistanceKm(
-            { lat: s.lat, lng: s.lng },
-            { lat: chk.coordinates.lat, lng: chk.coordinates.lng },
-          ) < 0.25,
-      );
-      if (overlapsActiveStop) continue;
-
-      const el = document.createElement('button');
-      el.type = 'button';
-      el.title = `Đã đóng dấu Hộ chiếu: ${chk.name}`;
-      el.innerHTML = `
-        <div style="display:grid;place-items:center;width:26px;height:26px;border-radius:999px;background:linear-gradient(135deg,#059669,#0d9488);color:#fff;border:2px solid #fff;box-shadow:0 4px 12px rgba(5,150,105,0.45);font-size:12px;cursor:pointer;transition:transform 150ms ease;">
-          🛂
-        </div>
-      `;
-      const popup = new maplibregl.Popup({ offset: 14 }).setHTML(`
-        <div style="min-width:190px;font-family:'Be Vietnam Pro',system-ui,sans-serif;">
-          <div style="font-size:10px;font-weight:800;text-transform:uppercase;color:#059669">🛂 Đã đóng dấu Hộ chiếu (+${chk.pointsAwarded}đ)</div>
-          <div style="font-weight:800;font-size:13px;color:#0f2922;margin-top:2px">${escapeHtml(chk.name)}</div>
-          <p style="font-size:11px;color:#475569;margin:4px 0 6px">${escapeHtml(chk.summary)}</p>
-          <a href="/destinations/${encodeURIComponent(chk.slug)}" style="font-size:11px;font-weight:700;color:#059669;text-decoration:underline">Xem chi tiết địa điểm →</a>
-        </div>
-      `);
-      markersRef.current.push(
-        new maplibregl.Marker({ element: el, anchor: 'center' })
-          .setLngLat([chk.coordinates.lng, chk.coordinates.lat])
-          .setPopup(popup)
-          .addTo(map),
-      );
     }
 
     redrawFogOfWar();
-  }, [
-    tracks,
-    selectedTrack,
-    livePoints,
-    liveMemories,
-    checkInPins,
-    focusedStopIdx,
-    mapStyle,
-    is3DView,
-    isReplaying,
-    replayProgress,
-    redrawFogOfWar,
-  ]);
+  }, [showRoutesOnMap, livePoints, selectedTrack, isReplaying, replayProgress, redrawFogOfWar]);
 
-  // Initialize MapLibre GL JS 3D Map
+  // ── Render Apple Photos Rounded-Square Stacked Photo Pins ─────────────────
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+
+    for (const m of photoMarkersRef.current) m.remove();
+    photoMarkersRef.current = [];
+
+    for (const cluster of photoClusters) {
+      const isSelected = activeCluster?.id === cluster.id;
+      const cardSize = isSelected ? 68 : cluster.count >= 5 ? 64 : 58;
+      const coverSrc = escapeHtml(cluster.coverPhoto.thumbnailUrl || cluster.coverPhoto.imageUrl);
+      const countText = cluster.count > 999 ? '999+' : String(cluster.count);
+      const hasMobileSync = cluster.photos.some(
+        (p) => p.sourceApp === 'ios' || p.sourceApp === 'android' || p.sourceApp === 'flutter',
+      );
+
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'fp-photo-pin';
+      btn.setAttribute('aria-label', `${cluster.title} — ${cluster.count} ảnh`);
+      btn.setAttribute('data-photo-cluster', cluster.title);
+
+      btn.innerHTML = `
+        <div class="fp-photo-pin-inner" style="position:relative;display:flex;flex-direction:column;align-items:center;${
+          isSelected ? 'transform:scale(1.1) translateY(-3px);z-index:20;' : ''
+        }">
+          ${
+            cluster.count > 1
+              ? `<div style="position:absolute;top:-4px;width:${cardSize - 8}px;height:${cardSize - 8}px;border-radius:13px;background:rgba(255,255,255,0.65);border:1.5px solid rgba(255,255,255,0.9);box-shadow:0 4px 12px rgba(0,0,0,0.28);transform:rotate(-3deg);"></div>`
+              : ''
+          }
+          <div style="position:relative;width:${cardSize}px;height:${cardSize}px;border-radius:14px;border:2.5px solid ${
+            isSelected ? '#34d399' : '#ffffff'
+          };background:#0f172a;overflow:hidden;box-shadow:0 12px 26px -4px rgba(0,0,0,0.48),0 2px 6px rgba(0,0,0,0.28);">
+            <img src="${coverSrc}" alt="" style="width:100%;height:100%;object-fit:cover;display:block;" loading="lazy" />
+            <div style="position:absolute;inset:0;background:linear-gradient(to top, rgba(0,0,0,0.68) 0%, rgba(0,0,0,0.12) 44%, transparent 70%);"></div>
+            <span style="position:absolute;left:6px;bottom:4px;color:#ffffff;font-family:'Be Vietnam Pro',system-ui,sans-serif;font-size:12px;font-weight:800;line-height:1;letter-spacing:-0.02em;font-variant-numeric:tabular-nums;text-shadow:0 1px 4px rgba(0,0,0,0.85);">
+              ${countText}
+            </span>
+            ${
+              hasMobileSync
+                ? `<span style="position:absolute;right:5px;top:5px;width:8px;height:8px;border-radius:999px;background:#38bdf8;border:1.5px solid #ffffff;box-shadow:0 1px 4px rgba(0,0,0,0.5);" title="Có ảnh đồng bộ từ App Mobile"></span>`
+                : ''
+            }
+          </div>
+          <div style="width:0;height:0;margin-top:-1px;border-left:7px solid transparent;border-right:7px solid transparent;border-top:8px solid ${
+            isSelected ? '#34d399' : '#ffffff'
+          };filter:drop-shadow(0 3px 3px rgba(0,0,0,0.35));"></div>
+        </div>
+      `;
+
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        setFollowUserLocation(false);
+        setDockMode('map');
+        setActiveClusterId(cluster.id);
+        map.flyTo({
+          center: [cluster.lng, cluster.lat],
+          zoom: Math.max(map.getZoom(), cluster.count > 1 ? 13.4 : 14.2),
+          duration: 700,
+        });
+      });
+
+      const marker = new maplibregl.Marker({ element: btn, anchor: 'bottom' })
+        .setLngLat([cluster.lng, cluster.lat])
+        .addTo(map);
+      photoMarkersRef.current.push(marker);
+    }
+
+    // Subtle secondary markers for check-in destinations that don't have a photo pin nearby
+    for (const m of stampMarkersRef.current) m.remove();
+    stampMarkersRef.current = [];
+    for (const chk of checkInPins) {
+      const coveredByPhoto = photoClusters.some(
+        (c) => haversineDistanceKm({ lat: c.lat, lng: c.lng }, chk.coordinates) < 0.25,
+      );
+      if (coveredByPhoto) continue;
+      const dot = document.createElement('div');
+      dot.title = `Đã đóng dấu Hộ chiếu: ${chk.name}`;
+      dot.style.cssText =
+        'width:14px;height:14px;border-radius:999px;background:#10b981;border:2.5px solid #ffffff;box-shadow:0 4px 12px rgba(0,0,0,0.38);cursor:pointer;';
+      stampMarkersRef.current.push(
+        new maplibregl.Marker({ element: dot, anchor: 'center' })
+          .setLngLat([chk.coordinates.lng, chk.coordinates.lat])
+          .addTo(map),
+      );
+    }
+  }, [mapReady, photoClusters, activeCluster?.id, checkInPins]);
+
+  // ── Dedicated Permanent Live Current User Location Blue Dot Marker ────────
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+
+    if (!userLocation) {
+      if (userLocationMarkerRef.current) {
+        userLocationMarkerRef.current.remove();
+        userLocationMarkerRef.current = null;
+      }
+      return;
+    }
+
+    const headingAngle = typeof userLocation.headingDegrees === 'number' ? userLocation.headingDegrees : null;
+
+    if (!userLocationMarkerRef.current) {
+      const el = document.createElement('div');
+      el.setAttribute('data-live-user-location', 'true');
+      el.title = 'Vị trí hiện tại của bạn';
+      el.innerHTML = `
+        <div style="position:relative;width:44px;height:44px;display:grid;place-items:center;pointer-events:auto;cursor:pointer;">
+          <span class="fp-user-halo" style="position:absolute;width:30px;height:30px;border-radius:999px;background:rgba(10,132,255,0.42);"></span>
+          <span style="position:absolute;width:34px;height:34px;border-radius:999px;background:rgba(10,132,255,0.18);border:1px solid rgba(10,132,255,0.35);"></span>
+          ${
+            headingAngle !== null
+              ? `<span style="position:absolute;width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-bottom:18px solid rgba(10,132,255,0.45);transform:rotate(${headingAngle}deg) translateY(-16px);"></span>`
+              : ''
+          }
+          <span style="position:relative;width:16px;height:16px;border-radius:999px;background:#0a84ff;border:3px solid #ffffff;box-shadow:0 3px 12px rgba(10,132,255,0.65),0 1px 4px rgba(0,0,0,0.4);"></span>
+        </div>
+      `;
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const latest = userLocationRef.current;
+        if (!latest) return;
+        setCaptureModalState({
+          open: true,
+          coords: { lat: latest.lat, lng: latest.lng },
+          placeName: '',
+        });
+      });
+
+      userLocationMarkerRef.current = new maplibregl.Marker({ element: el, anchor: 'center' })
+        .setLngLat([userLocation.lng, userLocation.lat])
+        .addTo(map);
+    } else {
+      userLocationMarkerRef.current.setLngLat([userLocation.lng, userLocation.lat]);
+    }
+    redrawFogOfWar();
+  }, [userLocation, mapReady, redrawFogOfWar]);
+
+  // Separate Replay Avatar Marker (only visible during 3D Replay / Demo run — NEVER interferes with live blue dot!)
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    if (!replayAvatarPos) {
+      if (replayAvatarMarkerRef.current) {
+        replayAvatarMarkerRef.current.remove();
+        replayAvatarMarkerRef.current = null;
+      }
+      return;
+    }
+    if (!replayAvatarMarkerRef.current) {
+      const el = document.createElement('div');
+      el.innerHTML = `<div style="width:28px;height:28px;border-radius:999px;background:linear-gradient(135deg,#f59e0b,#f43f5e);border:3px solid #ffffff;box-shadow:0 6px 18px rgba(0,0,0,0.45);"></div>`;
+      replayAvatarMarkerRef.current = new maplibregl.Marker({ element: el, anchor: 'center' })
+        .setLngLat([replayAvatarPos.lng, replayAvatarPos.lat])
+        .addTo(map);
+    } else {
+      replayAvatarMarkerRef.current.setLngLat([replayAvatarPos.lng, replayAvatarPos.lat]);
+    }
+  }, [replayAvatarPos, mapReady]);
+
+  // ── Initialize MapLibre GL JS Full-Bleed Canvas ────────────────────────────
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
     let cancelled = false;
@@ -1092,27 +1137,33 @@ export function FootprintMapPage() {
       const style = await buildFootprintMapStyle(mapStyle);
       if (cancelled || !mapContainerRef.current) return;
 
+      const initialCenter: [number, number] = userLocation
+        ? [userLocation.lng, userLocation.lat]
+        : [105.756, 10.312];
+
       const map = new maplibregl.Map({
         container: mapContainerRef.current,
         style,
-        center: [105.756, 10.301],
-        zoom: 13.2,
-        pitch: is3DView ? 44 : 0,
-        bearing: is3DView ? -10 : 0,
+        center: initialCenter,
+        zoom: 11.6,
+        pitch: is3DView ? 42 : 0,
+        attributionControl: false,
       });
 
-      map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'bottom-right');
+      map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
 
       map.on('load', () => {
         if (cancelled) return;
         setMapReady(true);
+        setMapZoom(map.getZoom());
       });
 
-      map.on('click', (e) => {
-        setPinCoords({
-          lat: Number(e.lngLat.lat.toFixed(6)),
-          lng: Number(e.lngLat.lng.toFixed(6)),
-        });
+      map.on('zoomend', () => {
+        setMapZoom(Math.round(map.getZoom() * 10) / 10);
+      });
+
+      map.on('dragstart', () => {
+        setFollowUserLocation(false);
       });
 
       mapRef.current = map;
@@ -1122,23 +1173,74 @@ export function FootprintMapPage() {
 
     return () => {
       cancelled = true;
-      window.cancelAnimationFrame(dashAnimRef.current);
-      if (avatarMarkerRef.current) {
-        avatarMarkerRef.current.remove();
-        avatarMarkerRef.current = null;
-      }
-      for (const m of markersRef.current) m.remove();
-      markersRef.current = [];
-      if (mapRef.current) {
-        mapRef.current.remove();
-        mapRef.current = null;
-      }
+      for (const m of photoMarkersRef.current) m.remove();
+      for (const m of stampMarkersRef.current) m.remove();
+      userLocationMarkerRef.current?.remove();
+      replayAvatarMarkerRef.current?.remove();
+      mapRef.current?.remove();
+      mapRef.current = null;
       setMapReady(false);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Re-bind Fog-of-War redraw to every WebGL render frame
+  // Handle manual map tap (either setting manual current position or closing popovers)
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    const onClick = (e: maplibregl.MapMouseEvent) => {
+      setLayerPopoverOpen(false);
+      if (pickingManualLocation) {
+        const manualLoc: LiveUserLocation = {
+          lat: Number(e.lngLat.lat.toFixed(6)),
+          lng: Number(e.lngLat.lng.toFixed(6)),
+          updatedAt: Date.now(),
+          isManualFallback: true,
+        };
+        persistUserLocation(manualLoc);
+        setGpsStatus('active');
+        setPickingManualLocation(false);
+        toast.success('Đã ghim vị trí hiện tại của bạn!', `${manualLoc.lat.toFixed(4)}, ${manualLoc.lng.toFixed(4)}`);
+      }
+    };
+    map.on('click', onClick);
+    return () => {
+      map.off('click', onClick);
+    };
+  }, [mapReady, pickingManualLocation, persistUserLocation]);
+
+  // Sync style changes smoothly
+  const prevStyleRef = useRef<MapStyleMode>(mapStyle);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady || prevStyleRef.current === mapStyle) return;
+    prevStyleRef.current = mapStyle;
+    let cancelled = false;
+    void buildFootprintMapStyle(mapStyle).then((style) => {
+      if (cancelled || !mapRef.current) return;
+      map.setStyle(style);
+      map.once('style.load', () => {
+        if (!cancelled) syncRouteLayers();
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [mapStyle, mapReady, syncRouteLayers]);
+
+  // Sync 3D pitch
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    map.easeTo({ pitch: is3DView ? 45 : 0, bearing: is3DView ? -10 : 0, duration: 600 });
+  }, [is3DView, mapReady]);
+
+  // Keep route layers & fog in sync
+  useEffect(() => {
+    if (!mapReady) return;
+    syncRouteLayers();
+  }, [mapReady, syncRouteLayers]);
+
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
@@ -1151,162 +1253,39 @@ export function FootprintMapPage() {
     };
   }, [mapReady, redrawFogOfWar]);
 
-  // Switch MapLibre 3D style cleanly without destroying map state
-  const prevStyleRef = useRef<MapStyleMode>(mapStyle);
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !mapReady || prevStyleRef.current === mapStyle) return;
-    prevStyleRef.current = mapStyle;
-
-    let cancelled = false;
-    void buildFootprintMapStyle(mapStyle).then((style) => {
-      if (cancelled || !mapRef.current) return;
-      map.setStyle(style);
-      map.once('style.load', () => {
-        if (!cancelled) syncMapLayersAndMarkers();
-      });
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [mapStyle, mapReady, syncMapLayersAndMarkers]);
-
-  // Smoothly toggle 3D / 2D camera pitch
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !mapReady) return;
-    map.easeTo({
-      pitch: is3DView ? 44 : 0,
-      bearing: is3DView ? -10 : 0,
-      duration: 650,
-    });
-  }, [is3DView, mapReady]);
-
-  // Keep route layers & markers in sync whenever data changes
-  useEffect(() => {
-    if (!mapReady) return;
-    syncMapLayersAndMarkers();
-  }, [mapReady, syncMapLayersAndMarkers]);
-
-  // Auto-fit full route bounds whenever user switches tracks or map finishes first load!
-  const lastFittedTrackRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (!mapReady || !selectedTrack || selectedTrack.points.length < 2) return;
-    if (lastFittedTrackRef.current === selectedTrack.clientId) return;
-    lastFittedTrackRef.current = selectedTrack.clientId;
-    setFocusedStopIdx(0);
-    fitTrackBounds(selectedTrack.points);
-  }, [mapReady, selectedTrack, fitTrackBounds]);
-
-  // Subtle animated marching light pulse along active route to make travel direction crystal clear
-  useEffect(() => {
-    if (!mapReady) return;
-    const dashSteps: Array<[number, number, number]> = [
-      [0, 3.6, 0.5],
-      [0.6, 3.0, 0.5],
-      [1.2, 2.4, 0.5],
-      [1.8, 1.8, 0.5],
-      [2.4, 1.2, 0.5],
-      [3.0, 0.6, 0.5],
-      [3.6, 0, 0.5],
-    ];
-    let step = 0;
-    let lastTs = 0;
-
-    const tick = (ts: number) => {
-      const map = mapRef.current;
-      if (map && ts - lastTs > 130 && map.isStyleLoaded() && map.getLayer('fp-active-energy')) {
-        lastTs = ts;
-        step = (step + 1) % dashSteps.length;
-        try {
-          map.setPaintProperty('fp-active-energy', 'line-dasharray', dashSteps[step]);
-        } catch {
-          // ignore while switching styles
-        }
-      }
-      dashAnimRef.current = window.requestAnimationFrame(tick);
-    };
-
-    dashAnimRef.current = window.requestAnimationFrame(tick);
-    return () => window.cancelAnimationFrame(dashAnimRef.current);
-  }, [mapReady]);
-
-  // Moving Pé Meko 🦊 Beacon during Replay / Demo / Live GPS
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !mapReady) return;
-
-    if (!avatarPos) {
-      if (avatarMarkerRef.current) {
-        avatarMarkerRef.current.remove();
-        avatarMarkerRef.current = null;
-      }
-      return;
-    }
-
-    if (!avatarMarkerRef.current) {
-      const el = document.createElement('div');
-      el.innerHTML = `
-        <div style="position:relative;display:flex;align-items:center;justify-content:center;width:46px;height:46px;">
-          <span style="position:absolute;inset:0;border-radius:999px;background:rgba(16,185,129,0.45);animation:ping 1.4s cubic-bezier(0,0,0.2,1) infinite;"></span>
-          <span style="position:relative;display:grid;place-items:center;width:38px;height:38px;border-radius:999px;background:linear-gradient(135deg,#059669,#14b8a6);border:3px solid white;box-shadow:0 8px 24px rgba(0,0,0,0.42);font-size:20px;">🦊</span>
-        </div>
-      `;
-      avatarMarkerRef.current = new maplibregl.Marker({ element: el, anchor: 'center' })
-        .setLngLat([avatarPos.lng, avatarPos.lat])
-        .addTo(map);
-    } else {
-      avatarMarkerRef.current.setLngLat([avatarPos.lng, avatarPos.lat]);
-    }
-    redrawFogOfWar();
-  }, [avatarPos, mapReady, redrawFogOfWar]);
-
-  // Timer for live GPS recording elapsed seconds
-  useEffect(() => {
-    if (!isRecordingGps || !liveStartedAt) return;
-    const id = window.setInterval(() => {
-      setLiveElapsedSec(Math.floor((Date.now() - liveStartedAt) / 1000));
-    }, 1000);
-    return () => window.clearInterval(id);
-  }, [isRecordingGps, liveStartedAt]);
-
-  // Hands-Free Automatic GPS Geofence Check-in (triggers <= 1,000m)
+  // ── Geofence Auto Check-in ─────────────────────────────────────────────────
   const checkAndTriggerGeofence = useCallback(
     async (lat: number, lng: number) => {
       if (!autoCheckInEnabled || geofenceTargets.length === 0) return;
-
       for (const target of geofenceTargets) {
         if (target.isCheckedIn || checkedInSessionRef.current.has(target.id)) continue;
-
-        const distKm = haversineDistanceKm(
-          { lat, lng },
-          { lat: target.coordinates.lat, lng: target.coordinates.lng },
-        );
+        const distKm = haversineDistanceKm({ lat, lng }, target.coordinates);
         if (distKm <= 1.0) {
           checkedInSessionRef.current.add(target.id);
           const distMeters = Math.round(distKm * 1000);
-
-          const optimisticPin: CheckInPinItem = {
-            id: `auto-chk-${target.id}-${Date.now()}`,
-            destinationId: target.id,
-            name: target.name,
-            slug: target.slug,
-            area: target.area,
-            category: target.category,
-            summary: target.summary,
-            imageUrl: target.imageUrl,
-            coordinates: target.coordinates,
-            pointsAwarded: 15,
-            checkedInAt: new Date().toISOString(),
-          };
           setCheckInPins((prev) =>
-            prev.some((p) => p.destinationId === target.id) ? prev : [optimisticPin, ...prev],
+            prev.some((p) => p.destinationId === target.id)
+              ? prev
+              : [
+                  {
+                    id: `auto-chk-${target.id}-${Date.now()}`,
+                    destinationId: target.id,
+                    name: target.name,
+                    slug: target.slug,
+                    area: target.area,
+                    category: target.category,
+                    summary: target.summary,
+                    imageUrl: target.imageUrl,
+                    coordinates: target.coordinates,
+                    pointsAwarded: 15,
+                    checkedInAt: new Date().toISOString(),
+                  },
+                  ...prev,
+                ],
           );
           setGeofenceTargets((prev) =>
             prev.map((g) => (g.id === target.id ? { ...g, isCheckedIn: true } : g)),
           );
-
           if (isEffectiveOnline) {
             try {
               const res = await api.post<{
@@ -1320,19 +1299,14 @@ export function FootprintMapPage() {
               });
               if (res.data.created) {
                 toast.success(
-                  `🛂 Tự động Điểm danh GPS (+${res.data.pointsAwarded} EXP)!`,
-                  `Phát hiện bạn vừa đến gần "${target.name}" (${distMeters}m) và tự động đóng dấu Hộ chiếu số!`,
+                  `Tự động Điểm danh GPS (+${res.data.pointsAwarded} EXP)`,
+                  `Phát hiện bạn gần "${target.name}" (${distMeters}m) và tự đóng dấu Hộ chiếu số!`,
                 );
                 if (res.data.newBadges?.length) announceBadges(res.data.newBadges);
               }
             } catch {
               // handled on next sync
             }
-          } else {
-            toast.info(
-              `🛂 Tự động Điểm danh Offline: ${target.name}`,
-              `Đã ghi nhận vào máy (cách ${distMeters}m). Sẽ tự động cộng EXP khi có Wi-Fi lại!`,
-            );
           }
         }
       }
@@ -1340,36 +1314,35 @@ export function FootprintMapPage() {
     [autoCheckInEnabled, geofenceTargets, isEffectiveOnline, simulatingRouteId],
   );
 
-  // Start Live Real GPS Recording
+  // ── Live GPS Track Recording ───────────────────────────────────────────────
+  useEffect(() => {
+    if (!isRecordingGps || !liveStartedAt) return;
+    const id = window.setInterval(() => {
+      setLiveElapsedSec(Math.floor((Date.now() - liveStartedAt) / 1000));
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [isRecordingGps, liveStartedAt]);
+
   const handleStartLiveGps = async () => {
     if (!('geolocation' in navigator)) {
-      toast.error('Thiết bị không hỗ trợ GPS', 'Hãy thử chạy Cung đường Mẫu ở tab Chuyến đi nhé!');
+      toast.error('Thiết bị không hỗ trợ GPS', 'Bạn có thể chạy Cung đường Mẫu trong tab Lộ trình.');
       return;
     }
-
     try {
-      if ('wakeLock' in navigator) {
-        wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
-      }
+      if ('wakeLock' in navigator) wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
     } catch {
       // ignore
     }
-
-    const startTs = Date.now();
-    setLiveStartedAt(startTs);
+    setLiveStartedAt(Date.now());
     setLiveElapsedSec(0);
     setLivePoints([]);
     setLiveMemories([]);
     setIsRecordingGps(true);
+    setShowRoutesOnMap(true);
+    setFollowUserLocation(true);
+    toast.success('Đã bật ghi hành trình GPS', 'Bấm nút Camera bất cứ lúc nào để lưu ảnh gắn theo lộ trình này.');
 
-    toast.success(
-      'Đã bật ghi hành trình GPS & Tự động Điểm danh!',
-      isEffectiveOnline
-        ? 'Di chuyển đến bất kỳ điểm du lịch nào trong bán kính 1.000m sẽ tự động đóng dấu Hộ chiếu!'
-        : 'Đang ghi ở chế độ Offline — dữ liệu vẫn lưu an toàn trong máy!',
-    );
-
-    const watchId = navigator.geolocation.watchPosition(
+    recordWatchIdRef.current = navigator.geolocation.watchPosition(
       (pos) => {
         const pt: TrackPoint = {
           lat: Number(pos.coords.latitude.toFixed(6)),
@@ -1377,34 +1350,29 @@ export function FootprintMapPage() {
           timestamp: Date.now(),
           speedKmh: pos.coords.speed ? Math.round(pos.coords.speed * 3.6) : undefined,
         };
-        setAvatarPos({ lat: pt.lat, lng: pt.lng, label: 'Vị trí của bạn' });
-        setPinCoords({ lat: pt.lat, lng: pt.lng });
+        persistUserLocation({
+          lat: pt.lat,
+          lng: pt.lng,
+          accuracyMeters: pos.coords.accuracy || undefined,
+          headingDegrees: typeof pos.coords.heading === 'number' ? pos.coords.heading : null,
+          updatedAt: Date.now(),
+        });
+        setGpsStatus('active');
         void checkAndTriggerGeofence(pt.lat, pt.lng);
-
         setLivePoints((prev) => {
-          if (prev.length > 0) {
-            const last = prev[prev.length - 1]!;
-            if (haversineDistanceKm(last, pt) < 0.008) return prev;
-          }
-          const updated = [...prev, pt];
-          mapRef.current?.easeTo({ center: [pt.lng, pt.lat], duration: 500 });
-          return updated;
+          if (prev.length > 0 && haversineDistanceKm(prev[prev.length - 1]!, pt) < 0.008) return prev;
+          return [...prev, pt];
         });
       },
-      () => {
-        toast.info('Đang chờ tín hiệu GPS...', 'Nếu đang ở trong nhà, bạn có thể chạy Cung đường Mẫu!');
-      },
+      () => {},
       { enableHighAccuracy: true, maximumAge: 3000, timeout: 10000 },
     );
-
-    watchIdRef.current = watchId;
   };
 
-  // Stop & Save Live GPS Recording
   const handleStopAndSaveLiveGps = async () => {
-    if (watchIdRef.current !== null) {
-      navigator.geolocation.clearWatch(watchIdRef.current);
-      watchIdRef.current = null;
+    if (recordWatchIdRef.current !== null) {
+      navigator.geolocation.clearWatch(recordWatchIdRef.current);
+      recordWatchIdRef.current = null;
     }
     if (wakeLockRef.current) {
       try {
@@ -1414,14 +1382,11 @@ export function FootprintMapPage() {
       }
       wakeLockRef.current = null;
     }
-
     setIsRecordingGps(false);
-
     if (livePoints.length === 0) {
-      toast.info('Chưa ghi nhận bước di chuyển nào', 'Hãy thử chạy 1 Cung đường Mẫu để xem lộ trình 3D!');
+      toast.info('Chưa ghi nhận bước di chuyển nào');
       return;
     }
-
     const newTrack: LocalFootprintTrack = {
       clientId: `track-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       title: liveTrackTitle.trim() || `Hành trình ngày ${new Date().toLocaleDateString('vi-VN')}`,
@@ -1434,40 +1399,30 @@ export function FootprintMapPage() {
       memories: liveMemories,
       syncStatus: 'pending',
     };
-
     await saveLocalTrack(newTrack);
     setLivePoints([]);
     setLiveMemories([]);
-    lastFittedTrackRef.current = null;
     setSelectedTrackId(newTrack.clientId);
-    setSidebarTab('timeline');
     await syncWithCloud(false);
   };
 
-  // 1-Click Road-Snapped Demo Journey Simulator
+  // ── Demo Journey & Replay ──────────────────────────────────────────────────
   const handleRunDemoJourney = async (preset: PresetJourneyRoute) => {
-    if (simTimerRef.current) {
-      window.clearInterval(simTimerRef.current);
-      simTimerRef.current = null;
-    }
+    if (simTimerRef.current) window.clearInterval(simTimerRef.current);
     setIsReplaying(false);
     setSimulatingRouteId(preset.id);
+    setShowRoutesOnMap(true);
 
-    const { points: fullPoints, memories: fullMemories, roadSnapped } =
-      await resolveRoadSnappedJourney(preset.waypoints, isEffectiveOnline);
-
-    if (roadSnapped) {
-      toast.info(`🛣️ Đang chạy tuyến "${preset.title}"`, 'Lộ trình đã bám sát đường bộ thực tế Đồng Tháp!');
-    }
-
+    const { points: fullPoints, memories: fullMemories } = await resolveRoadSnappedJourney(
+      preset.waypoints,
+      isEffectiveOnline,
+    );
     const startPt = fullPoints[0]!;
     fitTrackBounds(fullPoints);
-
-    setLiveStartedAt(Date.now());
     setLiveTrackTitle(preset.title);
     setLivePoints([startPt]);
     setLiveMemories([]);
-    setAvatarPos({ lat: startPt.lat, lng: startPt.lng, label: preset.title });
+    setReplayAvatarPos({ lat: startPt.lat, lng: startPt.lng });
     void checkAndTriggerGeofence(startPt.lat, startPt.lng);
 
     let idx = 1;
@@ -1476,6 +1431,7 @@ export function FootprintMapPage() {
         if (simTimerRef.current) window.clearInterval(simTimerRef.current);
         simTimerRef.current = null;
         setSimulatingRouteId(null);
+        setReplayAvatarPos(null);
 
         const completedTrack: LocalFootprintTrack = {
           clientId: `track-${preset.id}-${Date.now()}`,
@@ -1490,156 +1446,104 @@ export function FootprintMapPage() {
           isDemoRoute: true,
           syncStatus: 'pending',
         };
-
         await saveLocalTrack(completedTrack);
         setLivePoints([]);
         setLiveMemories([]);
-        lastFittedTrackRef.current = null;
         setSelectedTrackId(completedTrack.clientId);
-        setSidebarTab('timeline');
-        fitTrackBounds(fullPoints);
-
-        if (isEffectiveOnline) {
-          await syncWithCloud(false);
-        } else {
-          const updated = await getAllLocalTracks();
-          setTracks(updated);
-          toast.info(
-            'Đã lưu lộ trình vào Bộ nhớ Offline (IndexedDB)!',
-            `Hành trình "${preset.title}" (${completedTrack.distanceKm} km) đã lưu an toàn khi mất mạng.`,
-          );
-        }
+        if (isEffectiveOnline) await syncWithCloud(false);
+        else setTracks(await getAllLocalTracks());
         return;
       }
-
       const nextPt = fullPoints[idx]!;
       const partialPoints = fullPoints.slice(0, idx + 1);
-      const unlockedMems = fullMemories.filter((m) =>
-        partialPoints.some((p) => haversineDistanceKm(p, m) < 0.25),
-      );
-
       setLivePoints(partialPoints);
-      setLiveMemories(unlockedMems);
-      setAvatarPos({ lat: nextPt.lat, lng: nextPt.lng });
-      setPinCoords({ lat: nextPt.lat, lng: nextPt.lng });
+      setReplayAvatarPos({ lat: nextPt.lat, lng: nextPt.lng });
       void checkAndTriggerGeofence(nextPt.lat, nextPt.lng);
       idx++;
-    }, 95);
+    }, 90);
   };
 
-  // Cinematic 3D Route Replay along the road
   useEffect(() => {
     if (!isReplaying || !selectedTrack || selectedTrack.points.length < 2) {
-      if (replayTimerRef.current) {
-        window.clearInterval(replayTimerRef.current);
-        replayTimerRef.current = null;
-      }
+      if (replayTimerRef.current) window.clearInterval(replayTimerRef.current);
       return;
     }
-
     const totalPts = selectedTrack.points.length;
     const intervalMs = Math.max(45, Math.round(150 / replaySpeed));
-
     replayTimerRef.current = window.setInterval(() => {
       setReplayProgress((prev) => {
         const next = prev + 100 / totalPts;
         if (next >= 100) {
           setIsReplaying(false);
-          const last = selectedTrack.points[totalPts - 1]!;
-          setAvatarPos({ lat: last.lat, lng: last.lng });
+          setReplayAvatarPos(null);
           fitTrackBounds(selectedTrack.points);
           return 100;
         }
         const ptIdx = Math.min(totalPts - 1, Math.floor((next / 100) * totalPts));
         const pt = selectedTrack.points[ptIdx]!;
-        setAvatarPos({ lat: pt.lat, lng: pt.lng });
-        mapRef.current?.easeTo({
-          center: [pt.lng, pt.lat],
-          zoom: Math.max(mapRef.current.getZoom(), 14.2),
-          pitch: is3DView ? 50 : 0,
-          duration: intervalMs * 1.1,
-        });
+        setReplayAvatarPos({ lat: pt.lat, lng: pt.lng });
+        mapRef.current?.easeTo({ center: [pt.lng, pt.lat], duration: intervalMs * 1.1 });
         return next;
       });
     }, intervalMs);
-
     return () => {
-      if (replayTimerRef.current) {
-        window.clearInterval(replayTimerRef.current);
-        replayTimerRef.current = null;
-      }
+      if (replayTimerRef.current) window.clearInterval(replayTimerRef.current);
     };
-  }, [isReplaying, replaySpeed, selectedTrack, is3DView, fitTrackBounds]);
+  }, [isReplaying, replaySpeed, selectedTrack, fitTrackBounds]);
 
-  const handleStartReplay = (track: LocalFootprintTrack) => {
-    if (track.points.length < 2) return;
-    setSelectedTrackId(track.clientId);
-    setReplayProgress(0);
-    const first = track.points[0]!;
-    setAvatarPos({ lat: first.lat, lng: first.lng });
-    mapRef.current?.flyTo({
-      center: [first.lng, first.lat],
-      zoom: 14.3,
-      pitch: is3DView ? 50 : 0,
-      duration: 850,
+  // ── Photo Mutations (Upload / Edit / Delete) ───────────────────────────────
+  const handlePhotosUploaded = (created: FootprintPhotoItem[]) => {
+    setUserPhotos((prev) => {
+      const existingIds = new Set(prev.map((p) => p.id));
+      const fresh = created.filter((c) => !existingIds.has(c.id));
+      return [...fresh, ...prev];
     });
-    setIsReplaying(true);
+    const first = created[0];
+    if (first) {
+      setFollowUserLocation(false);
+      setDockMode('map');
+      mapRef.current?.flyTo({
+        center: [first.coordinates.lng, first.coordinates.lat],
+        zoom: Math.max(mapRef.current.getZoom(), 14.2),
+        duration: 850,
+      });
+    }
   };
 
-  // Drop a Memory Pin (Works both Online & Offline!)
-  const handleAddMemoryPin = async () => {
-    const newMem: MemoryPin = {
-      clientId: `mem-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      lat: pinCoords.lat,
-      lng: pinCoords.lng,
-      emoji: pinEmoji,
-      moodLabel: pinMood,
-      placeName: pinPlaceName.trim() || undefined,
-      note: pinNote.trim(),
-      createdAt: Date.now(),
-    };
-
-    if (isRecordingGps) {
-      setLiveMemories((prev) => [...prev, newMem]);
-      toast.success('Đã thả Ghim Kỷ niệm vào hành trình đang đi!');
-    } else if (selectedTrack) {
-      const updatedTrack: LocalFootprintTrack = {
-        ...selectedTrack,
-        memories: [...(selectedTrack.memories || []), newMem],
-        syncStatus: 'pending',
-      };
-      await saveLocalTrack(updatedTrack);
-      await syncWithCloud(false);
-    } else {
-      const standaloneTrack: LocalFootprintTrack = {
-        clientId: `track-pin-${Date.now()}`,
-        title: pinPlaceName.trim() || `Dấu chân kỷ niệm (${pinMood})`,
-        color: '#10b981',
-        distanceKm: 0.2,
-        durationSeconds: 60,
-        startedAt: Date.now(),
-        endedAt: Date.now(),
-        points: [
-          { lat: pinCoords.lat, lng: pinCoords.lng, timestamp: Date.now() },
-          { lat: pinCoords.lat + 0.0008, lng: pinCoords.lng + 0.0008, timestamp: Date.now() + 1000 },
-        ],
-        memories: [newMem],
-        syncStatus: 'pending',
-      };
-      await saveLocalTrack(standaloneTrack);
-      setSelectedTrackId(standaloneTrack.clientId);
-      await syncWithCloud(false);
+  const handleUpdatePhoto = async (id: string, patch: { caption?: string; placeName?: string }) => {
+    try {
+      const res = await api.patch<{ success: boolean; photo: FootprintPhotoItem }>(
+        `/footprints/photos/${encodeURIComponent(id)}`,
+        patch,
+      );
+      if (res.data?.photo) {
+        const updated = res.data.photo;
+        setUserPhotos((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+        setLightboxState((prev) =>
+          prev ? { ...prev, photos: prev.photos.map((p) => (p.id === updated.id ? updated : p)) } : null,
+        );
+        toast.success('Đã cập nhật ghi chú ảnh');
+      }
+    } catch (err) {
+      toast.error('Cập nhật ảnh thất bại', toApiError(err).message);
     }
+  };
 
-    setPinNote('');
-    setPinPlaceName('');
-    setPinModalOpen(false);
+  const handleDeletePhoto = async (photo: FootprintPhotoItem) => {
+    try {
+      await api.delete(`/footprints/photos/${encodeURIComponent(photo.id)}`);
+      setUserPhotos((prev) => prev.filter((p) => p.id !== photo.id));
+      setLightboxState((prev) =>
+        prev ? { ...prev, photos: prev.photos.filter((p) => p.id !== photo.id) } : null,
+      );
+      toast.info('Đã xóa ảnh khỏi Bản đồ Dấu chân');
+    } catch (err) {
+      toast.error('Không thể xóa ảnh', toApiError(err).message);
+    }
   };
 
   const handleDeleteTrack = async (clientId: string) => {
-    if (typeof window !== 'undefined') {
-      window.sessionStorage.setItem('dtst_footprint_user_cleared', '1');
-    }
+    if (typeof window !== 'undefined') window.sessionStorage.setItem('dtst_footprint_user_cleared', '1');
     await deleteLocalTrackById(clientId);
     if (isEffectiveOnline) {
       try {
@@ -1650,18 +1554,16 @@ export function FootprintMapPage() {
     }
     const remaining = await getAllLocalTracks();
     setTracks(remaining);
-    if (selectedTrackId === clientId) {
-      lastFittedTrackRef.current = null;
-      setSelectedTrackId(remaining[0]?.clientId ?? null);
-    }
+    if (selectedTrackId === clientId) setSelectedTrackId(remaining[0]?.clientId ?? null);
     toast.info('Đã xóa hành trình khỏi bản đồ');
   };
 
   const handleExportJson = () => {
     const payload = {
       exportedAt: new Date().toISOString(),
-      platform: 'Đồng Tháp Smart Travel - Footprint Map 3D',
+      platform: 'Đồng Tháp Smart Travel - Footprint Photo Map',
       stats,
+      photos: userPhotos,
       tracks,
       checkInPins,
     };
@@ -1669,806 +1571,580 @@ export function FootprintMapPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `dau-chan-dong-thap-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `dau-chan-anh-dong-thap-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    toast.success('Đã xuất file sao lưu hành trình (.json)');
+    toast.success('Đã xuất file sao lưu (.json)');
   };
 
   const handleShareCard = () => {
     if (!selectedTrack) {
-      toast.info('Chưa có lộ trình để xuất ảnh', 'Hãy chọn hoặc chạy thử 1 cung đường trước nhé!');
+      toast.info('Chưa có lộ trình để xuất ảnh');
       return;
     }
-    const ok = downloadFootprintShareCard(selectedTrack, stats.exploredPercent);
-    if (ok) {
-      toast.success('Đã tải Thẻ Lộ trình HD (.png)!', 'Bạn có thể chia sẻ ngay lên Facebook, TikTok hoặc Instagram.');
+    if (downloadFootprintShareCard(selectedTrack, stats.exploredPercent)) {
+      toast.success('Đã tải Thẻ Lộ trình HD (.png)!');
     }
   };
 
-  const focusStopOnMap = (idx: number, lat: number, lng: number) => {
-    setFocusedStopIdx(idx);
+  const handleLocateButtonClick = () => {
+    if (userLocation) {
+      setFollowUserLocation(true);
+      mapRef.current?.flyTo({
+        center: [userLocation.lng, userLocation.lat],
+        zoom: Math.max(mapRef.current.getZoom(), 14.8),
+        duration: 850,
+      });
+      requestLiveLocation(false);
+    } else {
+      requestLiveLocation(true);
+    }
+  };
+
+  const handleSearchJump = () => {
+    const first = visibleMapPhotos[0];
+    if (!first) {
+      toast.info('Không tìm thấy ảnh hoặc địa điểm khớp từ khóa');
+      return;
+    }
+    setFollowUserLocation(false);
     mapRef.current?.flyTo({
-      center: [lng, lat],
-      zoom: 14.8,
-      pitch: is3DView ? 48 : 0,
-      duration: 750,
+      center: [first.coordinates.lng, first.coordinates.lat],
+      zoom: 14.4,
+      duration: 850,
     });
   };
 
   return (
-    <PageContainer width="cinema">
-      {/* ── Compact Cinema Command Header (Keeps 3D Map immediately above the fold!) ── */}
-      <section className="tp-fade-up relative overflow-hidden rounded-panel bg-gradient-to-br from-river-950 via-leaf-900 to-teal-900 p-4 text-white shadow-raised sm:px-6 sm:py-5">
-        <div
-          className="pointer-events-none absolute -right-12 -top-16 size-64 rounded-full bg-emerald-400/20 blur-3xl"
-          aria-hidden
-        />
-        <div className="relative flex flex-col justify-between gap-4 xl:flex-row xl:items-center">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-0.5 text-[11px] font-bold text-emerald-200 ring-1 ring-white/20">
-                <Footprints className="size-3.5" aria-hidden />
-                Bản đồ Dấu chân 3D · Đường bộ thực tế
-              </span>
-              <button
-                type="button"
-                onClick={() => {
-                  const next = !simulateOffline;
-                  setSimulateOffline(next);
-                  toast.info(
-                    next ? '🟠 Đang giả lập Mất Wi-Fi (Offline)' : '🟢 Đã bật lại Wi-Fi (Auto-Sync)',
-                    next
-                      ? 'Vẫn ghi GPS & lưu hành trình 100% vào IndexedDB!'
-                      : 'Tự động đồng bộ hành trình lên Cloud...',
-                  );
-                }}
-                className={clsx(
-                  'inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-bold ring-1 transition',
-                  !isEffectiveOnline
-                    ? 'bg-amber-400/25 text-amber-100 ring-amber-300/50'
-                    : 'bg-emerald-400/20 text-emerald-100 ring-emerald-300/35 hover:bg-emerald-400/30',
-                )}
-                title="Bấm để kiểm thử chế độ Offline-First (Mất Wi-Fi)"
-              >
-                {!isEffectiveOnline ? <WifiOff className="size-3" /> : <Wifi className="size-3" />}
-                {!isEffectiveOnline
-                  ? `Offline${pendingSyncCount > 0 ? ` (${pendingSyncCount} chờ)` : ''}`
-                  : 'Cloud + Offline'}
-              </button>
-            </div>
+    <div className="fp-map-canvas relative h-[calc(100%-4.1rem)] w-full overflow-hidden bg-[#133572] lg:h-full">
+      {/* ── Full-Bleed MapLibre Canvas ───────────────────────────────────── */}
+      <div
+        ref={mapContainerRef}
+        className={clsx('size-full', pickingManualLocation && 'cursor-crosshair')}
+      />
+      <canvas ref={fogCanvasRef} className="pointer-events-none absolute inset-0 z-10" />
 
-            <div className="mt-2 flex flex-wrap items-baseline gap-x-5 gap-y-1">
-              <h1 className="text-xl font-black tracking-tight text-white sm:text-3xl">
-                Bản đồ Dấu chân Khám phá
-              </h1>
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-semibold text-leaf-100">
-                <span className="inline-flex items-center gap-1">
-                  <Flame className="size-3.5 text-amber-300" aria-hidden />
-                  <strong className="text-white">{stats.exploredPercent}%</strong> Đồng Tháp
-                </span>
-                <span>
-                  📏 <strong className="text-white">{stats.totalKm} km</strong>
-                </span>
-                <span>
-                  🧭 <strong className="text-white">{stats.totalTracks}</strong> hành trình
-                </span>
-                <span>
-                  🛂 <strong className="text-white">{stats.totalCheckIns + stats.totalMemories}</strong> điểm dấu
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            {!isRecordingGps ? (
-              <button
-                type="button"
-                onClick={() => void handleStartLiveGps()}
-                className="inline-flex items-center justify-center gap-1.5 rounded-full bg-gradient-to-r from-rose-500 to-amber-500 px-4 py-2 text-xs font-extrabold text-white shadow-lg shadow-rose-600/30 transition hover:scale-105"
-              >
-                <Radio className="size-3.5 shrink-0 animate-pulse" />
-                Ghi GPS thực tế
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => void handleStopAndSaveLiveGps()}
-                className="inline-flex items-center justify-center gap-1.5 rounded-full bg-rose-600 px-4 py-2 text-xs font-extrabold text-white ring-4 ring-rose-400/40 animate-pulse"
-              >
-                <Square className="size-3.5 shrink-0 fill-white" />
-                Dừng ({formatDurationClock(liveElapsedSec)})
-              </button>
-            )}
-
-            <button
-              type="button"
-              onClick={() => setPinModalOpen(true)}
-              className="inline-flex items-center justify-center gap-1.5 rounded-full bg-white/15 px-3.5 py-2 text-xs font-bold text-white ring-1 ring-white/25 backdrop-blur-sm transition hover:bg-white/25"
-            >
-              <MapPinPlus className="size-3.5 text-amber-300" />
-              Thả Ghim
-            </button>
-
-            <button
-              type="button"
-              onClick={handleShareCard}
-              className="inline-flex items-center justify-center gap-1.5 rounded-full bg-white px-3.5 py-2 text-xs font-extrabold text-leaf-900 shadow-sm transition hover:bg-leaf-50"
-              title="Xuất ảnh Poster Lộ trình chất lượng cao (.png)"
-            >
-              <Camera className="size-3.5 text-leaf-700" />
-              Lưu ảnh HD
-            </button>
+      {/* ── Top-Left Compact Frosted Status Pill (Stacks cleanly on narrow mobile, never clips top-right capsule) ── */}
+      <div className="pointer-events-none absolute left-3.5 right-[4.5rem] top-3.5 z-20 flex flex-col items-start gap-1.5 sm:left-5 sm:right-20 sm:top-5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
+        <div className="pointer-events-auto flex items-center gap-2.5 rounded-full border border-white/20 bg-slate-950/65 px-3.5 py-2 text-white shadow-[0_12px_32px_-8px_rgba(0,0,0,0.55)] backdrop-blur-xl">
+          <span className="grid size-7 shrink-0 place-items-center rounded-full bg-emerald-500/25 text-emerald-300 ring-1 ring-emerald-400/40">
+            <Compass className="size-4" aria-hidden />
+          </span>
+          <div className="min-w-0 leading-tight">
+            <h1 className="text-xs font-extrabold tracking-tight text-white sm:text-sm">
+              Bản đồ Dấu chân
+            </h1>
+            <p className="text-[11px] font-medium text-slate-300 tabular-nums">
+              {stats.totalPhotos} ảnh · {photoClusters.length} cụm điểm
+            </p>
           </div>
         </div>
-      </section>
 
-      {/* ── Main Cinema Split Stage: 3D Vector Map (Left) + Step-by-Step Route Studio (Right) ── */}
-      <div className="mt-4 grid gap-4 sm:mt-5 sm:gap-5 lg:grid-cols-[1fr_390px] lg:items-start">
-        {/* Left: Full-Height MapLibre 3D Interactive Stage */}
-        <div className="min-w-0 space-y-3">
-          {/* Sleek Map Controls Bar */}
-          <div className="flex flex-nowrap items-center justify-between gap-2 overflow-x-auto rounded-2xl border border-sand-200 bg-white px-2.5 py-2 shadow-2xs no-scrollbar sm:flex-wrap sm:overflow-visible sm:px-3">
-            <div className="flex shrink-0 items-center gap-1">
-              {(Object.keys(MAP_STYLE_LABELS) as MapStyleMode[]).map((mode) => (
+        {/* Always-Visible Live GPS Status Pill */}
+        <button
+          type="button"
+          onClick={() => {
+            if (gpsStatus === 'denied' || gpsStatus === 'unavailable') {
+              setPickingManualLocation((v) => !v);
+            } else {
+              handleLocateButtonClick();
+            }
+          }}
+          className={clsx(
+            'pointer-events-auto inline-flex items-center gap-1.5 rounded-full border px-3 py-2 text-[11px] font-bold shadow-[0_10px_26px_-8px_rgba(0,0,0,0.5)] backdrop-blur-xl transition active:scale-95',
+            pickingManualLocation
+              ? 'border-amber-300/60 bg-amber-500/90 text-slate-950'
+              : gpsStatus === 'active'
+                ? 'border-sky-300/35 bg-slate-950/65 text-sky-100 hover:bg-slate-900/80'
+                : 'border-white/20 bg-slate-950/65 text-slate-200 hover:bg-slate-900/80',
+          )}
+          title={
+            userLocation
+              ? `Vị trí của bạn: ${userLocation.lat.toFixed(4)}, ${userLocation.lng.toFixed(4)}`
+              : 'Bấm để định vị hoặc chạm chọn vị trí trên bản đồ'
+          }
+        >
+          <span
+            className={clsx(
+              'size-2 shrink-0 rounded-full',
+              pickingManualLocation
+                ? 'bg-slate-950 animate-ping'
+                : gpsStatus === 'active'
+                  ? 'bg-[#0a84ff] shadow-[0_0_8px_#0a84ff]'
+                  : gpsStatus === 'locating'
+                    ? 'bg-amber-400 animate-pulse'
+                    : 'bg-slate-400',
+            )}
+          />
+          <span className="tabular-nums">
+            {pickingManualLocation
+              ? 'Chạm vào bản đồ để đặt vị trí...'
+              : gpsStatus === 'active' && userLocation
+                ? userLocation.isManualFallback
+                  ? 'Vị trí đã ghim'
+                  : `Vị trí của bạn${userLocation.accuracyMeters ? ` · ±${Math.round(userLocation.accuracyMeters)}m` : ''}`
+                : gpsStatus === 'locating'
+                  ? 'Đang định vị GPS...'
+                  : 'Chạm đặt vị trí'}
+          </span>
+        </button>
+      </div>
+
+      {/* ── Top-Right Apple Maps Frosted Vertical Control Capsule ────────── */}
+      <div className="absolute right-3.5 top-3.5 z-20 flex flex-col items-end gap-2.5 sm:right-5 sm:top-5">
+        <div className="flex flex-col overflow-hidden rounded-[22px] border border-white/22 bg-slate-950/60 text-white shadow-[0_14px_34px_-8px_rgba(0,0,0,0.55)] backdrop-blur-xl">
+          <button
+            type="button"
+            onClick={() => setLayerPopoverOpen((v) => !v)}
+            className={clsx(
+              'grid size-11 place-items-center transition hover:bg-white/15',
+              layerPopoverOpen && 'bg-white/20 text-emerald-300',
+            )}
+            aria-label="Chọn kiểu bản đồ & lớp hiển thị"
+            title="Kiểu bản đồ & Lớp hiển thị"
+          >
+            <MapIcon className="size-[1.15rem]" />
+          </button>
+
+          <div className="mx-2 h-px bg-white/15" />
+
+          <button
+            type="button"
+            onClick={handleLocateButtonClick}
+            className={clsx(
+              'grid size-11 place-items-center transition hover:bg-white/15',
+              followUserLocation ? 'text-[#38bdf8]' : 'text-white',
+            )}
+            aria-label="Về vị trí hiện tại của tôi"
+            title="Về vị trí hiện tại của tôi"
+          >
+            <Navigation
+              className={clsx('size-[1.15rem]', followUserLocation && 'fill-[#38bdf8]')}
+            />
+          </button>
+        </div>
+
+        {/* Sleek Map Zoom Capsule (Cleanly clear of bottom-right Pé Meko orb) */}
+        <div className="hidden flex-col overflow-hidden rounded-[20px] border border-white/20 bg-slate-950/55 text-white shadow-[0_12px_28px_-8px_rgba(0,0,0,0.5)] backdrop-blur-xl sm:flex">
+          <button
+            type="button"
+            onClick={() => mapRef.current?.zoomIn({ duration: 280 })}
+            className="grid size-10 place-items-center transition hover:bg-white/15"
+            aria-label="Phóng to bản đồ"
+          >
+            <Plus className="size-4" />
+          </button>
+          <div className="mx-2 h-px bg-white/15" />
+          <button
+            type="button"
+            onClick={() => mapRef.current?.zoomOut({ duration: 280 })}
+            className="grid size-10 place-items-center transition hover:bg-white/15"
+            aria-label="Thu nhỏ bản đồ"
+          >
+            <Minus className="size-4" />
+          </button>
+        </div>
+
+        {/* Layer & Map Style Popover */}
+        {layerPopoverOpen && (
+          <div className="mt-1 w-60 rounded-3xl border border-white/20 bg-slate-950/90 p-3.5 text-white shadow-2xl backdrop-blur-2xl">
+            <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+              Giao diện bản đồ
+            </p>
+            <div className="grid grid-cols-2 gap-1.5">
+              {(
+                [
+                  { id: 'atlas', label: 'Bản đồ Ảnh', icon: Sparkles },
+                  { id: 'satellite', label: 'Vệ tinh', icon: Globe2 },
+                  { id: 'day_3d', label: 'Sáng 3D', icon: Sun },
+                  { id: 'night', label: 'Đêm sâu', icon: Moon },
+                ] as const
+              ).map(({ id, label, icon: Icon }) => (
                 <button
-                  key={mode}
+                  key={id}
                   type="button"
-                  onClick={() => setMapStyle(mode)}
+                  onClick={() => setMapStyle(id)}
                   className={clsx(
-                    'shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-bold transition',
-                    mapStyle === mode
-                      ? 'bg-leaf-700 text-white shadow-xs'
-                      : 'bg-sand-100 text-river-700 hover:bg-sand-200',
+                    'flex items-center gap-1.5 rounded-xl px-2.5 py-2 text-xs font-bold transition',
+                    mapStyle === id
+                      ? 'bg-emerald-500 text-white'
+                      : 'bg-white/10 text-slate-200 hover:bg-white/20',
                   )}
                 >
-                  <span className="hidden sm:inline">{MAP_STYLE_LABELS[mode].label}</span>
-                  <span className="sm:hidden">{MAP_STYLE_LABELS[mode].short}</span>
+                  <Icon className="size-3.5 shrink-0" />
+                  <span className="truncate">{label}</span>
                 </button>
               ))}
             </div>
 
-            <div className="flex shrink-0 items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => setIs3DView((v) => !v)}
-                className={clsx(
-                  'inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-extrabold transition',
-                  is3DView
-                    ? 'bg-river-900 text-emerald-200 ring-1 ring-emerald-400/40'
-                    : 'bg-sand-100 text-river-700 hover:bg-sand-200',
-                )}
-                title="Chuyển góc nhìn nghiêng 3D / Phẳng 2D"
-              >
-                <Layers className="size-3.5" />
-                {is3DView ? 'Góc 3D' : 'Phẳng 2D'}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  const pts = livePoints.length >= 2 ? livePoints : selectedTrack?.points || [];
-                  if (pts.length > 0) fitTrackBounds(pts);
-                }}
-                className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-leaf-50 px-3 py-1.5 text-xs font-extrabold text-leaf-800 ring-1 ring-leaf-200 transition hover:bg-leaf-100"
-                title="Tự động thu phóng để thấy toàn bộ lộ trình"
-              >
-                <Maximize2 className="size-3.5" />
-                Toàn tuyến
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setFogEnabled((v) => !v)}
-                className={clsx(
-                  'inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-extrabold transition',
-                  fogEnabled
-                    ? 'bg-teal-50 text-teal-900 ring-1 ring-teal-300'
-                    : 'bg-sand-100 text-river-600 hover:bg-sand-200',
-                )}
-              >
-                {fogEnabled ? <Eye className="size-3.5" /> : <EyeOff className="size-3.5" />}
-                Sương mù
-              </button>
-
-              {fogEnabled && (
-                <label className="hidden items-center gap-1.5 pl-1 text-[11px] font-semibold text-river-600 xl:flex">
-                  <span>Độ mở:</span>
-                  <input
-                    type="range"
-                    min={32}
-                    max={88}
-                    value={fogRadiusPx}
-                    onChange={(e) => setFogRadiusPx(Number(e.target.value))}
-                    className="w-16 accent-leaf-600"
-                  />
-                </label>
-              )}
-            </div>
-          </div>
-
-          {/* 3D WebGL Map Canvas Container */}
-          <div className="isolate relative z-0 h-[58dvh] min-h-[410px] w-full overflow-hidden rounded-3xl border border-sand-300 bg-river-950 shadow-raised sm:h-[580px]">
-            <div ref={mapContainerRef} className="size-full" />
-            <canvas
-              ref={fogCanvasRef}
-              className="pointer-events-none absolute inset-0 z-10"
-            />
-
-            {/* Floating Top-Left Active Route Pill inside Map */}
-            {selectedTrack && (
-              <div className="pointer-events-none absolute left-3 top-3 z-20 flex max-w-[calc(100%-1.5rem)] items-center gap-2 rounded-2xl border border-white/25 bg-river-950/85 px-3 py-2 text-white shadow-xl backdrop-blur-md">
-                <span
-                  className="size-3 shrink-0 rounded-full ring-2 ring-white/70"
-                  style={{ backgroundColor: selectedTrack.color || '#10b981' }}
-                />
-                <div className="min-w-0">
-                  <p className="truncate text-xs font-extrabold leading-tight">
-                    {selectedTrack.title}
-                  </p>
-                  <p className="mt-0.5 flex items-center gap-2 text-[10px] font-semibold text-emerald-200">
-                    <span>📏 {selectedTrack.distanceKm} km</span>
-                    <span>·</span>
-                    <span>📍 {routeStopsWithLegs.length} chặng</span>
-                    {autoCheckInEnabled && (
-                      <>
-                        <span>·</span>
-                        <span className="text-teal-200">🛂 Auto Check-in</span>
-                      </>
-                    )}
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* Floating Bottom Replay HUD inside Map */}
-            {selectedTrack && selectedTrack.points.length >= 2 && (
-              <div className="absolute bottom-3 left-3 right-3 z-20 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/25 bg-river-950/90 px-3 py-2.5 text-white shadow-2xl backdrop-blur-md sm:bottom-4 sm:left-4 sm:right-4 sm:px-4">
-                <div className="flex min-w-0 items-center gap-2.5">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (isReplaying) {
-                        setIsReplaying(false);
-                      } else {
-                        handleStartReplay(selectedTrack);
-                      }
-                    }}
-                    className="grid size-9 shrink-0 place-items-center rounded-full bg-emerald-500 text-white shadow-md transition hover:scale-105 hover:bg-emerald-400"
-                    title={isReplaying ? 'Tạm dừng' : 'Phát lại hành trình 3D'}
-                  >
-                    {isReplaying ? (
-                      <Pause className="size-4" />
-                    ) : (
-                      <Play className="size-4 translate-x-0.5 fill-white" />
-                    )}
-                  </button>
-                  <div className="min-w-0">
-                    <p className="truncate text-xs font-extrabold text-white">
-                      {isReplaying ? '🦊 Đang bay theo lộ trình...' : '🎬 Bay phát lại 3D theo đường thật'}
-                    </p>
-                    <p className="truncate text-[11px] text-teal-200">
-                      Kéo thanh trượt để xem từng chặng trên tuyến đường
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex min-w-[140px] max-w-xs flex-1 items-center gap-2.5">
-                  <input
-                    type="range"
-                    min={0}
-                    max={100}
-                    value={Math.round(replayProgress)}
-                    onChange={(e) => {
-                      const val = Number(e.target.value);
-                      setReplayProgress(val);
-                      const idx = Math.min(
-                        selectedTrack.points.length - 1,
-                        Math.floor((val / 100) * selectedTrack.points.length),
-                      );
-                      const pt = selectedTrack.points[idx];
-                      if (pt) {
-                        setAvatarPos({ lat: pt.lat, lng: pt.lng });
-                        mapRef.current?.easeTo({ center: [pt.lng, pt.lat], duration: 250 });
-                      }
-                    }}
-                    className="w-full accent-emerald-400"
-                  />
-                  <span className="w-8 text-right text-[11px] font-bold tabular-nums text-teal-200">
-                    {Math.round(replayProgress)}%
+            <div className="mt-3 space-y-1.5 border-t border-white/12 pt-3">
+              {(
+                [
+                  {
+                    label: 'Góc nhìn nghiêng 3D',
+                    active: is3DView,
+                    toggle: () => setIs3DView((v) => !v),
+                    icon: Layers,
+                  },
+                  {
+                    label: 'Hiện tuyến đường đã đi',
+                    active: showRoutesOnMap,
+                    toggle: () => setShowRoutesOnMap((v) => !v),
+                    icon: Route,
+                  },
+                  {
+                    label: 'Sương mù khám phá',
+                    active: fogEnabled,
+                    toggle: () => setFogEnabled((v) => !v),
+                    icon: Compass,
+                  },
+                ] as const
+              ).map(({ label, active, toggle, icon: Icon }) => (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={toggle}
+                  className="flex w-full items-center justify-between rounded-xl px-2.5 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/10"
+                >
+                  <span className="flex items-center gap-2">
+                    <Icon className="size-3.5 text-emerald-400" />
+                    {label}
                   </span>
-                </div>
+                  <span
+                    className={clsx(
+                      'grid size-5 place-items-center rounded-full text-white transition',
+                      active ? 'bg-emerald-500' : 'bg-white/15',
+                    )}
+                  >
+                    {active && <Check className="size-3" />}
+                  </span>
+                </button>
+              ))}
 
-                <div className="flex items-center gap-1">
-                  {([1, 2, 4] as const).map((spd) => (
-                    <button
-                      key={spd}
-                      type="button"
-                      onClick={() => setReplaySpeed(spd)}
-                      className={clsx(
-                        'rounded-lg px-2 py-1 text-[11px] font-extrabold transition',
-                        replaySpeed === spd
-                          ? 'bg-emerald-500 text-white'
-                          : 'bg-white/10 text-leaf-100 hover:bg-white/20',
-                      )}
-                    >
-                      {spd}x
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Right: 2-Tab Interactive Route Studio (Step-by-Step Timeline + Journeys & Demos) */}
-        <aside className="min-w-0 space-y-4">
-          <Card className="overflow-hidden p-0">
-            {/* Clean 2-Tab Switcher */}
-            <div className="grid grid-cols-2 border-b border-sand-200 bg-sand-50/80 p-1.5">
-              <button
-                type="button"
-                onClick={() => setSidebarTab('timeline')}
-                className={clsx(
-                  'inline-flex items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-extrabold transition',
-                  sidebarTab === 'timeline'
-                    ? 'bg-white text-leaf-800 shadow-sm ring-1 ring-sand-200'
-                    : 'text-river-600 hover:text-river-900',
-                )}
-              >
-                <Route className="size-3.5" />
-                Lộ trình ({routeStopsWithLegs.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setSidebarTab('journeys')}
-                className={clsx(
-                  'inline-flex items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-extrabold transition',
-                  sidebarTab === 'journeys'
-                    ? 'bg-white text-leaf-800 shadow-sm ring-1 ring-sand-200'
-                    : 'text-river-600 hover:text-river-900',
-                )}
-              >
-                <Compass className="size-3.5" />
-                Chuyến đi ({tracks.length})
-              </button>
-            </div>
-
-            {sidebarTab === 'timeline' ? (
-              <div className="p-4">
-                {selectedTrack && routeStopsWithLegs.length > 0 ? (
-                  <>
-                    <div className="flex items-start justify-between gap-2 pb-3 border-b border-sand-100">
-                      <div className="min-w-0">
-                        <p className="text-[11px] font-bold uppercase tracking-wider text-leaf-700">
-                          Bấm từng chặng để định vị trên bản đồ 3D
-                        </p>
-                        <h2 className="mt-0.5 truncate text-sm font-extrabold text-river-900">
-                          {selectedTrack.title}
-                        </h2>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => fitTrackBounds(selectedTrack.points)}
-                        className="shrink-0 whitespace-nowrap rounded-full bg-leaf-50 px-2.5 py-1 text-[11px] font-bold text-leaf-800 ring-1 ring-leaf-200 hover:bg-leaf-100"
-                      >
-                        Toàn tuyến
-                      </button>
-                    </div>
-
-                    {/* Quick Action Bar at Top (Always clear of floating Pé Meko orb!) */}
-                    <div className="mt-3 grid grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => handleStartReplay(selectedTrack)}
-                        className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-leaf-700 py-2 text-xs font-extrabold text-white shadow-xs transition hover:bg-leaf-800"
-                      >
-                        <Play className="size-3.5 fill-white" />
-                        Bay phát lại 3D
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleShareCard}
-                        className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-sand-300 bg-white py-2 text-xs font-bold text-river-800 transition hover:border-leaf-400 hover:bg-leaf-50"
-                      >
-                        <Camera className="size-3.5 text-leaf-700" />
-                        Tải ảnh HD
-                      </button>
-                    </div>
-
-                    {/* Visual Vertical Connected Stop-by-Stop Stepper */}
-                    <ol className="mt-3 max-h-[410px] space-y-2 overflow-y-auto pr-1">
-                      {routeStopsWithLegs.map((stop, i) => {
-                        const isFocused = focusedStopIdx === i;
-                        const isStart = i === 0;
-                        const isEnd = i === routeStopsWithLegs.length - 1 && routeStopsWithLegs.length > 1;
-                        const color = selectedTrack.color || '#10b981';
-
-                        return (
-                          <li key={`${stop.title}-${i}`} className="relative">
-                            {/* Leg distance connector pill between stops */}
-                            {i > 0 && (
-                              <div className="mb-2 ml-4 flex items-center gap-2 border-l-2 border-dashed border-leaf-300 py-1 pl-4 text-[11px] font-semibold text-river-500">
-                                <Navigation className="size-3 shrink-0 text-leaf-600" aria-hidden />
-                                <span>
-                                  Di chuyển <strong className="text-river-800">{stop.legKm} km</strong> · ~{stop.legMin} phút
-                                </span>
-                              </div>
-                            )}
-
-                            <button
-                              type="button"
-                              onClick={() => focusStopOnMap(i, stop.lat, stop.lng)}
-                              className={clsx(
-                                'group flex w-full items-start gap-3 rounded-2xl border p-2.5 text-left transition-all',
-                                isFocused
-                                  ? 'border-leaf-500 bg-leaf-50/75 shadow-sm ring-1 ring-leaf-300'
-                                  : 'border-sand-200 bg-white hover:border-leaf-300 hover:bg-sand-50/60',
-                              )}
-                            >
-                              {/* Numbered Stop Circle + Photo Thumbnail */}
-                              <div className="relative shrink-0">
-                                {stop.imageUrl ? (
-                                  <img
-                                    src={stop.imageUrl}
-                                    alt={stop.title}
-                                    className="size-12 rounded-xl object-cover ring-2 ring-white shadow-xs"
-                                  />
-                                ) : (
-                                  <span className="grid size-12 place-items-center rounded-xl bg-sand-100 text-xl">
-                                    {stop.emoji}
-                                  </span>
-                                )}
-                                <span
-                                  className="absolute -left-1.5 -top-1.5 grid size-5 place-items-center rounded-full text-[10px] font-black text-white ring-2 ring-white shadow"
-                                  style={{
-                                    backgroundColor: isStart ? '#059669' : isEnd ? '#e11d48' : color,
-                                  }}
-                                >
-                                  {i + 1}
-                                </span>
-                              </div>
-
-                              <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-1.5">
-                                  <span
-                                    className={clsx(
-                                      'shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-extrabold uppercase',
-                                      isStart
-                                        ? 'bg-emerald-100 text-emerald-800'
-                                        : isEnd
-                                          ? 'bg-rose-100 text-rose-800'
-                                          : 'bg-sand-100 text-river-600',
-                                    )}
-                                  >
-                                    {isStart ? '🚩 Xuất phát' : isEnd ? '🏁 Đích đến' : `Chặng ${i + 1}`}
-                                  </span>
-                                  <span className="truncate text-[10px] font-semibold text-river-500">
-                                    {stop.emoji} {stop.moodLabel}
-                                  </span>
-                                </div>
-                                <p className="mt-1 truncate text-xs font-extrabold text-river-900 group-hover:text-leaf-800">
-                                  {stop.title}
-                                </p>
-                                {stop.note && (
-                                  <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-river-600">
-                                    {stop.note}
-                                  </p>
-                                )}
-                              </div>
-                            </button>
-                          </li>
-                        );
-                      })}
-                    </ol>
-                  </>
-                ) : (
-                  <div className="rounded-2xl border border-dashed border-sand-300 bg-sand-50/70 p-6 text-center">
-                    <Flag className="mx-auto size-8 text-leaf-600 opacity-75" />
-                    <p className="mt-2 text-xs font-extrabold text-river-900">Chưa có lộ trình nào được chọn</p>
-                    <p className="mt-1 text-[11px] text-river-500">
-                      Hãy chạy thử ngay một cung đường mẫu bám sát đường thực tế bên dưới!
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => void handleRunDemoJourney(PRESET_DEMO_JOURNEYS[0]!)}
-                      className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-leaf-700 px-4 py-2 text-xs font-extrabold text-white hover:bg-leaf-800"
-                    >
-                      <Play className="size-3.5 fill-white" /> Chạy Cung đường Sa Đéc
-                    </button>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="space-y-4 p-4">
-                {/* 1-Click Road-Snapped Demo Routes */}
-                <div>
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="flex items-center gap-1.5 text-xs font-extrabold text-river-900">
-                      <Zap className="size-3.5 text-amber-500" />
-                      Chạy thử Cung đường Mẫu (Đường thật)
-                    </p>
-                  </div>
-                  <div className="mt-2 space-y-2">
-                    {PRESET_DEMO_JOURNEYS.map((route) => {
-                      const isRunning = simulatingRouteId === route.id;
-                      return (
-                        <button
-                          key={route.id}
-                          type="button"
-                          disabled={Boolean(simulatingRouteId)}
-                          onClick={() => void handleRunDemoJourney(route)}
-                          className={clsx(
-                            'flex w-full items-center justify-between gap-2.5 rounded-2xl border p-3 text-left transition-all',
-                            isRunning
-                              ? 'border-emerald-500 bg-emerald-50 ring-2 ring-emerald-200'
-                              : 'border-sand-200 bg-sand-50/60 hover:border-leaf-400 hover:bg-white',
-                          )}
-                        >
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2">
-                              <span
-                                className="size-2.5 shrink-0 rounded-full"
-                                style={{ backgroundColor: route.color }}
-                              />
-                              <p className="truncate text-xs font-extrabold text-river-900">
-                                {route.title}
-                              </p>
-                            </div>
-                            <p className="mt-0.5 line-clamp-1 text-[11px] text-river-500">
-                              {route.subtitle}
-                            </p>
-                          </div>
-                          <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-[11px] font-extrabold text-leaf-700 ring-1 ring-sand-200">
-                            {isRunning ? '🦊 Đang chạy' : '▶️ Chạy'}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Saved / Offline Tracks List */}
-                <div className="border-t border-sand-200 pt-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs font-extrabold text-river-900">
-                      Nhật ký đã lưu ({tracks.length})
-                    </p>
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        disabled={isSyncing || !isEffectiveOnline}
-                        onClick={() => void syncWithCloud(false)}
-                        className="inline-flex items-center gap-1 rounded-full bg-sand-100 px-2.5 py-1 text-[11px] font-bold text-river-700 hover:bg-leaf-50 disabled:opacity-40"
-                        title="Đồng bộ lên Cloud"
-                      >
-                        <RefreshCw className={clsx('size-3', isSyncing && 'animate-spin')} />
-                        Sync
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleExportJson}
-                        className="inline-flex items-center gap-1 rounded-full bg-sand-100 px-2.5 py-1 text-[11px] font-bold text-river-700 hover:bg-leaf-50"
-                        title="Tải file JSON sao lưu"
-                      >
-                        <Download className="size-3" />
-                        JSON
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="mt-2.5 max-h-[240px] space-y-2 overflow-y-auto pr-1">
-                    {tracks.map((t) => {
-                      const isSelected = t.clientId === (selectedTrack?.clientId ?? '');
-                      return (
-                        <div
-                          key={t.clientId}
-                          onClick={() => {
-                            lastFittedTrackRef.current = null;
-                            setSelectedTrackId(t.clientId);
-                            setSidebarTab('timeline');
-                          }}
-                          className={clsx(
-                            'cursor-pointer rounded-2xl border p-3 transition-all',
-                            isSelected
-                              ? 'border-leaf-500 bg-leaf-50/60 ring-1 ring-leaf-300'
-                              : 'border-sand-200 bg-white hover:border-leaf-300',
-                          )}
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="flex min-w-0 items-center gap-2">
-                              <span
-                                className="size-2.5 shrink-0 rounded-full"
-                                style={{ backgroundColor: t.color || '#10b981' }}
-                              />
-                              <h3 className="truncate text-xs font-extrabold text-river-900">
-                                {t.title}
-                              </h3>
-                            </div>
-                            <span
-                              className={clsx(
-                                'shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold',
-                                t.syncStatus === 'pending'
-                                  ? 'bg-amber-100 text-amber-800'
-                                  : 'bg-emerald-100 text-emerald-800',
-                              )}
-                            >
-                              {t.syncStatus === 'pending' ? 'Offline' : 'Cloud'}
-                            </span>
-                          </div>
-                          <div className="mt-1.5 flex items-center justify-between text-[11px] text-river-600">
-                            <span>
-                              📏 {t.distanceKm} km · 📍 {t.memories?.length || 0} chặng
-                            </span>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                void handleDeleteTrack(t.clientId);
-                              }}
-                              className="rounded-lg p-1 text-river-400 hover:bg-rose-50 hover:text-rose-600"
-                              title="Xóa hành trình"
-                            >
-                              <Trash2 className="size-3.5" />
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            )}
-          </Card>
-
-          {/* Compact Auto Check-In & Passport Connection Card */}
-          <Card className="bg-gradient-to-br from-leaf-900 to-river-950 p-4 text-white">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2.5">
-                <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-white/15 text-teal-200">
-                  <Stamp className="size-5" />
-                </span>
-                <div>
-                  <h3 className="text-sm font-extrabold text-white">Hộ chiếu & Auto Check-in</h3>
-                  <p className="text-[11px] text-leaf-100">
-                    {checkInPins.length} điểm đã đóng dấu trên bản đồ
-                  </p>
-                </div>
-              </div>
               <button
                 type="button"
                 onClick={() => {
-                  const next = !autoCheckInEnabled;
-                  setAutoCheckInEnabled(next);
-                  toast.info(
-                    next ? 'Đã BẬT Tự động Check-in (<1km)' : 'Đã TẮT Tự động Check-in',
-                  );
+                  setLayerPopoverOpen(false);
+                  setPickingManualLocation(true);
+                  toast.info('Chạm vào bất kỳ điểm nào trên bản đồ để ghim vị trí hiện tại của bạn');
                 }}
-                className={clsx(
-                  'inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-extrabold transition',
-                  autoCheckInEnabled
-                    ? 'bg-emerald-500 text-white'
-                    : 'bg-white/15 text-leaf-100 hover:bg-white/25',
-                )}
+                className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-semibold text-sky-300 transition hover:bg-white/10"
               >
-                <MapPinCheck className="size-3" />
-                {autoCheckInEnabled ? 'Auto: BẬT' : 'Auto: TẮT'}
+                <LocateFixed className="size-3.5" />
+                Đặt vị trí hiện tại thủ công
               </button>
             </div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Link
-                to="/check-in"
-                className="inline-flex items-center gap-1 rounded-full bg-emerald-500 px-3.5 py-1.5 text-xs font-extrabold text-white hover:bg-emerald-400"
-              >
-                <MapPin className="size-3.5" /> Điểm danh GPS
-              </Link>
-              <Link
-                to="/passport"
-                className="inline-flex items-center gap-1 rounded-full bg-white/15 px-3.5 py-1.5 text-xs font-bold text-white hover:bg-white/25"
-              >
-                Xem Hộ chiếu số →
-              </Link>
-              <button
-                type="button"
-                onClick={() => setSimulateOffline((v) => !v)}
-                className="inline-flex items-center gap-1 rounded-full bg-white/10 px-3 py-1.5 text-[11px] font-bold text-amber-200 hover:bg-white/20"
-              >
-                <CloudOff className="size-3" />
-                {simulateOffline ? 'Bật lại Wi-Fi' : 'Test Offline'}
-              </button>
-            </div>
-          </Card>
-        </aside>
+          </div>
+        )}
       </div>
 
-      {/* ── Drop Memory Pin Modal ─────────────────────────────────────── */}
-      {pinModalOpen && (
-        <div className="fixed inset-0 z-[1050] flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm">
-          <div className="tp-scale-up w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl ring-1 ring-sand-200">
-            <div className="flex items-start justify-between">
-              <div>
-                <span className="inline-flex items-center gap-1 rounded-full bg-leaf-50 px-2.5 py-0.5 text-[11px] font-bold text-leaf-700">
-                  <Sparkles className="size-3" /> Ghim Kỷ Niệm trên Lộ trình
-                </span>
-                <h3 className="mt-1 text-lg font-extrabold text-river-900">
-                  Thả Ghim Kỷ Niệm
-                </h3>
-                <p className="text-xs text-river-500">
-                  Tọa độ: {pinCoords.lat.toFixed(4)}, {pinCoords.lng.toFixed(4)} (Chạm vào bản đồ để đổi điểm)
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setPinModalOpen(false)}
-                className="rounded-xl p-1 text-river-400 hover:bg-sand-100 hover:text-river-700"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="mt-4 space-y-3">
-              <div>
-                <label className="block text-xs font-bold text-river-700">Chọn Sticker Cảm xúc</label>
-                <div className="mt-1.5 grid grid-cols-2 gap-2">
-                  {MOOD_PRESETS.map((m) => {
-                    const active = pinEmoji === m.emoji && pinMood === m.label;
-                    return (
-                      <button
-                        key={m.label}
-                        type="button"
-                        onClick={() => {
-                          setPinEmoji(m.emoji);
-                          setPinMood(m.label);
-                        }}
-                        className={clsx(
-                          'flex items-center gap-2 rounded-xl border px-3 py-2 text-left text-xs font-bold transition',
-                          active
-                            ? 'border-leaf-600 bg-leaf-50 text-leaf-900 ring-2 ring-leaf-200'
-                            : 'border-sand-200 bg-white text-river-700 hover:bg-sand-50',
-                        )}
-                      >
-                        <span className="text-base">{m.emoji}</span>
-                        <span className="truncate">{m.label}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-river-700">Tên địa điểm / Góc check-in</label>
-                <input
-                  type="text"
-                  value={pinPlaceName}
-                  onChange={(e) => setPinPlaceName(e.target.value)}
-                  placeholder="Ví dụ: Cầu tàu Làng hoa Sa Đéc..."
-                  className="mt-1 w-full rounded-xl border border-sand-300 px-3 py-2 text-base text-river-900 focus:border-leaf-500 focus:outline-none sm:text-xs"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-river-700">Ghi chú kỷ niệm</label>
-                <textarea
-                  rows={2}
-                  value={pinNote}
-                  onChange={(e) => setPinNote(e.target.value)}
-                  placeholder="Lưu lại cảm xúc hoặc mẹo nhỏ tại tọa độ này..."
-                  className="mt-1 w-full rounded-xl border border-sand-300 px-3 py-2 text-base text-river-900 focus:border-leaf-500 focus:outline-none sm:text-xs"
-                />
-              </div>
-            </div>
-
-            <div className="mt-5 flex justify-end gap-2">
-              <Button type="button" variant="secondary" size="sm" onClick={() => setPinModalOpen(false)}>
-                Hủy
-              </Button>
-              <Button type="button" size="sm" onClick={() => void handleAddMemoryPin()}>
-                📍 Thả Ghim lên Bản đồ
-              </Button>
-            </div>
-          </div>
+      {/* ── Expandable Search Bar (floats cleanly right above bottom dock) ─ */}
+      {searchOpen && (
+        <div className="pointer-events-auto absolute bottom-[5.25rem] left-1/2 z-30 flex w-[calc(100%-2rem)] max-w-md -translate-x-1/2 items-center gap-2 rounded-full border border-white/25 bg-slate-950/82 px-3.5 py-2 text-white shadow-2xl backdrop-blur-2xl sm:bottom-24">
+          <Search className="size-4 shrink-0 text-emerald-300" />
+          <input
+            type="search"
+            autoFocus
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleSearchJump();
+              if (e.key === 'Escape') setSearchOpen(false);
+            }}
+            placeholder="Tìm địa điểm, khu vực hoặc ghi chú ảnh..."
+            className="min-w-0 flex-1 bg-transparent text-xs font-medium text-white placeholder:text-slate-400 focus:outline-none sm:text-sm"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={handleSearchJump}
+              className="shrink-0 rounded-full bg-emerald-500 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-emerald-400"
+            >
+              Đi tới ({visibleMapPhotos.length})
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              setSearchQuery('');
+              setSearchOpen(false);
+            }}
+            className="grid size-7 shrink-0 place-items-center rounded-full bg-white/10 text-slate-300 hover:bg-white/20 hover:text-white"
+            aria-label="Đóng tìm kiếm"
+          >
+            <X className="size-3.5" />
+          </button>
         </div>
       )}
-    </PageContainer>
+
+      {/* Hidden Quick-Upload File Picker triggered directly by the Upload dock icon */}
+      <input
+        ref={quickUploadInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        className="hidden"
+        onChange={(e) => {
+          const selected = e.target.files ? Array.from(e.target.files) : [];
+          e.target.value = '';
+          if (selected.length === 0) return;
+          setCaptureModalState({
+            open: true,
+            coords: userLocation ? { lat: userLocation.lat, lng: userLocation.lng } : null,
+            placeName: '',
+            mode: 'upload',
+            files: selected,
+          });
+        }}
+      />
+
+      {/* ── Bottom Apple Photos Floating Dock (Centered, zero Pé Meko overlap!) ─ */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-3.5 z-30 flex items-center justify-center px-2.5 sm:bottom-5 sm:px-3">
+        <div className="pointer-events-auto flex items-center gap-1.5 sm:gap-2">
+          {/* Segmented Frosted Pill: Bản đồ | Thư viện | Địa điểm | Lộ trình */}
+          <nav
+            aria-label="Chế độ xem Bản đồ Dấu chân"
+            className="flex items-center gap-0.5 rounded-full border border-white/22 bg-slate-950/65 p-1 text-white shadow-[0_16px_40px_-8px_rgba(0,0,0,0.65)] backdrop-blur-2xl sm:gap-1 sm:p-1.5"
+          >
+            {(
+              [
+                { id: 'map', label: 'Bản đồ', icon: MapIcon },
+                { id: 'library', label: 'Thư viện', icon: Images },
+                { id: 'places', label: 'Địa điểm', icon: FolderHeart },
+                { id: 'routes', label: 'Lộ trình', icon: Route },
+              ] as const
+            ).map(({ id, label, icon: Icon }) => {
+              const active = dockMode === id;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => {
+                    setDockMode((prev) => (prev === id && id !== 'map' ? 'map' : id));
+                    if (id !== 'map') setActiveClusterId(null);
+                  }}
+                  className={clsx(
+                    'flex items-center gap-1.5 rounded-full px-2.5 py-2 text-xs font-bold transition-all active:scale-95 sm:px-4',
+                    active
+                      ? 'bg-white text-slate-950 shadow-sm'
+                      : 'text-slate-200 hover:bg-white/12 hover:text-white',
+                  )}
+                >
+                  <Icon className="size-3.5 shrink-0" aria-hidden />
+                  <span className={clsx(active ? 'inline' : 'hidden sm:inline')}>{label}</span>
+                </button>
+              );
+            })}
+          </nav>
+
+          {/* Icon-Only Action #1: Open Live Camera Immediately */}
+          <button
+            type="button"
+            onClick={() =>
+              setCaptureModalState({
+                open: true,
+                coords: userLocation ? { lat: userLocation.lat, lng: userLocation.lng } : null,
+                placeName: '',
+                mode: 'camera',
+                files: null,
+              })
+            }
+            className="grid size-11 shrink-0 place-items-center rounded-full border border-emerald-300/45 bg-emerald-500 text-white shadow-[0_14px_32px_-6px_rgba(16,185,129,0.75)] transition hover:scale-105 hover:bg-emerald-400 active:scale-95 sm:size-12"
+            aria-label="Mở camera chụp ảnh"
+            title="Mở camera chụp ảnh"
+          >
+            <Camera className="size-[1.15rem]" aria-hidden />
+          </button>
+
+          {/* Icon-Only Action #2: Upload Photos from Device Immediately */}
+          <button
+            type="button"
+            onClick={() => quickUploadInputRef.current?.click()}
+            className="grid size-11 shrink-0 place-items-center rounded-full border border-white/25 bg-slate-950/70 text-emerald-300 shadow-[0_14px_34px_-8px_rgba(0,0,0,0.6)] backdrop-blur-2xl transition hover:scale-105 hover:bg-slate-900/90 hover:text-white active:scale-95 sm:size-12"
+            aria-label="Tải ảnh lên từ thiết bị"
+            title="Tải ảnh lên từ thiết bị"
+          >
+            <Upload className="size-[1.15rem]" aria-hidden />
+          </button>
+
+          {/* Circular Frosted Search Trigger */}
+          <button
+            type="button"
+            onClick={() => setSearchOpen((v) => !v)}
+            className={clsx(
+              'grid size-11 shrink-0 place-items-center rounded-full border border-white/22 shadow-[0_14px_34px_-8px_rgba(0,0,0,0.6)] backdrop-blur-2xl transition active:scale-95 sm:size-12',
+              searchOpen || searchQuery
+                ? 'bg-white text-slate-950'
+                : 'bg-slate-950/65 text-white hover:bg-slate-900/80',
+            )}
+            aria-label="Tìm kiếm ảnh và địa điểm trên bản đồ"
+            title="Tìm kiếm ảnh & địa điểm"
+          >
+            <Search className="size-[1.15rem]" aria-hidden />
+          </button>
+        </div>
+      </div>
+
+      {/* ── Selected Photo Cluster Drawer ────────────────────────────────── */}
+      {activeCluster && dockMode === 'map' && (
+        <PhotoClusterDrawer
+          cluster={activeCluster}
+          userLocation={userLocation}
+          onClose={() => setActiveClusterId(null)}
+          onOpenLightbox={(photos, startIndex) => setLightboxState({ photos, index: startIndex })}
+          onAddPhotoHere={(coords, placeName) =>
+            setCaptureModalState({ open: true, coords, placeName })
+          }
+        />
+      )}
+
+      {/* ── Library / Places Collection Overlay ──────────────────────────── */}
+      {(dockMode === 'library' || dockMode === 'places') && (
+        <PhotoLibraryOverlay
+          mode={dockMode}
+          photos={allMapPhotos}
+          userLocation={userLocation}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          onClose={() => setDockMode('map')}
+          onOpenLightbox={(photos, startIndex) => setLightboxState({ photos, index: startIndex })}
+          onFlyToPlace={(coords) => {
+            setFollowUserLocation(false);
+            mapRef.current?.flyTo({
+              center: [coords.lng, coords.lat],
+              zoom: 14.5,
+              duration: 850,
+            });
+          }}
+          onOpenCapture={() =>
+            setCaptureModalState({
+              open: true,
+              coords: userLocation ? { lat: userLocation.lat, lng: userLocation.lng } : null,
+              placeName: '',
+            })
+          }
+        />
+      )}
+
+      {/* ── Journeys, GPS Recording & 3D Replay Drawer ───────────────────── */}
+      <JourneyDrawer
+        open={dockMode === 'routes'}
+        onClose={() => setDockMode('map')}
+        tracks={tracks}
+        selectedTrack={selectedTrack}
+        routeStops={routeStopsWithLegs}
+        focusedStopIdx={focusedStopIdx}
+        isRecordingGps={isRecordingGps}
+        liveElapsedLabel={formatDurationClock(liveElapsedSec)}
+        simulatingRouteId={simulatingRouteId}
+        isReplaying={isReplaying}
+        replayProgress={replayProgress}
+        replaySpeed={replaySpeed}
+        fogEnabled={fogEnabled}
+        fogRadiusPx={fogRadiusPx}
+        autoCheckInEnabled={autoCheckInEnabled}
+        checkInCount={checkInPins.length}
+        isEffectiveOnline={isEffectiveOnline}
+        simulateOffline={simulateOffline}
+        pendingSyncCount={pendingSyncCount}
+        isSyncing={isSyncing}
+        totalKm={stats.totalKm}
+        exploredPercent={stats.exploredPercent}
+        onSelectTrack={(clientId) => {
+          setSelectedTrackId(clientId);
+          setShowRoutesOnMap(true);
+          const found = tracks.find((t) => t.clientId === clientId);
+          if (found?.points.length) fitTrackBounds(found.points);
+        }}
+        onDeleteTrack={(clientId) => void handleDeleteTrack(clientId)}
+        onFocusStop={(idx, lat, lng) => {
+          setFocusedStopIdx(idx);
+          setFollowUserLocation(false);
+          mapRef.current?.flyTo({ center: [lng, lat], zoom: 14.8, pitch: is3DView ? 45 : 0, duration: 750 });
+        }}
+        onFitTrack={() => {
+          const pts = livePoints.length >= 2 ? livePoints : selectedTrack?.points || [];
+          if (pts.length > 0) fitTrackBounds(pts);
+        }}
+        onStartLiveGps={() => void handleStartLiveGps()}
+        onStopLiveGps={() => void handleStopAndSaveLiveGps()}
+        onRunDemoJourney={(route) => void handleRunDemoJourney(route)}
+        onToggleReplay={() => {
+          if (!selectedTrack || selectedTrack.points.length < 2) return;
+          if (isReplaying) {
+            setIsReplaying(false);
+          } else {
+            setShowRoutesOnMap(true);
+            setReplayProgress(0);
+            const first = selectedTrack.points[0]!;
+            setReplayAvatarPos({ lat: first.lat, lng: first.lng });
+            mapRef.current?.flyTo({ center: [first.lng, first.lat], zoom: 14.3, duration: 800 });
+            setIsReplaying(true);
+          }
+        }}
+        onSeekReplay={(pct) => {
+          if (!selectedTrack || selectedTrack.points.length < 2) return;
+          setReplayProgress(pct);
+          const idx = Math.min(
+            selectedTrack.points.length - 1,
+            Math.floor((pct / 100) * selectedTrack.points.length),
+          );
+          const pt = selectedTrack.points[idx];
+          if (pt) {
+            setReplayAvatarPos({ lat: pt.lat, lng: pt.lng });
+            mapRef.current?.easeTo({ center: [pt.lng, pt.lat], duration: 250 });
+          }
+        }}
+        onChangeReplaySpeed={setReplaySpeed}
+        onToggleFog={() => setFogEnabled((v) => !v)}
+        onChangeFogRadius={setFogRadiusPx}
+        onToggleAutoCheckIn={() => {
+          setAutoCheckInEnabled((v) => {
+            toast.info(!v ? 'Đã BẬT Tự động Check-in (<1km)' : 'Đã TẮT Tự động Check-in');
+            return !v;
+          });
+        }}
+        onToggleSimulateOffline={() => setSimulateOffline((v) => !v)}
+        onSyncNow={() => void syncWithCloud(false)}
+        onExportJson={handleExportJson}
+        onDownloadShareCard={handleShareCard}
+      />
+
+      {/* ── Photo Capture & Multi-Upload Modal ───────────────────────────── */}
+      <PhotoCaptureModal
+        open={captureModalState.open}
+        onClose={() => setCaptureModalState({ open: false })}
+        userLocation={userLocation}
+        initialCoords={captureModalState.coords}
+        initialPlaceName={captureModalState.placeName}
+        initialMode={captureModalState.mode}
+        initialFiles={captureModalState.files}
+        geofenceTargets={geofenceTargets}
+        activeTrackClientId={isRecordingGps ? liveTrackTitle : selectedTrack?.clientId}
+        onUploaded={handlePhotosUploaded}
+        onRequestLocation={() => requestLiveLocation(true)}
+      />
+
+      {/* ── Full-Screen Photo Lightbox Modal ─────────────────────────────── */}
+      {lightboxState && (
+        <PhotoLightboxModal
+          photos={lightboxState.photos}
+          activeIndex={lightboxState.index}
+          onChangeIndex={(nextIndex) => setLightboxState((prev) => (prev ? { ...prev, index: nextIndex } : null))}
+          onClose={() => setLightboxState(null)}
+          onFocusOnMap={(photo) => {
+            setFollowUserLocation(false);
+            setDockMode('map');
+            mapRef.current?.flyTo({
+              center: [photo.coordinates.lng, photo.coordinates.lat],
+              zoom: 15.2,
+              duration: 850,
+            });
+          }}
+          onUpdatePhoto={handleUpdatePhoto}
+          onDeletePhoto={handleDeletePhoto}
+        />
+      )}
+    </div>
   );
 }

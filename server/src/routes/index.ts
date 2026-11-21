@@ -21,6 +21,7 @@ import * as auth from '../controllers/auth.controller.js';
 import * as banners from '../controllers/banner.controller.js';
 import * as destinations from '../controllers/destination.controller.js';
 import * as footprints from '../controllers/footprint.controller.js';
+import * as footprintPhotos from '../controllers/footprintPhotos.controller.js';
 import * as itineraries from '../controllers/itinerary.controller.js';
 import * as passport from '../controllers/passport.controller.js';
 import * as partnerPublic from '../controllers/partnerPublic.controller.js';
@@ -117,6 +118,16 @@ export function buildApiRouter(): Router {
   api.post('/passport/claim', requireAuth, passport.claimDevicePassport);
   api.get('/footprints', footprints.listFootprintsHandler);
   api.post('/footprints/sync', eventLimiter, footprints.syncFootprintsHandler);
+  api.get('/footprints/photos', footprintPhotos.listFootprintPhotosHandler);
+  api.post(
+    '/footprints/photos',
+    eventLimiter,
+    footprintPhotos.optionalPhotoUploadMiddleware,
+    footprintPhotos.createFootprintPhotoHandler,
+  );
+  api.post('/footprints/photos/sync', eventLimiter, footprintPhotos.syncFootprintPhotosHandler);
+  api.patch('/footprints/photos/:id', eventLimiter, footprintPhotos.updateFootprintPhotoHandler);
+  api.delete('/footprints/photos/:id', footprintPhotos.deleteFootprintPhotoHandler);
   api.delete('/footprints/:clientId', footprints.deleteFootprintHandler);
   api.get('/favorites', requireAuth, passport.listFavorites);
   api.post('/favorites/:destinationId', requireAuth, passport.addFavorite);
