@@ -2,6 +2,19 @@ import axios, { AxiosError, type InternalAxiosRequestConfig } from 'axios';
 
 const baseURL = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api/v1';
 
+/** Resolves `/uploads/...` against cross-origin API host when frontend & backend are deployed on separate domains (e.g. Vercel + Render). */
+export function resolveMediaUrl(url: string): string {
+  if (!url) return url;
+  if (url.startsWith('/uploads/') && /^https?:\/\//i.test(baseURL)) {
+    try {
+      return `${new URL(baseURL).origin}${url}`;
+    } catch {
+      return url;
+    }
+  }
+  return url;
+}
+
 export const api = axios.create({ baseURL, withCredentials: true, timeout: 15_000 });
 
 let csrfToken: string | null = null;

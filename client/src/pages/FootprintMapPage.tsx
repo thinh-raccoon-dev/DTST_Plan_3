@@ -30,7 +30,7 @@ import { PhotoClusterDrawer } from '../components/footprints/PhotoClusterDrawer'
 import { PhotoLibraryOverlay } from '../components/footprints/PhotoLibraryOverlay';
 import { PhotoLightboxModal } from '../components/footprints/PhotoLightboxModal';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
-import { api, toApiError } from '../lib/api';
+import { api, resolveMediaUrl, toApiError } from '../lib/api';
 import {
   calculatePolylineKm,
   deleteLocalTrackById,
@@ -634,7 +634,13 @@ export function FootprintMapPage() {
           if (!selectedTrackId && merged[0]) setSelectedTrackId(merged[0].clientId);
         }
         if (Array.isArray(res.data?.photos)) {
-          setUserPhotos(res.data.photos);
+          setUserPhotos(
+            res.data.photos.map((p) => ({
+              ...p,
+              imageUrl: resolveMediaUrl(p.imageUrl),
+              thumbnailUrl: resolveMediaUrl(p.thumbnailUrl || p.imageUrl),
+            })),
+          );
         }
         if (res.data?.checkInPins) {
           setCheckInPins(res.data.checkInPins);
@@ -1493,12 +1499,17 @@ export function FootprintMapPage() {
 
   // ── Photo Mutations (Upload / Edit / Delete) ───────────────────────────────
   const handlePhotosUploaded = (created: FootprintPhotoItem[]) => {
+    const normalized = created.map((p) => ({
+      ...p,
+      imageUrl: resolveMediaUrl(p.imageUrl),
+      thumbnailUrl: resolveMediaUrl(p.thumbnailUrl || p.imageUrl),
+    }));
     setUserPhotos((prev) => {
       const existingIds = new Set(prev.map((p) => p.id));
-      const fresh = created.filter((c) => !existingIds.has(c.id));
+      const fresh = normalized.filter((c) => !existingIds.has(c.id));
       return [...fresh, ...prev];
     });
-    const first = created[0];
+    const first = normalized[0];
     if (first) {
       setFollowUserLocation(false);
       setDockMode('map');
@@ -1517,7 +1528,11 @@ export function FootprintMapPage() {
         patch,
       );
       if (res.data?.photo) {
-        const updated = res.data.photo;
+        const updated: FootprintPhotoItem = {
+          ...res.data.photo,
+          imageUrl: resolveMediaUrl(res.data.photo.imageUrl),
+          thumbnailUrl: resolveMediaUrl(res.data.photo.thumbnailUrl || res.data.photo.imageUrl),
+        };
         setUserPhotos((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
         setLightboxState((prev) =>
           prev ? { ...prev, photos: prev.photos.map((p) => (p.id === updated.id ? updated : p)) } : null,
