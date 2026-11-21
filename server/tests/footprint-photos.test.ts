@@ -40,12 +40,19 @@ describe('Footprint Photo Memories & Shared Mobile App Sync API', () => {
 
     expect(uploadRes.status).toBe(201);
     expect(uploadRes.body.success).toBe(true);
-    expect(uploadRes.body.photo.imageUrl).toMatch(/^\/uploads\/footprints\/fp-.*\.png$/);
+    expect(uploadRes.body.photo.imageUrl).toMatch(/^\/api\/v1\/footprints\/media\/[a-f0-9]{32}\.png$/);
     expect(uploadRes.body.photo.takenAt).toBe(takenAt);
     expect(uploadRes.body.photo.placeName).toBe(dest.name);
     expect(uploadRes.body.photo.destinationId).toBe(String(dest._id));
     expect(uploadRes.body.photo.deviceModel).toBe('Apple iPhone 16 Pro');
     expect(uploadRes.body.autoCheckIn?.slug).toBe('lang-hoa-sa-dec');
+
+    // Verify persisted MongoDB binary media endpoint returns exact image bytes cross-origin
+    const mediaRes = await request(app).get(uploadRes.body.photo.imageUrl);
+    expect(mediaRes.status).toBe(200);
+    expect(mediaRes.headers['content-type']).toContain('image/png');
+    expect(mediaRes.headers['cross-origin-resource-policy']).toBe('cross-origin');
+    expect(Buffer.compare(mediaRes.body as Buffer, TINY_VALID_PNG)).toBe(0);
 
     // Also surfaced inside GET /api/v1/footprints combined payload
     const fpRes = await client.get('/api/v1/footprints');
@@ -53,10 +60,13 @@ describe('Footprint Photo Memories & Shared Mobile App Sync API', () => {
     expect(fpRes.body.photos.length).toBe(1);
     expect(fpRes.body.stats.totalPhotos).toBe(1);
 
-    // Clean up uploaded test file via DELETE endpoint
+    // Deleting photo also deletes persisted MongoDB binary blob
     const delRes = await client.delete(`/api/v1/footprints/photos/${uploadRes.body.photo.id}`);
     expect(delRes.status).toBe(200);
     expect(delRes.body.success).toBe(true);
+
+    const mediaAfterDelete = await request(app).get(uploadRes.body.photo.imageUrl);
+    expect(mediaAfterDelete.status).toBe(404);
   });
 
   it('rejects spoofed non-image binary uploads with 400 INVALID_IMAGE_SIGNATURE', async () => {

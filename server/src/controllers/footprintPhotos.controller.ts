@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { closeSync, existsSync, mkdirSync, openSync, readSync, unlinkSync } from 'node:fs';
+import { existsSync, unlinkSync } from 'node:fs';
 import path from 'node:path';
 import type { NextFunction, Request, Response } from 'express';
 import { isValidObjectId, Types } from 'mongoose';
@@ -7,15 +7,13 @@ import multer from 'multer';
 import { z } from 'zod';
 import { DestinationModel } from '../models/Destination.js';
 import { FootprintPhotoModel } from '../models/FootprintPhoto.js';
+import { FootprintPhotoBlobModel } from '../models/FootprintPhotoBlob.js';
 import { identityFromRequest, ownerFields, ownerFilter } from '../services/identity.js';
 import { checkIn } from '../services/passport.service.js';
 import { haversineMeters, MAX_CHECKIN_METERS } from '../utils/geo.js';
 import { logger } from '../utils/logger.js';
 
-const footprintUploadsDir = path.resolve(process.cwd(), 'uploads', 'footprints');
-if (!existsSync(footprintUploadsDir)) {
-  mkdirSync(footprintUploadsDir, { recursive: true });
-}
+const legacyFootprintUploadsDir = path.resolve(process.cwd(), 'uploads', 'footprints');
 
 const MIME_TO_EXT: Record<string, string> = {
   'image/jpeg': '.jpg',
@@ -28,47 +26,43 @@ const MIME_TO_EXT: Record<string, string> = {
 
 const ALLOWED_MIME_TYPES = new Set(Object.keys(MIME_TO_EXT));
 const MAX_AUTO_PLACE_MATCH_METERS = 500;
+const MEDIA_KEY_REGEX = /^[a-f0-9]{32}\.(?:jpg|png|webp|gif|avif)$/i;
 
-function hasValidImageMagicBytes(filePath: string): boolean {
-  let fd: number | null = null;
-  try {
-    fd = openSync(filePath, 'r');
-    const buf = Buffer.alloc(16);
-    const bytesRead = readSync(fd, buf, 0, 16, 0);
-    if (bytesRead < 8) return false;
-
-    if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return true;
-    if (
-      buf[0] === 0x89 &&
-      buf[1] === 0x50 &&
-      buf[2] === 0x4e &&
-      buf[3] === 0x47 &&
-      buf[4] === 0x0d &&
-      buf[5] === 0x0a &&
-      buf[6] === 0x1a &&
-      buf[7] === 0x0a
-    ) {
-      return true;
-    }
-    const header6 = buf.subarray(0, 6).toString('ascii');
-    if (header6 === 'GIF87a' || header6 === 'GIF89a') return true;
-    if (
-      bytesRead >= 12 &&
-      buf.subarray(0, 4).toString('ascii') === 'RIFF' &&
-      buf.subarray(8, 12).toString('ascii') === 'WEBP'
-    ) {
-      return true;
-    }
-    if (bytesRead >= 12 && buf.subarray(4, 8).toString('ascii') === 'ftyp') {
-      const brand = buf.subarray(8, 12).toString('ascii');
-      if (brand === 'avif' || brand === 'avis' || brand === 'mif1') return true;
-    }
-    return false;
-  } catch {
-    return false;
-  } finally {
-    if (fd !== null) closeSync(fd);
+/** OWASP binary magic-byte verification directly on in-memory upload Buffer. */
+function hasValidImageMagicBytesBuffer(buf: Buffer): boolean {
+  if (!buf || buf.length < 8) return false;
+  // JPEG
+  if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return true;
+  // PNG
+  if (
+    buf[0] === 0x89 &&
+    buf[1] === 0x50 &&
+    buf[2] === 0x4e &&
+    buf[3] === 0x47 &&
+    buf[4] === 0x0d &&
+    buf[5] === 0x0a &&
+    buf[6] === 0x1a &&
+    buf[7] === 0x0a
+  ) {
+    return true;
   }
+  // GIF
+  const header6 = buf.subarray(0, 6).toString('ascii');
+  if (header6 === 'GIF87a' || header6 === 'GIF89a') return true;
+  // WebP
+  if (
+    buf.length >= 12 &&
+    buf.subarray(0, 4).toString('ascii') === 'RIFF' &&
+    buf.subarray(8, 12).toString('ascii') === 'WEBP'
+  ) {
+    return true;
+  }
+  // AVIF
+  if (buf.length >= 12 && buf.subarray(4, 8).toString('ascii') === 'ftyp') {
+    const brand = buf.subarray(8, 12).toString('ascii');
+    if (brand === 'avif' || brand === 'avis' || brand === 'mif1') return true;
+  }
+  return false;
 }
 
 function safeUnlink(filePath: string) {
@@ -79,24 +73,10 @@ function safeUnlink(filePath: string) {
   }
 }
 
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
-    if (!existsSync(footprintUploadsDir)) {
-      mkdirSync(footprintUploadsDir, { recursive: true });
-    }
-    cb(null, footprintUploadsDir);
-  },
-  filename: (_req, file, cb) => {
-    const ext = MIME_TO_EXT[file.mimetype.toLowerCase()] || '.jpg';
-    const randomHex = crypto.randomBytes(8).toString('hex');
-    cb(null, `fp-${Date.now()}-${randomHex}${ext}`);
-  },
-});
-
 const rawPhotoUpload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: {
-    fileSize: 12 * 1024 * 1024, // 12 MB
+    fileSize: 10 * 1024 * 1024, // 10 MB (safely below MongoDB 16 MB BSON limit)
     files: 1,
   },
   fileFilter: (_req, file, cb) => {
@@ -118,7 +98,7 @@ export function optionalPhotoUploadMiddleware(req: Request, res: Response, next:
     if (err) {
       const message =
         err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE'
-          ? 'Ảnh vượt quá giới hạn 12 MB. Vui lòng chọn ảnh nhẹ hơn.'
+          ? 'Ảnh vượt quá giới hạn 10 MB. Vui lòng chọn ảnh nhẹ hơn.'
           : err instanceof Error
             ? err.message
             : 'Không thể tải ảnh lên.';
@@ -154,9 +134,10 @@ function coerceDate(val: unknown): Date {
   }
   if (typeof val === 'string' && val.trim().length > 0) {
     const asNum = Number(val);
-    const d = Number.isFinite(asNum) && val.trim().length >= 10 && /^\d+$/.test(val.trim())
-      ? new Date(asNum)
-      : new Date(val.trim());
+    const d =
+      Number.isFinite(asNum) && val.trim().length >= 10 && /^\d+$/.test(val.trim())
+        ? new Date(asNum)
+        : new Date(val.trim());
     if (!Number.isNaN(d.getTime())) return d;
   }
   return new Date();
@@ -172,8 +153,12 @@ const safeImageUrlSchema = z
   .min(1)
   .max(600)
   .refine(
-    (u) => u.startsWith('/uploads/') || u.startsWith('/images/') || /^https?:\/\//i.test(u),
-    'URL ảnh không hợp lệ (chỉ chấp nhận /uploads/, /images/ hoặc http/https).',
+    (u) =>
+      u.startsWith('/api/v1/footprints/media/') ||
+      u.startsWith('/uploads/') ||
+      u.startsWith('/images/') ||
+      /^https?:\/\//i.test(u),
+    'URL ảnh không hợp lệ.',
   );
 
 const createPhotoSchema = z.object({
@@ -354,6 +339,46 @@ export async function claimAnonymousPhotosIfLoggedIn(req: Request): Promise<void
   }
 }
 
+/**
+ * Serves persisted Footprint Photo binaries directly from MongoDB via `/api/v1/footprints/media/:mediaKey`.
+ * Immutable 1-year browser/CDN cache, cross-origin enabled (works on Vercel, Render, Docker & Mobile Apps).
+ */
+export async function serveFootprintMediaHandler(req: Request, res: Response): Promise<void> {
+  try {
+    const mediaKey = String(req.params.mediaKey || '').trim();
+    if (!MEDIA_KEY_REGEX.test(mediaKey)) {
+      res.status(404).end();
+      return;
+    }
+
+    const blob = await FootprintPhotoBlobModel.findOne({ mediaKey })
+      .select('contentType data size')
+      .lean();
+
+    if (!blob || !blob.data) {
+      res.status(404).end();
+      return;
+    }
+
+    // Handle Mongoose Binary vs Node Buffer cleanly
+    const rawBuffer = Buffer.isBuffer(blob.data)
+      ? blob.data
+      : Buffer.from((blob.data as unknown as { buffer: Uint8Array }).buffer ?? (blob.data as unknown as Uint8Array));
+
+    res.set({
+      'Content-Type': blob.contentType || 'image/jpeg',
+      'Content-Length': String(rawBuffer.length),
+      'Cache-Control': 'public, max-age=31536000, immutable',
+      'Cross-Origin-Resource-Policy': 'cross-origin',
+      'X-Content-Type-Options': 'nosniff',
+    });
+    res.send(rawBuffer);
+  } catch (error) {
+    logger.error({ err: error }, 'Failed to serve footprint photo media');
+    res.status(500).end();
+  }
+}
+
 export async function listFootprintPhotosHandler(req: Request, res: Response): Promise<void> {
   try {
     await claimAnonymousPhotosIfLoggedIn(req);
@@ -435,8 +460,7 @@ export async function createFootprintPhotoHandler(req: Request, res: Response): 
   const uploadedFile = req.file;
 
   try {
-    if (uploadedFile && !hasValidImageMagicBytes(uploadedFile.path)) {
-      safeUnlink(uploadedFile.path);
+    if (uploadedFile && !hasValidImageMagicBytesBuffer(uploadedFile.buffer)) {
       res.status(400).json({
         error: {
           code: 'INVALID_IMAGE_SIGNATURE',
@@ -448,7 +472,6 @@ export async function createFootprintPhotoHandler(req: Request, res: Response): 
 
     const parsed = createPhotoSchema.safeParse(req.body);
     if (!parsed.success) {
-      if (uploadedFile) safeUnlink(uploadedFile.path);
       res.status(400).json({
         error: {
           code: 'VALIDATION_ERROR',
@@ -460,8 +483,7 @@ export async function createFootprintPhotoHandler(req: Request, res: Response): 
     }
 
     const data = parsed.data;
-    const finalImageUrl = uploadedFile ? `/uploads/footprints/${uploadedFile.filename}` : data.imageUrl;
-    if (!finalImageUrl) {
+    if (!uploadedFile && !data.imageUrl) {
       res.status(400).json({
         error: {
           code: 'VALIDATION_ERROR',
@@ -475,14 +497,13 @@ export async function createFootprintPhotoHandler(req: Request, res: Response): 
     const filter = ownerFilter(identity);
     const owner = ownerFields(identity);
 
-    // Idempotent check by clientPhotoId (prevents duplicates on mobile/offline retry)
+    // Idempotent check by clientPhotoId
     if (data.clientPhotoId) {
       const existing = await FootprintPhotoModel.findOne({
         ...filter,
         clientPhotoId: data.clientPhotoId,
       }).lean();
       if (existing) {
-        if (uploadedFile) safeUnlink(uploadedFile.path);
         res.status(200).json({
           success: true,
           deduplicated: true,
@@ -492,7 +513,6 @@ export async function createFootprintPhotoHandler(req: Request, res: Response): 
       }
     }
 
-    // Resolve destination & place name automatically if nearby
     const publishedDestinations = await DestinationModel.find({
       publicationStatus: 'published',
       'coordinates.lat': { $exists: true, $ne: null },
@@ -519,7 +539,6 @@ export async function createFootprintPhotoHandler(req: Request, res: Response): 
     const finalPlaceName = data.placeName || resolvedDest?.name || '';
     const finalArea = data.area || resolvedDest?.area || '';
 
-    // Detect mobile client header automatically if sourceApp not specified explicitly
     const platformHeader = (req.get('x-client-platform') || '').toLowerCase();
     const finalSourceApp =
       req.body?.sourceApp !== undefined
@@ -532,33 +551,64 @@ export async function createFootprintPhotoHandler(req: Request, res: Response): 
               ? 'flutter'
               : 'web';
 
-    const created = await FootprintPhotoModel.create({
-      ...owner,
-      clientPhotoId: data.clientPhotoId || `fp-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`,
-      imageUrl: finalImageUrl,
-      thumbnailUrl: data.thumbnailUrl || finalImageUrl,
-      coordinates: { lat: data.lat, lng: data.lng },
-      location: { type: 'Point', coordinates: [data.lng, data.lat] },
-      accuracyMeters: data.accuracyMeters,
-      altitudeMeters: data.altitudeMeters,
-      headingDegrees: data.headingDegrees,
-      takenAt: data.takenAt,
-      placeName: finalPlaceName,
-      area: finalArea,
-      destinationId: resolvedDest?._id,
-      destinationSlug: resolvedDest?.slug,
-      trackClientId: data.trackClientId,
-      caption: data.caption,
-      moodEmoji: data.moodEmoji,
-      sourceApp: finalSourceApp,
-      deviceModel: data.deviceModel,
-      exifSource: data.exifSource,
-      width: data.width,
-      height: data.height,
-      fileSize: uploadedFile?.size ?? data.fileSize,
-      mimeType: uploadedFile?.mimetype ?? data.mimeType,
-      visibility: data.visibility,
-    });
+    // Persist binary into MongoDB FootprintPhotoBlobModel when multipart file is uploaded
+    let mediaKey: string | null = null;
+    let finalImageUrl = data.imageUrl || '';
+    if (uploadedFile) {
+      const ext = MIME_TO_EXT[uploadedFile.mimetype.toLowerCase()] || '.jpg';
+      mediaKey = `${crypto.randomBytes(16).toString('hex')}${ext}`;
+      finalImageUrl = `/api/v1/footprints/media/${mediaKey}`;
+    }
+
+    const photoObjectId = new Types.ObjectId();
+
+    if (uploadedFile && mediaKey) {
+      await FootprintPhotoBlobModel.create({
+        mediaKey,
+        photoId: photoObjectId,
+        contentType: uploadedFile.mimetype.toLowerCase() === 'image/jpg' ? 'image/jpeg' : uploadedFile.mimetype.toLowerCase(),
+        size: uploadedFile.buffer.length,
+        data: uploadedFile.buffer,
+      });
+    }
+
+    let created;
+    try {
+      created = await FootprintPhotoModel.create({
+        _id: photoObjectId,
+        ...owner,
+        clientPhotoId: data.clientPhotoId || `fp-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`,
+        imageUrl: finalImageUrl,
+        thumbnailUrl: data.thumbnailUrl || finalImageUrl,
+        coordinates: { lat: data.lat, lng: data.lng },
+        location: { type: 'Point', coordinates: [data.lng, data.lat] },
+        accuracyMeters: data.accuracyMeters,
+        altitudeMeters: data.altitudeMeters,
+        headingDegrees: data.headingDegrees,
+        takenAt: data.takenAt,
+        placeName: finalPlaceName,
+        area: finalArea,
+        destinationId: resolvedDest?._id,
+        destinationSlug: resolvedDest?.slug,
+        trackClientId: data.trackClientId,
+        caption: data.caption,
+        moodEmoji: data.moodEmoji,
+        sourceApp: finalSourceApp,
+        deviceModel: data.deviceModel,
+        exifSource: data.exifSource,
+        width: data.width,
+        height: data.height,
+        fileSize: uploadedFile?.size ?? data.fileSize,
+        mimeType: uploadedFile?.mimetype ?? data.mimeType,
+        visibility: data.visibility,
+      });
+    } catch (createErr) {
+      // Roll back orphan blob if metadata insert fails
+      if (mediaKey) {
+        await FootprintPhotoBlobModel.deleteOne({ mediaKey }).catch(() => {});
+      }
+      throw createErr;
+    }
 
     // Optional hands-free GPS check-in when shooting a photo within 1,000m of a destination
     let autoCheckInResult: {
@@ -603,7 +653,6 @@ export async function createFootprintPhotoHandler(req: Request, res: Response): 
       newBadges,
     });
   } catch (error) {
-    if (uploadedFile) safeUnlink(uploadedFile.path);
     logger.error({ err: error }, 'Failed to save footprint photo');
     res.status(500).json({
       error: { code: 'INTERNAL_ERROR', message: 'Không thể lưu ảnh kỷ niệm lúc này.' },
@@ -822,12 +871,15 @@ export async function deleteFootprintPhotoHandler(req: Request, res: Response): 
       return;
     }
 
-    // Safely delete local uploaded file if no other document references it
+    // Delete persisted MongoDB binary blob if present
+    await FootprintPhotoBlobModel.deleteMany({ photoId: doc._id }).catch(() => {});
+
+    // Also clean up any legacy local disk upload if unreferenced
     if (doc.imageUrl?.startsWith('/uploads/footprints/')) {
       const stillReferenced = await FootprintPhotoModel.exists({ imageUrl: doc.imageUrl });
       if (!stillReferenced) {
         const fileName = path.basename(doc.imageUrl);
-        safeUnlink(path.join(footprintUploadsDir, fileName));
+        safeUnlink(path.join(legacyFootprintUploadsDir, fileName));
       }
     }
 

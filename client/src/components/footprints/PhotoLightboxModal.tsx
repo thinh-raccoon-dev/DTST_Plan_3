@@ -45,9 +45,11 @@ export function PhotoLightboxModal({
   const [placeDraft, setPlaceDraft] = useState(photo?.placeName || '');
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [imgFailed, setImgFailed] = useState(false);
 
   useEffect(() => {
     setEditing(false);
+    setImgFailed(false);
     setCaptionDraft(photo?.caption || '');
     setPlaceDraft(photo?.placeName || '');
   }, [photo?.id, photo?.caption, photo?.placeName]);
@@ -199,11 +201,21 @@ export function PhotoLightboxModal({
           </button>
         )}
 
-        <img
-          src={photo.imageUrl}
-          alt={photo.caption || photo.placeName || 'Ảnh kỷ niệm'}
-          className="max-h-full max-w-full rounded-2xl object-contain shadow-2xl ring-1 ring-white/10"
-        />
+        {imgFailed ? (
+          <div className="flex max-w-sm flex-col items-center justify-center rounded-3xl border border-white/15 bg-white/[0.06] px-6 py-10 text-center">
+            <p className="text-sm font-bold text-white">Không tải được tệp ảnh gốc</p>
+            <p className="mt-1.5 text-xs leading-relaxed text-slate-300">
+              Tấm ảnh này có thể được lưu từ phiên bản cũ trước khi chuyển sang kho ảnh bền vững trên Cloud. Bạn có thể bấm biểu tượng thùng rác ở góc trên để dọn đi rồi chụp/tải lại ảnh mới.
+            </p>
+          </div>
+        ) : (
+          <img
+            src={photo.imageUrl}
+            alt={photo.caption || photo.placeName || 'Ảnh kỷ niệm'}
+            onError={() => setImgFailed(true)}
+            className="max-h-full max-w-full rounded-2xl object-contain shadow-2xl ring-1 ring-white/10"
+          />
+        )}
 
         {activeIndex < photos.length - 1 && (
           <button

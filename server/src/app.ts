@@ -6,6 +6,7 @@ import express, { type Express } from 'express';
 import helmet from 'helmet';
 import { pinoHttp } from 'pino-http';
 import { env } from './config/env.js';
+import { serveFootprintMediaHandler } from './controllers/footprintPhotos.controller.js';
 import { anonymousSession } from './middleware/anonymousSession.js';
 import { attachUser } from './middleware/auth.js';
 import { CSRF_HEADER, csrfProtection } from './middleware/csrf.js';
@@ -84,6 +85,9 @@ export function createApp(): Express {
     mkdirSync(uploadsDir, { recursive: true });
   }
   app.use('/uploads', express.static(uploadsDir, { maxAge: '7d' }));
+
+  // Immutable MongoDB-backed Footprint Photo media stream (mounted before apiLimiter so large galleries never hit 429)
+  app.get('/api/v1/footprints/media/:mediaKey', serveFootprintMediaHandler);
 
   app.use('/api/v1', apiLimiter, anonymousSession, csrfProtection, attachUser, enforceMaintenanceMode, buildApiRouter());
   app.use('/api', notFoundHandler);

@@ -13,8 +13,8 @@ Tài liệu này mô tả hợp đồng dữ liệu dùng chung giữa **Web Đ�
 {
   "id": "673f8...",
   "clientPhotoId": "ios-photo-uuid-001",
-  "imageUrl": "/uploads/footprints/fp-1795272306-a1b2c3d4.jpg",
-  "thumbnailUrl": "/uploads/footprints/fp-1795272306-a1b2c3d4.jpg",
+  "imageUrl": "/api/v1/footprints/media/9edffd5da665e624a1b2c3d4e5f60718.jpg",
+  "thumbnailUrl": "/api/v1/footprints/media/9edffd5da665e624a1b2c3d4e5f60718.jpg",
   "coordinates": { "lat": 10.3125, "lng": 105.7468 },
   "accuracyMeters": 8.5,
   "altitudeMeters": 4.2,

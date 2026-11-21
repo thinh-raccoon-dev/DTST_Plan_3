@@ -2,10 +2,10 @@ import axios, { AxiosError, type InternalAxiosRequestConfig } from 'axios';
 
 const baseURL = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api/v1';
 
-/** Resolves `/uploads/...` against cross-origin API host when frontend & backend are deployed on separate domains (e.g. Vercel + Render). */
+/** Resolves `/api/...` and `/uploads/...` media paths against cross-origin API host when frontend & backend sit on separate domains (e.g. Vercel + Render). */
 export function resolveMediaUrl(url: string): string {
   if (!url) return url;
-  if (url.startsWith('/uploads/') && /^https?:\/\//i.test(baseURL)) {
+  if ((url.startsWith('/uploads/') || url.startsWith('/api/')) && /^https?:\/\//i.test(baseURL)) {
     try {
       return `${new URL(baseURL).origin}${url}`;
     } catch {
