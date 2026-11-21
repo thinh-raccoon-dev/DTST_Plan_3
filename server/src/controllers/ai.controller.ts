@@ -47,6 +47,69 @@ const domControlSchema = z
     value: ctrl.value,
   }));
 
+const draftItineraryStopSchema = z
+  .object({
+    stopId: z.string().max(100).optional(),
+    placeId: z.string().max(120).optional(),
+    name: z.string().max(250),
+    type: z.string().max(40).optional(),
+    start: z.string().max(30).optional(),
+    end: z.string().max(30).optional(),
+    lat: z.number().min(-90).max(90).optional(),
+    lng: z.number().min(-180).max(180).optional(),
+  })
+  .passthrough();
+
+const draftItineraryDaySchema = z
+  .object({
+    day: z.number().int().min(1).max(14),
+    date: z.string().max(40).optional(),
+    stops: z.array(draftItineraryStopSchema).max(30),
+  })
+  .passthrough();
+
+const pendingSwapCandidateSchema = z
+  .object({
+    id: z.string().max(100).optional(),
+    slug: z.string().max(160),
+    name: z.string().max(250),
+    area: z.string().max(120).optional(),
+    category: z.string().max(80).optional(),
+    summary: z.string().max(600).optional(),
+    coordinates: z
+      .object({
+        lat: z.number().min(-90).max(90),
+        lng: z.number().min(-180).max(180),
+      })
+      .optional(),
+  })
+  .passthrough();
+
+const pendingSwapSchema = z
+  .object({
+    dayNumber: z.number().int().min(1).max(14),
+    targetStopId: z.string().max(100).optional(),
+    targetStopName: z.string().max(250),
+    candidates: z.array(pendingSwapCandidateSchema).max(12).optional(),
+  })
+  .passthrough();
+
+const lastDiscussedDestinationSchema = z
+  .object({
+    id: z.string().max(100).optional(),
+    slug: z.string().max(160),
+    name: z.string().max(250),
+    area: z.string().max(120).optional(),
+    category: z.string().max(80).optional(),
+    coordinates: z
+      .object({
+        lat: z.number().min(-90).max(90),
+        lng: z.number().min(-180).max(180),
+      })
+      .optional(),
+  })
+  .passthrough();
+
 const pageContextSchema = z
   .object({
     currentPath: z.string().max(500).optional(),
@@ -62,6 +125,17 @@ const pageContextSchema = z
       .optional(),
     hasDraftItinerary: z.boolean().optional(),
     draftTitle: z.string().max(300).optional(),
+    draftItinerary: z
+      .object({
+        title: z.string().max(300).optional(),
+        totalDays: z.number().int().min(0).max(14).optional(),
+        days: z.array(draftItineraryDaySchema).max(14),
+      })
+      .passthrough()
+      .nullable()
+      .optional(),
+    pendingSwap: pendingSwapSchema.nullable().optional(),
+    lastDiscussedDestination: lastDiscussedDestinationSchema.nullable().optional(),
     controls: z.array(domControlSchema).max(80).optional(),
   })
   .passthrough()
@@ -76,6 +150,7 @@ const copilotChatSchema = z.object({
         content: z.string().max(4000),
       }),
     )
+    .max(16)
     .optional()
     .default([]),
   pageContext: pageContextSchema,
