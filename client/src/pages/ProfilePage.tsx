@@ -30,8 +30,8 @@ const schema = z
   })
   .superRefine((value, ctx) => {
     if (value.newPassword) {
-      if (value.newPassword.length < 6) {
-        ctx.addIssue({ code: 'custom', path: ['newPassword'], message: 'Mật khẩu mới cần ít nhất 6 ký tự' });
+      if (value.newPassword.length < 8) {
+        ctx.addIssue({ code: 'custom', path: ['newPassword'], message: 'Mật khẩu mới cần ít nhất 8 ký tự' });
       }
       if (!value.currentPassword) {
         ctx.addIssue({ code: 'custom', path: ['currentPassword'], message: 'Nhập mật khẩu hiện tại để đổi mật khẩu' });

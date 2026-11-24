@@ -54,11 +54,32 @@ const STATIC_PETALS: Decor[] = [
   },
 ];
 
-const DRIFTING_PETALS: Array<{ src: string; left: string; size: string; dur: string; delay: string }> = [
-  { src: '/images/lotus_leaf_2.png', left: '12%', size: 'w-7 sm:w-9', dur: '19s', delay: '0s' },
-  { src: '/images/lotus_leaf_6.png', left: '34%', size: 'w-6 sm:w-8', dur: '24s', delay: '-6s' },
-  { src: '/images/lotus_leaf_1.png', left: '62%', size: 'w-7 sm:w-9', dur: '21s', delay: '-11s' },
-  { src: '/images/lotus_leaf_2.png', left: '84%', size: 'w-6 sm:w-8', dur: '26s', delay: '-16s' },
+interface DriftingPetal {
+  src: string;
+  left: string;
+  size: string;
+  dur: string;
+  delay: string;
+  sway: string;
+  rot: string;
+  opacity: number;
+  reverse?: boolean;
+  blur?: string;
+  desktopOnly?: boolean;
+}
+
+const DRIFTING_PETALS: DriftingPetal[] = [
+  { src: '/images/lotus_leaf_2.png', left: '4%', size: 'w-7 sm:w-9', dur: '17s', delay: '-1s', sway: '14vw', rot: '235deg', opacity: 0.56 },
+  { src: '/images/lotus_leaf_5.png', left: '13%', size: 'w-5 sm:w-7', dur: '22s', delay: '-9s', sway: '-10vw', rot: '-210deg', opacity: 0.44, reverse: true, blur: 'blur-[0.5px]' },
+  { src: '/images/lotus_leaf_1.png', left: '22%', size: 'w-8 sm:w-10', dur: '15.5s', delay: '-4.5s', sway: '16vw', rot: '265deg', opacity: 0.58 },
+  { src: '/images/lotus_leaf_6.png', left: '31%', size: 'w-6 sm:w-8', dur: '21s', delay: '-13s', sway: '11vw', rot: '220deg', opacity: 0.48, desktopOnly: true },
+  { src: '/images/lotus_leaf_3.png', left: '40%', size: 'w-6 sm:w-8', dur: '19s', delay: '-7.5s', sway: '-13vw', rot: '-245deg', opacity: 0.5, reverse: true },
+  { src: '/images/lotus_leaf_4.png', left: '49%', size: 'w-7 sm:w-9', dur: '24s', delay: '-18s', sway: '12vw', rot: '215deg', opacity: 0.42, blur: 'blur-[0.6px]', desktopOnly: true },
+  { src: '/images/lotus_leaf_2.png', left: '58%', size: 'w-6 sm:w-8', dur: '16.5s', delay: '-2.5s', sway: '15vw', rot: '260deg', opacity: 0.55 },
+  { src: '/images/lotus_leaf_7.png', left: '67%', size: 'w-8 sm:w-10', dur: '20.5s', delay: '-11.5s', sway: '-14vw', rot: '-230deg', opacity: 0.5, reverse: true },
+  { src: '/images/lotus_leaf_1.png', left: '76%', size: 'w-5 sm:w-7', dur: '23s', delay: '-16s', sway: '10vw', rot: '205deg', opacity: 0.45, blur: 'blur-[0.4px]', desktopOnly: true },
+  { src: '/images/lotus_leaf_6.png', left: '85%', size: 'w-7 sm:w-9', dur: '18s', delay: '-6s', sway: '-12vw', rot: '-250deg', opacity: 0.54, reverse: true },
+  { src: '/images/lotus_leaf_3.png', left: '93%', size: 'w-6 sm:w-8', dur: '19.5s', delay: '-14.5s', sway: '-16vw', rot: '-220deg', opacity: 0.48, reverse: true, desktopOnly: true },
 ];
 
 function DecorImage({ src, className, style }: Decor) {
@@ -102,9 +123,12 @@ export function PetalBackdrop() {
                 top: 0,
                 '--petal-dur': p.dur,
                 '--petal-delay': p.delay,
+                '--petal-sway': p.sway,
+                '--petal-rot': p.rot,
+                '--petal-opacity': p.opacity,
               } as CSSProperties
             }
-            className={`dtst-petal-drift absolute h-auto select-none blur-[0.3px] ${p.size}`}
+            className={`${p.reverse ? 'dtst-petal-drift-reverse' : 'dtst-petal-drift'} absolute h-auto select-none ${p.blur ?? 'blur-[0.25px]'} ${p.desktopOnly ? 'hidden sm:block' : ''} ${p.size}`}
           />
         ))}
 

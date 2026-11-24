@@ -4,7 +4,7 @@ import { USER_ROLES } from '../models/User.js';
 export const createAdminUserSchema = z.object({
   email: z.string().trim().email('Email không đúng định dạng.').max(254),
   displayName: z.string().trim().min(2, 'Tên hiển thị tối thiểu 2 ký tự.').max(80),
-  password: z.string().min(6, 'Mật khẩu tối thiểu 6 ký tự.').max(100),
+  password: z.string().min(8, 'Mật khẩu tối thiểu 8 ký tự.').max(100),
   role: z.enum(USER_ROLES),
 });
 
@@ -17,5 +17,5 @@ export const updateUserStatusSchema = z.object({
 });
 
 export const resetUserPasswordSchema = z.object({
-  password: z.string().min(6, 'Mật khẩu tối thiểu 6 ký tự.').max(100),
+  password: z.string().min(8, 'Mật khẩu tối thiểu 8 ký tự.').max(100),
 });

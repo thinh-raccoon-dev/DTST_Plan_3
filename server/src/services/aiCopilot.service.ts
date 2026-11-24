@@ -2588,21 +2588,20 @@ function handleSmartIntent(
             contextType: 'register',
           },
         },
-        suggestions: ['Mật khẩu là 123456', 'Mở trang đăng nhập'],
+        suggestions: ['Mật khẩu là DongThap123', 'Mở trang đăng nhập'],
       };
     }
 
     const derivedName = displayName || email!.split('@')[0] || 'Du khách Đồng Tháp';
     const safeDisplayName = derivedName.length >= 2 ? derivedName : `${derivedName} DT`;
-    const runId = Date.now();
-    const targetPath = `/register?email=${encodeURIComponent(email!)}&password=${encodeURIComponent(password!)}&displayName=${encodeURIComponent(safeDisplayName)}&autoSubmit=true&run=${runId}`;
+    const targetPath = '/register';
 
     return {
       reply:
         `Dạ rõ! 🦊 **Pé Meko** đang mở ngay trang Đăng ký, tự động điền thông tin tài khoản và khởi tạo cho bạn:\n\n` +
         `• 👤 **Tên hiển thị**: \`${safeDisplayName}\`\n` +
         `• 📧 **Email**: \`${email}\`\n` +
-        `• 🔑 **Mật khẩu**: \`${password}\`\n\n` +
+        `• 🔑 **Mật khẩu**: \`••••••••\`\n\n` +
         `🚀 *Pé Meko đang tự động nhấn nút Đăng ký & Đăng nhập vào hệ thống cho bạn ngay trên màn hình!*`,
       action: {
         type: 'REGISTER_ACCOUNT',
@@ -2627,14 +2626,13 @@ function handleSmartIntent(
   if (isLoginTrigger) {
     const { email, password } = extractAuthSlots(message);
     if (email && password) {
-      const runId = Date.now();
       return {
         reply:
           `Dạ **Pé Meko** đang mở trang Đăng nhập, điền sẵn email \`${email}\` & mật khẩu và tự động đăng nhập cho bạn ngay đây ạ! 🦊✨`,
         action: {
           type: 'LOGIN_ACCOUNT',
           payload: {
-            path: `/login?email=${encodeURIComponent(email)}&password=${encodeURIComponent(password)}&autoSubmit=true&run=${runId}`,
+            path: '/login',
             label: `Đăng nhập ${email}`,
             email,
             password,
@@ -4611,11 +4609,10 @@ ${catalogPrompt}
         const email = String(args.email || '').trim();
         const password = String(args.password || '').trim();
         const displayName = String(args.displayName || email.split('@')[0] || 'Du khách').trim();
-        const runId = Date.now();
         action = {
           type: 'REGISTER_ACCOUNT',
           payload: {
-            path: `/register?email=${encodeURIComponent(email)}&password=${encodeURIComponent(password)}&displayName=${encodeURIComponent(displayName)}&autoSubmit=true&run=${runId}`,
+            path: '/register',
             label: `Tạo tài khoản ${email}`,
             email,
             password,
@@ -4629,11 +4626,10 @@ ${catalogPrompt}
         const email = args.email ? String(args.email).trim() : undefined;
         const password = args.password ? String(args.password).trim() : undefined;
         if (email && password) {
-          const runId = Date.now();
           action = {
             type: 'LOGIN_ACCOUNT',
             payload: {
-              path: `/login?email=${encodeURIComponent(email)}&password=${encodeURIComponent(password)}&autoSubmit=true&run=${runId}`,
+              path: '/login',
               label: `Đăng nhập ${email}`,
               email,
               password,

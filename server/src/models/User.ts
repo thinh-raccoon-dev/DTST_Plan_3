@@ -1,5 +1,5 @@
 import { Schema, model, type InferSchemaType, type HydratedDocument } from 'mongoose';
-import { AREAS, INTERESTS } from '../config/catalog.js';
+import { INTERESTS } from '../config/catalog.js';
 
 export const USER_ROLES = ['tourist', 'admin', 'partner'] as const;
 export type UserRole = (typeof USER_ROLES)[number];
@@ -28,6 +28,8 @@ const userSchema = new Schema(
     displayName: { type: String, required: true, trim: true, maxlength: 80 },
     role: { type: String, enum: USER_ROLES, default: 'tourist', required: true },
     status: { type: String, enum: ['active', 'disabled'], default: 'active', required: true },
+    emailVerified: { type: Boolean, default: false },
+    emailVerifiedAt: { type: Date },
     // Incremented on password reset, role change, or account disable to revoke all existing JWTs immediately.
     tokenVersion: { type: Number, default: 0, required: true },
     preferences: {

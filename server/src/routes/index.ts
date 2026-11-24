@@ -31,7 +31,16 @@ import * as safety from '../controllers/safety.controller.js';
 import { requireAdmin, requireAuth, requireStaff } from '../middleware/auth.js';
 import { issueCsrfToken } from '../middleware/csrf.js';
 import { requireAiPlannerEnabled } from '../middleware/maintenance.js';
-import { challengeLimiter, eventLimiter, loginLimiter, registerLimiter } from '../middleware/rateLimit.js';
+import {
+  aiLimiter,
+  challengeLimiter,
+  eventLimiter,
+  loginLimiter,
+  otpRequestLimiter,
+  otpVerifyLimiter,
+  photoUploadLimiter,
+  registerLimiter,
+} from '../middleware/rateLimit.js';
 import { isDatabaseReady } from '../config/db.js';
 
 export function buildApiRouter(): Router {
@@ -47,6 +56,8 @@ export function buildApiRouter(): Router {
   });
 
   // Authentication
+  api.post('/auth/register/request-otp', otpRequestLimiter, auth.requestRegisterOtp);
+  api.post('/auth/register/verify-otp', otpVerifyLimiter, auth.verifyRegisterOtp);
   api.post('/auth/register', registerLimiter, auth.register);
   api.post('/auth/login', loginLimiter, auth.login);
   api.post('/auth/logout', auth.logout);
@@ -54,10 +65,10 @@ export function buildApiRouter(): Router {
   api.patch('/auth/profile', requireAuth, auth.updateProfile);
 
   // AI Copilot, Voice Assistant & Visual Scene Search
-  api.post('/ai/copilot', eventLimiter, requireAiPlannerEnabled, aiController.handleCopilotChat);
+  api.post('/ai/copilot', aiLimiter, requireAiPlannerEnabled, aiController.handleCopilotChat);
   api.post(
     '/ai/visual-search',
-    eventLimiter,
+    aiLimiter,
     aiController.visualUploadMiddleware.single('image'),
     aiController.handleVisualSearch,
   );
@@ -121,11 +132,11 @@ export function buildApiRouter(): Router {
   api.get('/footprints/photos', footprintPhotos.listFootprintPhotosHandler);
   api.post(
     '/footprints/photos',
-    eventLimiter,
+    photoUploadLimiter,
     footprintPhotos.optionalPhotoUploadMiddleware,
     footprintPhotos.createFootprintPhotoHandler,
   );
-  api.post('/footprints/photos/sync', eventLimiter, footprintPhotos.syncFootprintPhotosHandler);
+  api.post('/footprints/photos/sync', photoUploadLimiter, footprintPhotos.syncFootprintPhotosHandler);
   api.patch('/footprints/photos/:id', eventLimiter, footprintPhotos.updateFootprintPhotoHandler);
   api.delete('/footprints/photos/:id', footprintPhotos.deleteFootprintPhotoHandler);
   api.delete('/footprints/:clientId', footprints.deleteFootprintHandler);
@@ -184,8 +195,8 @@ export function buildApiRouter(): Router {
   admin.delete('/partner/alerts/:id', adminPartner.deactivatePartnerAlert);
   admin.get('/partner/export', adminPartner.exportPartnerReportCsv);
   admin.get('/partner/audit-logs', adminPartner.listPartnerAuditLogs);
-  admin.post('/partner/ai/generate-challenge', eventLimiter, adminPartner.generatePartnerChallengeDraft);
-  admin.post('/partner/ai/suggest-review-reply', eventLimiter, adminPartner.suggestPartnerReviewReply);
+  admin.post('/partner/ai/generate-challenge', aiLimiter, adminPartner.generatePartnerChallengeDraft);
+  admin.post('/partner/ai/suggest-review-reply', aiLimiter, adminPartner.suggestPartnerReviewReply);
 
   // Partner Hub Đợt 2: Vouchers & Counter Redemption, Service Catalog, Group Inquiries, Promo Banner Submissions
   admin.get('/partner/vouchers/lookup', adminPartnerCommerce.lookupPartnerVoucherClaim);

@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import {
-  AREAS,
   CATEGORIES,
   OPERATIONAL_STATUSES,
   PUBLICATION_STATUSES,

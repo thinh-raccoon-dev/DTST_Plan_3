@@ -1,6 +1,5 @@
 import { Schema, model, type InferSchemaType, type HydratedDocument } from 'mongoose';
 import {
-  AREAS,
   CATEGORIES,
   OPERATIONAL_STATUSES,
   PUBLICATION_STATUSES,

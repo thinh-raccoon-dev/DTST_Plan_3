@@ -13,6 +13,38 @@ const ALLOWED_VISUAL_MIMES = new Set([
   'image/gif',
 ]);
 
+/** OWASP binary magic-byte inspection for uploaded visual search buffers. */
+function hasValidVisualImageMagicBytes(buf: Buffer): boolean {
+  if (!buf || buf.length < 8) return false;
+  // JPEG
+  if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return true;
+  // PNG
+  if (
+    buf[0] === 0x89 &&
+    buf[1] === 0x50 &&
+    buf[2] === 0x4e &&
+    buf[3] === 0x47 &&
+    buf[4] === 0x0d &&
+    buf[5] === 0x0a &&
+    buf[6] === 0x1a &&
+    buf[7] === 0x0a
+  ) {
+    return true;
+  }
+  // GIF
+  const header6 = buf.subarray(0, 6).toString('ascii');
+  if (header6 === 'GIF87a' || header6 === 'GIF89a') return true;
+  // WebP
+  if (
+    buf.length >= 12 &&
+    buf.subarray(0, 4).toString('ascii') === 'RIFF' &&
+    buf.subarray(8, 12).toString('ascii') === 'WEBP'
+  ) {
+    return true;
+  }
+  return false;
+}
+
 export const visualUploadMiddleware = multer({
   storage: multer.memoryStorage(),
   limits: {
@@ -188,6 +220,16 @@ export async function handleVisualSearch(req: Request, res: Response): Promise<v
       error: {
         code: 'VALIDATION_ERROR',
         message: 'Vui lòng chọn hoặc chụp một bức ảnh để Pé Meko phân tích tìm điểm tương đồng.',
+      },
+    });
+    return;
+  }
+
+  if (!hasValidVisualImageMagicBytes(req.file.buffer)) {
+    res.status(400).json({
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: 'Nội dung tệp không phải ảnh hợp lệ (JPG, PNG, WebP hoặc GIF).',
       },
     });
     return;

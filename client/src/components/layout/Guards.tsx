@@ -24,7 +24,7 @@ function StaffGate({ children, allowPartner }: { children: ReactNode; allowPartn
       </div>
     );
   }
-  if (!user) return <Navigate to="/admin/login" replace state={{ from: location.pathname }} />;
+  if (!user) return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;
   const allowed = user.role === 'admin' || (allowPartner && user.role === 'partner');
   if (!allowed) {
     return (

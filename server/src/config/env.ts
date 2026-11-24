@@ -16,12 +16,23 @@ const envSchema = z.object({
   PUBLIC_APP_URL: z.string().url().default('http://localhost:5173'),
   COOKIE_SAMESITE: z.enum(['lax', 'strict', 'none']).default('lax'),
   COOKIE_SECURE: booleanString.optional(),
-  TRUST_PROXY: z.coerce.number().int().min(0).default(0),
+  TRUST_PROXY: z.coerce.number().int().min(0).max(10).optional(),
   RATE_LIMIT_ENABLED: booleanString.default('true'),
   SERVE_CLIENT_DIR: z.string().optional(),
   TRIP_PLANNER_API_URL: z.string().url().default('http://127.0.0.1:8010'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).optional(),
   GEMINI_API_KEY: z.string().optional(),
+  // Email / OTP delivery (supports Brevo API, Resend API, or standard SMTP for @dongthapgo.com)
+  MAIL_FROM: z.string().trim().min(3).default('Đồng Tháp Smart Travel <support@dongthapgo.com>'),
+  MAIL_REPLY_TO: z.string().trim().email().default('support@dongthapgo.com'),
+  BREVO_API_KEY: z.string().trim().optional(),
+  RESEND_API_KEY: z.string().trim().optional(),
+  SMTP_HOST: z.string().trim().optional(),
+  SMTP_PORT: z.coerce.number().int().positive().default(587),
+  SMTP_SECURE: booleanString.optional(),
+  SMTP_USER: z.string().trim().optional(),
+  SMTP_PASS: z.string().optional(),
+  EMAIL_OTP_REQUIRED: booleanString.optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -39,6 +50,7 @@ const isTest = raw.NODE_ENV === 'test';
 
 export const env = {
   ...raw,
+  TRUST_PROXY: raw.TRUST_PROXY ?? (isProduction ? 1 : 0),
   isProduction,
   isTest,
   mongoUri: isTest ? raw.MONGODB_URI_TEST : raw.MONGODB_URI,
@@ -50,6 +62,13 @@ export const env = {
   publicAppUrl: raw.PUBLIC_APP_URL.replace(/\/+$/, ''),
   tripPlannerApiUrl: raw.TRIP_PLANNER_API_URL.replace(/\/+$/, ''),
   logLevel: raw.LOG_LEVEL ?? (isTest ? 'silent' : isProduction ? 'info' : 'debug'),
+  hasRealMailTransport: Boolean(
+    raw.BREVO_API_KEY || raw.RESEND_API_KEY || (raw.SMTP_HOST && raw.SMTP_USER && raw.SMTP_PASS),
+  ),
+  smtpSecure: raw.SMTP_SECURE ?? raw.SMTP_PORT === 465,
+  requireEmailOtp:
+    raw.EMAIL_OTP_REQUIRED ??
+    (!isTest && (isProduction || Boolean(raw.BREVO_API_KEY || raw.RESEND_API_KEY || raw.SMTP_HOST))),
 };
 
 if (env.COOKIE_SAMESITE === 'none' && !env.cookieSecure) {

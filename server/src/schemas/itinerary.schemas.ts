@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { AREAS, INTERESTS } from '../config/catalog.js';
+import { INTERESTS } from '../config/catalog.js';
 import { objectIdSchema } from './common.js';
 
 export const preferencesSchema = z

@@ -156,7 +156,7 @@ function SideNav({ onNavigate, pendingTotal }: { onNavigate?: () => void; pendin
           onClick={async () => {
             await logout();
             toast.success('Đã đăng xuất');
-            navigate('/admin/login');
+            navigate('/login', { replace: true });
           }}
           className="flex min-h-10 w-full items-center gap-2 rounded-control px-3 text-river-700 hover:bg-sand-100"
         >

@@ -6,7 +6,7 @@ import { logAuditEvent } from '../../services/audit.service.js';
 import { idParamsSchema } from '../../schemas/common.js';
 import { createBadgeSchema, updateBadgeSchema } from '../../schemas/badge.schemas.js';
 import { ensureDefaultBadges } from '../../services/passport.service.js';
-import { badRequest, conflict, notFound } from '../../utils/errors.js';
+import { conflict, notFound } from '../../utils/errors.js';
 
 export async function listBadges(_req: Request, res: Response) {
   await ensureDefaultBadges();

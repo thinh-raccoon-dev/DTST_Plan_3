@@ -59,7 +59,6 @@ function Footer() {
           <ul className="mt-3 space-y-2 text-sm text-river-600">
             <li><Link className={footerLinkClass} to="/privacy">Chính sách quyền riêng tư</Link></li>
             <li><Link className={footerLinkClass} to="/terms">Điều khoản sử dụng</Link></li>
-            <li><Link className={footerLinkClass} to="/admin/login">Dành cho quản trị viên</Link></li>
           </ul>
         </div>
 

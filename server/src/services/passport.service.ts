@@ -1,8 +1,8 @@
 import { Types } from 'mongoose';
-import { BADGES as DEFAULT_STATIC_BADGES, type BadgeDefinition, type PassportStats } from '../config/badges.js';
+import { BADGES as DEFAULT_STATIC_BADGES, type PassportStats } from '../config/badges.js';
 import { CHECKIN_POINTS } from '../config/catalog.js';
 import { AnalyticsEventModel } from '../models/AnalyticsEvent.js';
-import { BadgeModel, type Badge } from '../models/Badge.js';
+import { BadgeModel } from '../models/Badge.js';
 import { ChallengeModel } from '../models/Challenge.js';
 import { DestinationModel } from '../models/Destination.js';
 import { ItineraryModel } from '../models/Itinerary.js';
