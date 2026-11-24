@@ -15,6 +15,22 @@ MockClient createDtstMockClient() {
       );
     }
 
+    // Footprints background track sync
+    if (path.endsWith('/footprints/sync') && request.method == 'POST') {
+      return http.Response(
+        jsonEncode({
+          'success': true,
+          'syncedCount': 1,
+          'autoCheckIns': [
+            {'name': 'Khu di tích Nguyễn Sinh Sắc', 'pointsAwarded': 20}
+          ],
+          'newBadges': [],
+        }),
+        200,
+        headers: {'content-type': 'application/json'},
+      );
+    }
+
     // Auth status
     if (path.endsWith('/auth/me')) {
       return http.Response(

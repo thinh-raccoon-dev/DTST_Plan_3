@@ -201,4 +201,62 @@ describe('Footprint Photo Memories & Shared Mobile App Sync API', () => {
     });
     expect(guestPost.status).toBe(201);
   });
+
+  it('starts brand-new users with 0 footprints/photos and never stamps autoCheckIn for demo routes', async () => {
+    await createDestination({
+      name: 'Làng hoa Sa Đéc',
+      slug: 'lang-hoa-sa-dec-demo-guard',
+      area: 'sa-dec',
+      category: 'local_experience',
+      coordinates: { lat: 10.3125, lng: 105.7468 },
+    });
+
+    const { client } = await loggedInClient('tourist');
+
+    // 1. Brand-new user has 0 tracks, 0 photos, 0 check-in pins
+    const initial = await client.get('/api/v1/footprints');
+    expect(initial.status).toBe(200);
+    expect(initial.body.tracks).toHaveLength(0);
+    expect(initial.body.photos).toHaveLength(0);
+    expect(initial.body.checkInPins).toHaveLength(0);
+
+    // 2. Syncing a demo route with points right on top of Làng hoa Sa Đéc must NOT trigger autoCheckIn
+    const demoSync = await client.post('/api/v1/footprints/sync', {
+      autoCheckIn: true,
+      tracks: [
+        {
+          clientId: 'demo-sa-dec-1',
+          title: '[Demo] Hành trình Di sản & Hoa Sa Đéc',
+          isDemoRoute: true,
+          startedAt: Date.now() - 60000,
+          endedAt: Date.now(),
+          points: [
+            { lat: 10.3125, lng: 105.7468, timestamp: Date.now() - 30000 },
+            { lat: 10.3126, lng: 105.7469, timestamp: Date.now() },
+          ],
+          memories: [],
+        },
+        // Duplicate clientId in same batch must be deduplicated cleanly
+        {
+          clientId: 'demo-sa-dec-1',
+          title: '[Demo] Hành trình Di sản & Hoa Sa Đéc',
+          isDemoRoute: true,
+          startedAt: Date.now() - 60000,
+          endedAt: Date.now(),
+          points: [
+            { lat: 10.3125, lng: 105.7468, timestamp: Date.now() - 30000 },
+          ],
+          memories: [],
+        },
+      ],
+    });
+    expect(demoSync.status).toBe(200);
+    expect(demoSync.body.syncedCount).toBe(1);
+    expect(demoSync.body.autoCheckIns).toHaveLength(0);
+
+    const afterDemo = await client.get('/api/v1/footprints');
+    expect(afterDemo.status).toBe(200);
+    expect(afterDemo.body.checkInPins).toHaveLength(0);
+    expect(afterDemo.body.tracks).toHaveLength(1);
+  });
 });

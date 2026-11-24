@@ -19,7 +19,8 @@ import { AUTH_COOKIE, baseCookieOptions } from '../utils/cookies.js';
 import { AppError, conflict, unauthorized } from '../utils/errors.js';
 
 const BCRYPT_ROUNDS = 12;
-const SESSION_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 7;
+const SESSION_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 30; // 30 days persistent mobile/PWA session
+const SLIDING_RENEW_AFTER_SEC = 60 * 60 * 24; // Refresh token whenever older than 24h
 const OTP_TTL_MINUTES = 5;
 const OTP_TTL_MS = OTP_TTL_MINUTES * 60 * 1000;
 const OTP_RESEND_COOLDOWN_MS = 60 * 1000;
@@ -28,9 +29,16 @@ const OTP_MAX_ATTEMPTS = 5;
 // Compared against when the email does not exist, so response time does not reveal accounts.
 const DUMMY_HASH = bcrypt.hashSync('dtst-timing-equalizer', BCRYPT_ROUNDS);
 
-function setSessionCookie(res: Response, userId: string, tokenVersion = 0): void {
+function shouldIncludeBearerToken(req: Request): boolean {
+  const platform = req.get('x-client-platform')?.toLowerCase();
+  const persistence = req.get('x-auth-persistence')?.toLowerCase();
+  return platform === 'mobile' || persistence === 'token';
+}
+
+function setSessionCookie(res: Response, userId: string, tokenVersion = 0): string {
   const token = signAccessToken(userId, tokenVersion);
   res.cookie(AUTH_COOKIE, token, { ...baseCookieOptions(), maxAge: SESSION_MAX_AGE_MS });
+  return token;
 }
 
 function hashRegisterOtp(email: string, otp: string): string {
@@ -248,8 +256,11 @@ export async function verifyRegisterOtp(req: Request, res: Response) {
     emailVerified: true,
     emailVerifiedAt: new Date(),
   });
-  setSessionCookie(res, String(user._id), user.tokenVersion ?? 0);
-  res.status(201).json({ user: toAuthUser(user) });
+  const token = setSessionCookie(res, String(user._id), user.tokenVersion ?? 0);
+  res.status(201).json({
+    user: toAuthUser(user),
+    ...(shouldIncludeBearerToken(req) ? { token } : {}),
+  });
 }
 
 export async function register(req: Request, res: Response) {
@@ -279,8 +290,11 @@ export async function register(req: Request, res: Response) {
     emailVerified,
     ...(emailVerified ? { emailVerifiedAt: new Date() } : {}),
   });
-  setSessionCookie(res, String(user._id), user.tokenVersion ?? 0);
-  res.status(201).json({ user: toAuthUser(user) });
+  const token = setSessionCookie(res, String(user._id), user.tokenVersion ?? 0);
+  res.status(201).json({
+    user: toAuthUser(user),
+    ...(shouldIncludeBearerToken(req) ? { token } : {}),
+  });
 }
 
 export async function login(req: Request, res: Response) {
@@ -290,8 +304,11 @@ export async function login(req: Request, res: Response) {
   if (!user || !passwordOk) throw new AppError(401, 'INVALID_CREDENTIALS', 'Email hoặc mật khẩu không đúng.');
   if (user.status !== 'active') throw new AppError(403, 'ACCOUNT_DISABLED', 'Tài khoản đã bị vô hiệu hóa.');
 
-  setSessionCookie(res, String(user._id), user.tokenVersion ?? 0);
-  res.json({ user: toAuthUser(user) });
+  const token = setSessionCookie(res, String(user._id), user.tokenVersion ?? 0);
+  res.json({
+    user: toAuthUser(user),
+    ...(shouldIncludeBearerToken(req) ? { token } : {}),
+  });
 }
 
 export function logout(_req: Request, res: Response) {
@@ -300,7 +317,31 @@ export function logout(_req: Request, res: Response) {
 }
 
 export function me(req: Request, res: Response) {
-  res.json({ user: req.user ?? null });
+  res.set('Cache-Control', 'no-store');
+  if (!req.user) {
+    res.json({ user: null });
+    return;
+  }
+
+  // Sliding 30-day session renewal: re-issue a fresh cookie/token whenever older than 24h
+  // or when authenticated via Bearer fallback after mobile/PWA cookie eviction.
+  const nowSec = Math.floor(Date.now() / 1000);
+  const issuedAtSec = req.authMeta?.issuedAtSec ?? 0;
+  const shouldRefresh =
+    req.authMeta?.via === 'bearer' || !issuedAtSec || nowSec - issuedAtSec >= SLIDING_RENEW_AFTER_SEC;
+
+  let refreshedToken: string | undefined;
+  if (shouldRefresh) {
+    refreshedToken = setSessionCookie(res, req.user.id, req.authMeta?.tokenVersion ?? 0);
+  } else if (shouldIncludeBearerToken(req) && !req.headers.authorization?.startsWith('Bearer ')) {
+    // Allow installed PWA / mobile browser that still has a valid cookie to seed its resilient fallback token.
+    refreshedToken = signAccessToken(req.user.id, req.authMeta?.tokenVersion ?? 0);
+  }
+
+  res.json({
+    user: req.user,
+    ...(shouldIncludeBearerToken(req) && refreshedToken ? { token: refreshedToken } : {}),
+  });
 }
 
 export async function updateProfile(req: Request, res: Response) {
@@ -321,10 +362,14 @@ export async function updateProfile(req: Request, res: Response) {
   }
 
   await user.save();
+  let renewedToken: string | undefined;
   if (passwordChanged) {
-    setSessionCookie(res, String(user._id), user.tokenVersion ?? 0);
+    renewedToken = setSessionCookie(res, String(user._id), user.tokenVersion ?? 0);
   }
   const payload = toAuthUser(user);
   req.user = { ...payload, role: user.role };
-  res.json({ user: payload });
+  res.json({
+    user: payload,
+    ...(shouldIncludeBearerToken(req) && renewedToken ? { token: renewedToken } : {}),
+  });
 }

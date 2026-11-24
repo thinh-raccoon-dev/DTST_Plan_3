@@ -288,4 +288,50 @@ describe('authentication', () => {
     expect(rendered.html).toContain('support@dongthapgo.com');
     expect(rendered.text).toContain('739204');
   });
+
+  it('supports persistent mobile/PWA token login, restores session when cookies are evicted, and re-issues sliding cookie on /auth/me', async () => {
+    const { email, password } = await createUser('tourist', 'mobile-persist@test.local');
+    const csrfRes = await request(app).get('/api/v1/csrf');
+    const csrfToken = csrfRes.body.csrfToken as string;
+
+    // 1. Mobile/PWA client opting into token persistence receives a signed Bearer token + 30-day HttpOnly cookie
+    const loginRes = await request(app)
+      .post('/api/v1/auth/login')
+      .set('x-auth-persistence', 'token')
+      .set('x-csrf-token', csrfToken)
+      .send({ email, password });
+
+    expect(loginRes.status).toBe(200);
+    expect(typeof loginRes.body.token).toBe('string');
+    expect(loginRes.body.token.length).toBeGreaterThan(20);
+    const setCookies = ([] as string[]).concat(loginRes.headers['set-cookie'] ?? []);
+    expect(setCookies.some((c) => c.startsWith('dtst_access=') && /Max-Age=2592000/i.test(c))).toBe(true);
+
+    // 2. Simulate iOS Safari ITP / PWA restart wiping ALL cookies: Bearer token alone restores session cleanly
+    const meRes = await request(app)
+      .get('/api/v1/auth/me')
+      .set('Authorization', `Bearer ${loginRes.body.token}`)
+      .set('x-auth-persistence', 'token');
+    expect(meRes.status).toBe(200);
+    expect(meRes.headers['cache-control']).toContain('no-store');
+    expect(meRes.body.user.email).toBe(email);
+    expect(typeof meRes.body.token).toBe('string');
+
+    // 3. Pure Bearer mutation works without ambient cookie CSRF error
+    const patchRes = await request(app)
+      .patch('/api/v1/auth/profile')
+      .set('Authorization', `Bearer ${meRes.body.token}`)
+      .set('x-auth-persistence', 'token')
+      .send({ displayName: 'Mobile Tourist' });
+    expect(patchRes.status).toBe(200);
+    expect(patchRes.body.user.displayName).toBe('Mobile Tourist');
+
+    // 4. Stale/corrupted cookie alongside a valid Bearer token still authenticates via Bearer
+    const staleCookieRes = await request(app)
+      .get('/api/v1/auth/me')
+      .set('Cookie', 'dtst_access=corrupted.expired.token')
+      .set('Authorization', `Bearer ${meRes.body.token}`);
+    expect(staleCookieRes.status).toBe(200);
+    expect(staleCookieRes.body.user.displayName).toBe('Mobile Tourist');
+  });
 });

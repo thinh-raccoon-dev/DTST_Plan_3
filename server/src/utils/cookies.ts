@@ -11,5 +11,6 @@ export function baseCookieOptions(): CookieOptions {
     secure: env.cookieSecure,
     sameSite: env.COOKIE_SAMESITE,
     path: '/',
+    ...(env.COOKIE_DOMAIN ? { domain: env.COOKIE_DOMAIN } : {}),
   };
 }

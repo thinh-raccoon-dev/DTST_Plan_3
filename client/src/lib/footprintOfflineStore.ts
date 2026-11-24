@@ -18,6 +18,8 @@ export interface MemoryPin {
 }
 
 export interface LocalFootprintTrack {
+  storageKey?: string;
+  ownerKey?: string;
   clientId: string;
   title: string;
   color: string;
@@ -46,9 +48,33 @@ export interface CheckInPinItem {
 }
 
 const DB_NAME = 'dtst_footprints_offline_db';
-const DB_VERSION = 1;
-const STORE_TRACKS = 'footprint_tracks';
-const LS_FALLBACK_KEY = 'dtst_footprints_offline_backup_v1';
+const DB_VERSION = 2;
+const STORE_TRACKS = 'footprint_tracks_v2';
+const LEGACY_STORE_TRACKS = 'footprint_tracks';
+const LEGACY_LS_KEY = 'dtst_footprints_offline_backup_v1';
+const LS_FALLBACK_PREFIX = 'dtst_footprints_offline_backup_v2_';
+
+export function buildFootprintOwnerKey(userId?: string | null): string {
+  return userId ? `user:${userId}` : 'guest';
+}
+
+function makeStorageKey(ownerKey: string, clientId: string): string {
+  return `${ownerKey}::${clientId}`;
+}
+
+function lsKeyForOwner(ownerKey: string): string {
+  return `${LS_FALLBACK_PREFIX}${ownerKey}`;
+}
+
+function purgeLegacyUnscopedBackup(): void {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(LEGACY_LS_KEY);
+    }
+  } catch {
+    // ignore
+  }
+}
 
 export function haversineDistanceKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
   const toRad = (deg: number) => (deg * Math.PI) / 180;
@@ -78,8 +104,12 @@ function openFootprintDb(): Promise<IDBDatabase> {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = () => {
       const db = req.result;
+      // Drop legacy v1 unscoped store so stale cross-account / demo starter tracks never leak into new users
+      if (db.objectStoreNames.contains(LEGACY_STORE_TRACKS)) {
+        db.deleteObjectStore(LEGACY_STORE_TRACKS);
+      }
       if (!db.objectStoreNames.contains(STORE_TRACKS)) {
-        db.createObjectStore(STORE_TRACKS, { keyPath: 'clientId' });
+        db.createObjectStore(STORE_TRACKS, { keyPath: 'storageKey' });
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -87,26 +117,29 @@ function openFootprintDb(): Promise<IDBDatabase> {
   });
 }
 
-function readLsFallback(): LocalFootprintTrack[] {
+function readLsFallback(ownerKey: string): LocalFootprintTrack[] {
+  purgeLegacyUnscopedBackup();
   try {
-    const raw = localStorage.getItem(LS_FALLBACK_KEY);
+    const raw = localStorage.getItem(lsKeyForOwner(ownerKey));
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    return Array.isArray(parsed) ? parsed.filter((t) => t && t.ownerKey === ownerKey) : [];
   } catch {
     return [];
   }
 }
 
-function writeLsFallback(tracks: LocalFootprintTrack[]): void {
+function writeLsFallback(ownerKey: string, tracks: LocalFootprintTrack[]): void {
+  purgeLegacyUnscopedBackup();
   try {
-    localStorage.setItem(LS_FALLBACK_KEY, JSON.stringify(tracks.slice(0, 50)));
+    localStorage.setItem(lsKeyForOwner(ownerKey), JSON.stringify(tracks.slice(0, 50)));
   } catch {
     // ignore storage quota errors
   }
 }
 
-export async function getAllLocalTracks(): Promise<LocalFootprintTrack[]> {
+export async function getAllLocalTracks(ownerKey = 'guest'): Promise<LocalFootprintTrack[]> {
+  purgeLegacyUnscopedBackup();
   try {
     const db = await openFootprintDb();
     return await new Promise<LocalFootprintTrack[]>((resolve, reject) => {
@@ -114,27 +147,32 @@ export async function getAllLocalTracks(): Promise<LocalFootprintTrack[]> {
       const store = tx.objectStore(STORE_TRACKS);
       const req = store.getAll();
       req.onsuccess = () => {
-        const list = (req.result as LocalFootprintTrack[]) || [];
+        const list = ((req.result as LocalFootprintTrack[]) || []).filter((t) => t.ownerKey === ownerKey);
         list.sort((a, b) => b.startedAt - a.startedAt);
         resolve(list);
       };
       req.onerror = () => reject(req.error);
     });
   } catch {
-    return readLsFallback();
+    return readLsFallback(ownerKey);
   }
 }
 
-export async function saveLocalTrack(track: LocalFootprintTrack): Promise<void> {
-  const existingFallback = readLsFallback().filter((t) => t.clientId !== track.clientId);
-  writeLsFallback([track, ...existingFallback]);
+export async function saveLocalTrack(track: LocalFootprintTrack, ownerKey = track.ownerKey || 'guest'): Promise<void> {
+  const scoped: LocalFootprintTrack = {
+    ...track,
+    ownerKey,
+    storageKey: makeStorageKey(ownerKey, track.clientId),
+  };
+  const existingFallback = readLsFallback(ownerKey).filter((t) => t.clientId !== scoped.clientId);
+  writeLsFallback(ownerKey, [scoped, ...existingFallback]);
 
   try {
     const db = await openFootprintDb();
     await new Promise<void>((resolve, reject) => {
       const tx = db.transaction(STORE_TRACKS, 'readwrite');
       const store = tx.objectStore(STORE_TRACKS);
-      store.put(track);
+      store.put(scoped);
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
     });
@@ -143,16 +181,16 @@ export async function saveLocalTrack(track: LocalFootprintTrack): Promise<void> 
   }
 }
 
-export async function deleteLocalTrackById(clientId: string): Promise<void> {
-  const existingFallback = readLsFallback().filter((t) => t.clientId !== clientId);
-  writeLsFallback(existingFallback);
+export async function deleteLocalTrackById(clientId: string, ownerKey = 'guest'): Promise<void> {
+  const existingFallback = readLsFallback(ownerKey).filter((t) => t.clientId !== clientId);
+  writeLsFallback(ownerKey, existingFallback);
 
   try {
     const db = await openFootprintDb();
     await new Promise<void>((resolve, reject) => {
       const tx = db.transaction(STORE_TRACKS, 'readwrite');
       const store = tx.objectStore(STORE_TRACKS);
-      store.delete(clientId);
+      store.delete(makeStorageKey(ownerKey, clientId));
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
     });
@@ -161,12 +199,12 @@ export async function deleteLocalTrackById(clientId: string): Promise<void> {
   }
 }
 
-export async function markTracksAsSynced(clientIds: string[]): Promise<void> {
+export async function markTracksAsSynced(clientIds: string[], ownerKey = 'guest'): Promise<void> {
   const idSet = new Set(clientIds);
-  const all = await getAllLocalTracks();
+  const all = await getAllLocalTracks(ownerKey);
   for (const t of all) {
     if (idSet.has(t.clientId) && t.syncStatus !== 'synced') {
-      await saveLocalTrack({ ...t, syncStatus: 'synced' });
+      await saveLocalTrack({ ...t, syncStatus: 'synced' }, ownerKey);
     }
   }
 }
@@ -184,12 +222,16 @@ export async function mergeServerTracksWithLocal(
     memories: MemoryPin[];
     isDemoRoute?: boolean;
   }>,
+  ownerKey = 'guest',
 ): Promise<LocalFootprintTrack[]> {
-  const localTracks = await getAllLocalTracks();
+  const localTracks = await getAllLocalTracks(ownerKey);
   const byId = new Map<string, LocalFootprintTrack>();
 
+  // Keep only local pending tracks (not yet synced) or local preview demo tracks; server is the source of truth for synced tracks
   for (const loc of localTracks) {
-    byId.set(loc.clientId, loc);
+    if (loc.syncStatus === 'pending' || loc.isDemoRoute) {
+      byId.set(loc.clientId, loc);
+    }
   }
 
   for (const srv of serverTracks) {
@@ -205,6 +247,8 @@ export async function mergeServerTracksWithLocal(
     }
 
     const merged: LocalFootprintTrack = {
+      ownerKey,
+      storageKey: makeStorageKey(ownerKey, srv.clientId),
       clientId: srv.clientId,
       title: srv.title,
       color: srv.color || '#10b981',
@@ -213,15 +257,12 @@ export async function mergeServerTracksWithLocal(
       startedAt: typeof srv.startedAt === 'number' ? srv.startedAt : new Date(srv.startedAt).getTime(),
       endedAt: typeof srv.endedAt === 'number' ? srv.endedAt : new Date(srv.endedAt).getTime(),
       points: srv.points || [],
-      memories: (srv.memories || []).map((m) => ({
-        ...m,
-        imageUrl: resolveStopPhoto(m.placeName, m.imageUrl),
-      })),
+      memories: srv.memories || [],
       isDemoRoute: srv.isDemoRoute,
       syncStatus: 'synced',
     };
     byId.set(merged.clientId, merged);
-    await saveLocalTrack(merged);
+    await saveLocalTrack(merged, ownerKey);
   }
 
   return Array.from(byId.values()).sort((a, b) => b.startedAt - a.startedAt);
@@ -521,4 +562,83 @@ export async function resolveRoadSnappedJourney(
   } catch {
     return { ...fallback, roadSnapped: false };
   }
+}
+
+/**
+ * When recording on Mobile Web / PWA, locking the phone screen pauses browser GPS until the user reopens the app.
+ * This helper detects large highway gaps (>= 1.0 km) between consecutive recorded points and smoothly bridges them
+ * along real roads via OSRM when online so inter-provincial trips (e.g. Cần Thơ -> Sài Gòn) follow real highways.
+ */
+export async function bridgeTrackRoadGaps(
+  rawPoints: TrackPoint[],
+  online: boolean,
+): Promise<{ points: TrackPoint[]; bridgedSegments: number }> {
+  if (!online || rawPoints.length < 2) {
+    return { points: rawPoints, bridgedSegments: 0 };
+  }
+
+  const MAX_GAPS_TO_BRIDGE = 10;
+  const GAP_THRESHOLD_KM = 1.0;
+  const MAX_TOTAL_POINTS = 1800;
+
+  const result: TrackPoint[] = [rawPoints[0]!];
+  let bridgedSegments = 0;
+
+  for (let i = 1; i < rawPoints.length; i++) {
+    const prev = rawPoints[i - 1]!;
+    const curr = rawPoints[i]!;
+    const distKm = haversineDistanceKm(prev, curr);
+
+    if (distKm >= GAP_THRESHOLD_KM && distKm <= 450 && bridgedSegments < MAX_GAPS_TO_BRIDGE) {
+      try {
+        const ctrl = new AbortController();
+        const timer = window.setTimeout(() => ctrl.abort(), 4500);
+        const res = await fetch(
+          `https://router.project-osrm.org/route/v1/driving/${prev.lng.toFixed(6)},${prev.lat.toFixed(6)};${curr.lng.toFixed(6)},${curr.lat.toFixed(6)}?overview=simplified&geometries=geojson`,
+          { signal: ctrl.signal },
+        );
+        window.clearTimeout(timer);
+        if (res.ok) {
+          const json = (await res.json()) as {
+            routes?: Array<{ geometry?: { coordinates?: Array<[number, number]> } }>;
+          };
+          const coords = json.routes?.[0]?.geometry?.coordinates;
+          if (coords && coords.length >= 3) {
+            const maxSegPts = 80;
+            const stride = coords.length > maxSegPts ? Math.ceil(coords.length / maxSegPts) : 1;
+            const startTs = prev.timestamp;
+            const spanTs = Math.max(1000, curr.timestamp - startTs);
+            // Append interior bridged points (skip index 0 and last because prev/curr are already preserved)
+            for (let j = stride; j < coords.length - 1; j += stride) {
+              const [lng, lat] = coords[j]!;
+              const ratio = j / (coords.length - 1);
+              result.push({
+                lat: Number(lat.toFixed(6)),
+                lng: Number(lng.toFixed(6)),
+                timestamp: Math.round(startTs + spanTs * ratio),
+              });
+            }
+            bridgedSegments += 1;
+          }
+        }
+      } catch {
+        // Offline / OSRM timeout -> keep direct segment cleanly
+      }
+    }
+    result.push(curr);
+  }
+
+  // Cap safely under MongoDB schema limit (2000)
+  if (result.length > MAX_TOTAL_POINTS) {
+    const stride = Math.ceil(result.length / MAX_TOTAL_POINTS);
+    const compacted: TrackPoint[] = [];
+    for (let i = 0; i < result.length; i += stride) {
+      compacted.push(result[i]!);
+    }
+    const last = result[result.length - 1]!;
+    if (compacted[compacted.length - 1] !== last) compacted.push(last);
+    return { points: compacted, bridgedSegments };
+  }
+
+  return { points: result, bridgedSegments };
 }

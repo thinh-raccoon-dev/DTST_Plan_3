@@ -13,7 +13,7 @@ import {
   Search,
   Sparkles,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { announceBadges } from '../components/challenge/ChallengeQuiz';
 import { PageContainer } from '../components/layout/PublicLayout';
@@ -22,8 +22,13 @@ import { Card } from '../components/ui/Card';
 import { EmptyState, PageLoader } from '../components/ui/States';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { api, toApiError } from '../lib/api';
-import { saveLocalTrack } from '../lib/footprintOfflineStore';
+import { buildFootprintOwnerKey, saveLocalTrack } from '../lib/footprintOfflineStore';
 import { useAuthStore } from '../stores/authStore';
+import {
+  hasSessionAutoChecked,
+  markSessionAutoChecked,
+  useGpsAutoCheckInStore,
+} from '../stores/gpsAutoCheckInStore';
 import { toast } from '../stores/toastStore';
 import type { BadgeInfo } from '../types/api';
 
@@ -86,10 +91,11 @@ export function GpsCheckInPage() {
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [gpsLoading, setGpsLoading] = useState(true);
   const [gpsError, setGpsError] = useState<string | null>(null);
+  const [isFallbackCoords, setIsFallbackCoords] = useState(false);
   const [isDemoMode, setIsDemoMode] = useState(false);
   const [selectedDemoIndex, setSelectedDemoIndex] = useState(0);
-  const [autoCheckInMode, setAutoCheckInMode] = useState(true);
-  const autoCheckedSlugsRef = useRef<Set<string>>(new Set());
+  const autoCheckInMode = useGpsAutoCheckInStore((s) => s.enabled);
+  const setAutoCheckInMode = useGpsAutoCheckInStore((s) => s.setEnabled);
 
   // Data state
   const [data, setData] = useState<NearbyResponse | null>(null);
@@ -114,6 +120,7 @@ export function GpsCheckInPage() {
       (pos) => {
         setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
         setGpsError(null);
+        setIsFallbackCoords(false);
         setGpsLoading(false);
         setIsDemoMode(false);
       },
@@ -122,16 +129,17 @@ export function GpsCheckInPage() {
         if (err.code === err.PERMISSION_DENIED) {
           msg = 'Bạn đã từ chối quyền truy cập vị trí. Hãy bật GPS và cấp quyền cho trình duyệt, hoặc sử dụng Chế độ Mô phỏng Kiểm thử bên dưới.';
         } else if (err.code === err.TIMEOUT) {
-          msg = 'Hết thời gian chờ phản hồi GPS. Đang chuyển sang vị trí mặc định.';
+          msg = 'Hết thời gian chờ phản hồi GPS. Đang tạm hiển thị bản đồ từ vị trí tham khảo (chưa tự động điểm danh).';
         }
         setGpsLoading(false);
-        // Only show error if we have no valid coordinates at all
+        // Only fall back to reference coords if we have no valid GPS fix; mark as fallback so auto check-in NEVER triggers falsely!
         setCoords((prev) => {
           if (prev) {
             setGpsError(null);
             return prev;
           }
           setGpsError(msg);
+          setIsFallbackCoords(true);
           const defaultPreset = DEMO_PRESETS[0]!;
           return { lat: defaultPreset.lat, lng: defaultPreset.lng };
         });
@@ -149,6 +157,8 @@ export function GpsCheckInPage() {
     if (isDemoMode || !navigator.geolocation) return;
     const watchId = navigator.geolocation.watchPosition(
       (pos) => {
+        setIsFallbackCoords(false);
+        setGpsError(null);
         setCoords((prev) => {
           const next = { lat: pos.coords.latitude, lng: pos.coords.longitude };
           if (
@@ -179,18 +189,20 @@ export function GpsCheckInPage() {
         );
         setData(res.data);
 
-        // Hands-Free Automatic GPS Check-In for any destination within 1,000m that hasn't been checked into yet
-        if (autoCheckInMode && res.data?.items?.length) {
+        // Hands-Free Automatic GPS Check-In ONLY on verified real live GPS coordinates
+        // (NEVER auto-stamp using fallback reference coords or demo simulation!)
+        if (autoCheckInMode && !isDemoMode && !isFallbackCoords && !gpsError && res.data?.items?.length) {
           const candidates = res.data.items.filter(
             (item) =>
               item.canCheckIn &&
               !item.isCheckedIn &&
-              !autoCheckedSlugsRef.current.has(item.slug),
+              !hasSessionAutoChecked(item.slug),
           );
 
           if (candidates.length > 0) {
+            const ownerKey = buildFootprintOwnerKey(user?.id);
             for (const candidate of candidates) {
-              autoCheckedSlugsRef.current.add(candidate.slug);
+              markSessionAutoChecked(candidate.slug);
               setCheckingInId(candidate.id);
               try {
                 const chkRes = await api.post<CheckInResult>(
@@ -198,7 +210,7 @@ export function GpsCheckInPage() {
                   {
                     lat: currentCoords.lat,
                     lng: currentCoords.lng,
-                    isSimulated: isDemoMode,
+                    isSimulated: false,
                   },
                 );
                 if (chkRes.data.created) {
@@ -209,41 +221,44 @@ export function GpsCheckInPage() {
                   if (chkRes.data.newBadges?.length) {
                     announceBadges(chkRes.data.newBadges);
                   }
-                  // Also record footprint point into Offline-First store so /footprints map lights up!
-                  await saveLocalTrack({
-                    clientId: `checkin-${candidate.slug}`,
-                    title: `Check-in: ${candidate.name}`,
-                    color: '#10b981',
-                    distanceKm: 0.25,
-                    durationSeconds: 60,
-                    startedAt: Date.now(),
-                    endedAt: Date.now(),
-                    points: [
-                      {
-                        lat: candidate.coordinates.lat,
-                        lng: candidate.coordinates.lng,
-                        timestamp: Date.now(),
-                      },
-                      {
-                        lat: candidate.coordinates.lat + 0.0005,
-                        lng: candidate.coordinates.lng + 0.0005,
-                        timestamp: Date.now() + 1000,
-                      },
-                    ],
-                    memories: [
-                      {
-                        clientId: `mem-chk-${candidate.slug}`,
-                        lat: candidate.coordinates.lat,
-                        lng: candidate.coordinates.lng,
-                        emoji: '🛂',
-                        moodLabel: 'Đã tự động điểm danh GPS',
-                        placeName: candidate.name,
-                        note: `Tự động điểm danh cách ${chkRes.data.distanceMeters}m`,
-                        createdAt: Date.now(),
-                      },
-                    ],
-                    syncStatus: 'pending',
-                  });
+                  // Also record footprint point into user-scoped Offline-First store
+                  await saveLocalTrack(
+                    {
+                      clientId: `checkin-${candidate.slug}`,
+                      title: `Check-in: ${candidate.name}`,
+                      color: '#10b981',
+                      distanceKm: 0.25,
+                      durationSeconds: 60,
+                      startedAt: Date.now(),
+                      endedAt: Date.now(),
+                      points: [
+                        {
+                          lat: candidate.coordinates.lat,
+                          lng: candidate.coordinates.lng,
+                          timestamp: Date.now(),
+                        },
+                        {
+                          lat: candidate.coordinates.lat + 0.0005,
+                          lng: candidate.coordinates.lng + 0.0005,
+                          timestamp: Date.now() + 1000,
+                        },
+                      ],
+                      memories: [
+                        {
+                          clientId: `mem-chk-${candidate.slug}`,
+                          lat: candidate.coordinates.lat,
+                          lng: candidate.coordinates.lng,
+                          emoji: '🛂',
+                          moodLabel: 'Đã tự động điểm danh GPS',
+                          placeName: candidate.name,
+                          note: `Tự động điểm danh cách ${chkRes.data.distanceMeters}m`,
+                          createdAt: Date.now(),
+                        },
+                      ],
+                      syncStatus: 'pending',
+                    },
+                    ownerKey,
+                  );
                 }
               } catch {
                 // ignore auto check-in error
@@ -265,7 +280,7 @@ export function GpsCheckInPage() {
         setLoading(false);
       }
     },
-    [autoCheckInMode, isDemoMode],
+    [autoCheckInMode, isDemoMode, isFallbackCoords, gpsError, user?.id],
   );
 
   useEffect(() => {

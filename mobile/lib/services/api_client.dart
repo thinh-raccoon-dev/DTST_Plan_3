@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/api_models.dart';
+import 'background_gps_service.dart';
 
 class ApiException implements Exception {
   final String message;
@@ -29,6 +30,33 @@ class ApiClient {
 
   static const String _prefBaseUrlKey = 'dtst_api_base_url';
   static const String _prefCookiesKey = 'dtst_cookies_v1';
+  static const String _prefCachedUserKey = 'dtst_cached_user_v1';
+
+  bool get hasSavedAuthToken => (_cookies['dtst_access'] ?? '').isNotEmpty;
+
+  Future<AuthUser?> getCachedUser() async {
+    await init();
+    if (!hasSavedAuthToken) return null;
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_prefCachedUserKey);
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map<String, dynamic>) {
+        return AuthUser.fromJson(decoded);
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<void> saveCachedUser(AuthUser? user) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (user == null) {
+      await prefs.remove(_prefCachedUserKey);
+    } else {
+      await prefs.setString(_prefCachedUserKey, jsonEncode(user.toJson()));
+    }
+  }
 
   static void Function(bool online)? onConnectionStatusChanged;
 
@@ -149,8 +177,11 @@ class ApiClient {
     }
   }
 
-  String _buildCookieHeader() {
-    return _cookies.entries.map((e) => '${e.key}=${e.value}').join('; ');
+  String _buildCookieHeader({bool omitAccessCookie = false}) {
+    return _cookies.entries
+        .where((e) => !(omitAccessCookie && e.key == 'dtst_access'))
+        .map((e) => '${e.key}=${e.value}')
+        .join('; ');
   }
 
   Future<String> _ensureCsrfToken() async {
@@ -204,15 +235,18 @@ class ApiClient {
       csrf = await _ensureCsrfToken();
     }
 
+    final hasBearer = (_cookies['dtst_access'] ?? '').isNotEmpty;
+    final cookieHeader = _buildCookieHeader(omitAccessCookie: hasBearer);
+
     final headers = <String, String>{
       'Accept': 'application/json',
       if (body != null) 'Content-Type': 'application/json',
-      if (_cookies.isNotEmpty) 'Cookie': _buildCookieHeader(),
-      if (_cookies['dtst_access'] != null)
-        'Authorization': 'Bearer ${_cookies['dtst_access']}',
+      if (cookieHeader.isNotEmpty) 'Cookie': cookieHeader,
+      if (hasBearer) 'Authorization': 'Bearer ${_cookies['dtst_access']}',
       if (_cookies['dtst_anon'] != null)
         'x-device-session-id': _cookies['dtst_anon']!,
       'x-client-platform': 'mobile',
+      'x-auth-persistence': 'token',
       if (csrf != null && csrf.isNotEmpty) 'x-csrf-token': csrf,
     };
 
@@ -313,11 +347,22 @@ class ApiClient {
   }
 
   Future<AuthUser?> getMe() async {
-    final res = await request('GET', '/auth/me');
+    final res = await request('GET', '/auth/me', timeout: const Duration(seconds: 25));
+    final renewedToken = res['token']?.toString();
+    if (renewedToken != null && renewedToken.isNotEmpty) {
+      _cookies['dtst_access'] = renewedToken;
+      await _saveCookies();
+    }
     final u = res['user'];
     if (u is Map<String, dynamic>) {
-      return AuthUser.fromJson(u);
+      final parsed = AuthUser.fromJson(u);
+      await saveCachedUser(parsed);
+      return parsed;
     }
+    // Server explicitly confirmed session is not signed in
+    _cookies.remove('dtst_access');
+    await _saveCookies();
+    await saveCachedUser(null);
     return null;
   }
 
@@ -329,9 +374,11 @@ class ApiClient {
     final token = res['token']?.toString();
     if (token != null && token.isNotEmpty) {
       _cookies['dtst_access'] = token;
-      unawaited(_saveCookies());
+      await _saveCookies();
     }
-    return AuthUser.fromJson(res['user'] as Map<String, dynamic>);
+    final parsed = AuthUser.fromJson(res['user'] as Map<String, dynamic>);
+    await saveCachedUser(parsed);
+    return parsed;
   }
 
   Future<AuthUser> register({
@@ -347,17 +394,22 @@ class ApiClient {
     final token = res['token']?.toString();
     if (token != null && token.isNotEmpty) {
       _cookies['dtst_access'] = token;
-      unawaited(_saveCookies());
+      await _saveCookies();
     }
-    return AuthUser.fromJson(res['user'] as Map<String, dynamic>);
+    final parsed = AuthUser.fromJson(res['user'] as Map<String, dynamic>);
+    await saveCachedUser(parsed);
+    return parsed;
   }
 
   Future<void> logout() async {
     try {
       await request('POST', '/auth/logout');
+    } catch (_) {
+      // Always clear local session even if offline
     } finally {
       _cookies.remove('dtst_access');
       await _saveCookies();
+      await saveCachedUser(null);
     }
   }
 
@@ -376,7 +428,14 @@ class ApiClient {
       },
     };
     final res = await request('PATCH', '/auth/profile', body: payload);
-    return AuthUser.fromJson(res['user'] as Map<String, dynamic>);
+    final renewedToken = res['token']?.toString();
+    if (renewedToken != null && renewedToken.isNotEmpty) {
+      _cookies['dtst_access'] = renewedToken;
+      await _saveCookies();
+    }
+    final parsed = AuthUser.fromJson(res['user'] as Map<String, dynamic>);
+    await saveCachedUser(parsed);
+    return parsed;
   }
 
   // ---- Banners & Destinations ----
@@ -1030,6 +1089,35 @@ class ApiClient {
     }
 
     return V9ItineraryObject.fromJson(json);
+  }
+
+  // ---- Footprints & Background GPS Sync ----
+
+  Future<SyncFootprintsResult> syncFootprintTracks(
+    List<Map<String, dynamic>> tracks, {
+    bool autoCheckIn = true,
+  }) async {
+    final res = await request(
+      'POST',
+      '/footprints/sync',
+      body: {
+        'tracks': tracks,
+        'autoCheckIn': autoCheckIn,
+      },
+      timeout: const Duration(seconds: 30),
+    );
+    final autoList = (res['autoCheckIns'] as List?) ?? const [];
+    final names = autoList
+        .whereType<Map<String, dynamic>>()
+        .map((e) => e['name']?.toString() ?? '')
+        .where((s) => s.isNotEmpty)
+        .toList();
+    final badges = (res['newBadges'] as List?) ?? const [];
+    return SyncFootprintsResult(
+      syncedCount: (res['syncedCount'] as num?)?.toInt() ?? tracks.length,
+      autoCheckedInNames: names,
+      newBadgesCount: badges.length,
+    );
   }
 
   static int _hhmmToMins(String hhmm) {

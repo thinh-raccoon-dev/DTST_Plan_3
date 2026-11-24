@@ -71,6 +71,7 @@ export function createApp(): Express {
         'x-device-session-id',
         'x-anonymous-id',
         'x-client-platform',
+        'x-auth-persistence',
       ],
       exposedHeaders: ['x-csrf-token', 'x-device-session-id', 'set-cookie'],
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],

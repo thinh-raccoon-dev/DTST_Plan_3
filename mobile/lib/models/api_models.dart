@@ -55,6 +55,14 @@ class AuthUser {
       preferences: UserPreferences.fromJson(json['preferences'] as Map<String, dynamic>?),
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'email': email,
+        'displayName': displayName,
+        'role': role,
+        'preferences': preferences.toJson(),
+      };
 }
 
 class PublicBanner {

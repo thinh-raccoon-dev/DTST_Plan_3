@@ -4,9 +4,14 @@ import 'package:flutter/foundation.dart';
 
 import '../models/api_models.dart';
 import '../services/api_client.dart';
+import '../services/background_gps_service.dart';
 
 class AppState extends ChangeNotifier {
   final ApiClient api = ApiClient.instance;
+  late final BackgroundGpsTracker gpsTracker = BackgroundGpsTracker(
+    api: api,
+    onPassportUpdated: notifyPassportUpdated,
+  );
 
   AuthUser? _user;
   bool _loadingSession = true;
@@ -50,10 +55,29 @@ class AppState extends ChangeNotifier {
 
     try {
       await api.init();
+      await gpsTracker.init();
+      // Optimistically restore saved login before network verification so offline/slow starts never log users out
+      final cached = await api.getCachedUser();
+      if (cached != null) {
+        _user = cached;
+        notifyListeners();
+      }
       _serverOnline = await api.checkHealth();
-      _user = await api.getMe();
-      if (_user != null) {
-        await refreshFavorites();
+      if (_serverOnline) {
+        try {
+          _user = await api.getMe();
+          if (_user != null) {
+            await refreshFavorites();
+          }
+        } on ApiException catch (e) {
+          if (e.statusCode == 401 || e.statusCode == 403) {
+            _user = null;
+          }
+          // Keep cached user on timeout / transient 5xx / network error
+        }
+        if (gpsTracker.pendingSyncCount > 0) {
+          unawaited(gpsTracker.syncPendingTracks());
+        }
       }
     } catch (_) {
       _serverOnline = false;
@@ -119,6 +143,9 @@ class AppState extends ChangeNotifier {
     _user = loggedIn;
     _serverOnline = true;
     await refreshFavorites();
+    if (gpsTracker.pendingSyncCount > 0) {
+      unawaited(gpsTracker.syncPendingTracks());
+    }
     _passportRefreshTick++;
     _itinerariesRefreshTick++;
     notifyListeners();
@@ -212,5 +239,11 @@ class AppState extends ChangeNotifier {
         rethrow;
       }
     }
+  }
+
+  @override
+  void dispose() {
+    gpsTracker.dispose();
+    super.dispose();
   }
 }

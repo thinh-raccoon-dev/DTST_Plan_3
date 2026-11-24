@@ -32,13 +32,14 @@ import { PhotoLightboxModal } from '../components/footprints/PhotoLightboxModal'
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { api, resolveMediaUrl, toApiError } from '../lib/api';
 import {
+  bridgeTrackRoadGaps,
+  buildFootprintOwnerKey,
   calculatePolylineKm,
   deleteLocalTrackById,
   getAllLocalTracks,
   haversineDistanceKm,
   markTracksAsSynced,
   mergeServerTracksWithLocal,
-  PRESET_DEMO_JOURNEYS,
   registerFootprintServiceWorker,
   resolveRoadSnappedJourney,
   resolveStopPhoto,
@@ -58,6 +59,9 @@ import {
   type PhotoCluster,
 } from '../lib/footprintPhotoStore';
 import { downloadFootprintShareCard } from '../lib/footprintShareCard';
+import { useAuthStore } from '../stores/authStore';
+import { useGpsAutoCheckInStore } from '../stores/gpsAutoCheckInStore';
+import { getActiveRecordingKm, useGpsRecordingStore } from '../stores/gpsRecordingStore';
 import { toast } from '../stores/toastStore';
 import type { BadgeInfo } from '../types/api';
 
@@ -286,6 +290,10 @@ function escapeHtml(text: string): string {
 export function FootprintMapPage() {
   useDocumentTitle('Bản đồ Dấu chân & Ký ức Ảnh · Đồng Tháp Smart Travel');
 
+  const authUser = useAuthStore((s) => s.user);
+  const authStatus = useAuthStore((s) => s.status);
+  const ownerKey = buildFootprintOwnerKey(authUser?.id);
+
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const fogCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -294,11 +302,10 @@ export function FootprintMapPage() {
   const userLocationMarkerRef = useRef<maplibregl.Marker | null>(null);
   const replayAvatarMarkerRef = useRef<maplibregl.Marker | null>(null);
   const bgWatchIdRef = useRef<number | null>(null);
-  const recordWatchIdRef = useRef<number | null>(null);
-  const wakeLockRef = useRef<any>(null);
   const simTimerRef = useRef<number | null>(null);
   const replayTimerRef = useRef<number | null>(null);
   const hasAutoCenteredOnUserRef = useRef(false);
+  const syncInFlightRef = useRef(false);
 
   // Map UI & Dock State
   const [mapReady, setMapReady] = useState(false);
@@ -355,8 +362,9 @@ export function FootprintMapPage() {
   }>({ open: false });
   const quickUploadInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Geofencing Auto Check-in (<1,000m)
-  const [autoCheckInEnabled, setAutoCheckInEnabled] = useState(true);
+  // Geofencing Auto Check-in (<1,000m) — synced globally with the User Dropdown quick toggle
+  const autoCheckInEnabled = useGpsAutoCheckInStore((s) => s.enabled);
+  const toggleAutoCheckIn = useGpsAutoCheckInStore((s) => s.toggle);
   const [geofenceTargets, setGeofenceTargets] = useState<GeofenceTargetItem[]>(() => {
     try {
       const raw = localStorage.getItem(GEOFENCE_CACHE_KEY);
@@ -375,13 +383,26 @@ export function FootprintMapPage() {
   const [isSyncing, setIsSyncing] = useState(false);
   const isEffectiveOnline = browserOnline && !simulateOffline;
 
-  // Live GPS Track Recording
-  const [isRecordingGps, setIsRecordingGps] = useState(false);
-  const [liveTrackTitle, setLiveTrackTitle] = useState('Hành trình Khám phá Đồng Tháp');
-  const [livePoints, setLivePoints] = useState<TrackPoint[]>([]);
-  const [liveMemories, setLiveMemories] = useState<MemoryPin[]>([]);
-  const [liveStartedAt, setLiveStartedAt] = useState<number | null>(null);
-  const [liveElapsedSec, setLiveElapsedSec] = useState(0);
+  // Global Persistent Live GPS Track Recording (survives navigation, screen lock wake-up, and PWA reload!)
+  const recordingSession = useGpsRecordingStore((s) => s.session);
+  const wakeLockActive = useGpsRecordingStore((s) => s.wakeLockActive);
+  const liveGpsError = useGpsRecordingStore((s) => s.gpsError);
+  const startGlobalRecording = useGpsRecordingStore((s) => s.startRecording);
+  const clearGlobalRecording = useGpsRecordingStore((s) => s.clearSession);
+
+  const isRecordingGps = Boolean(recordingSession);
+  const liveStartedAt = recordingSession?.startedAt ?? null;
+  const liveTrackTitle = recordingSession?.title ?? `Hành trình ngày ${new Date().toLocaleDateString('vi-VN')}`;
+  const [simPoints, setSimPoints] = useState<TrackPoint[]>([]);
+  const livePoints = useMemo(
+    () => (isRecordingGps && recordingSession ? recordingSession.points : simPoints),
+    [isRecordingGps, recordingSession, simPoints],
+  );
+  const liveKm = useMemo(() => getActiveRecordingKm(recordingSession), [recordingSession]);
+  const [liveElapsedSec, setLiveElapsedSec] = useState(() =>
+    recordingSession ? Math.max(0, Math.floor((Date.now() - recordingSession.startedAt) / 1000)) : 0,
+  );
+  const [isSavingLiveTrack, setIsSavingLiveTrack] = useState(false);
 
   // Demo Route Simulator & 3D Replay
   const [simulatingRouteId, setSimulatingRouteId] = useState<string | null>(null);
@@ -533,55 +554,42 @@ export function FootprintMapPage() {
     [tracks],
   );
 
+  // Reset visible footprint state cleanly whenever the signed-in account changes
+  useEffect(() => {
+    setUserPhotos([]);
+    setTracks([]);
+    setCheckInPins([]);
+    setSelectedTrackId(null);
+    setActiveClusterId(null);
+    setLightboxState(null);
+    checkedInSessionRef.current = new Set();
+  }, [ownerKey]);
+
   const syncWithCloud = useCallback(
     async (silent = false) => {
-      let localList = await getAllLocalTracks();
+      if (syncInFlightRef.current) return;
+      syncInFlightRef.current = true;
 
-      if (
-        localList.length === 0 &&
-        typeof window !== 'undefined' &&
-        !window.sessionStorage.getItem('dtst_footprint_user_cleared')
-      ) {
-        const preset = PRESET_DEMO_JOURNEYS[0]!;
-        const { points: starterPts, memories: starterMems } = await resolveRoadSnappedJourney(
-          preset.waypoints,
-          isEffectiveOnline,
-        );
-        const starterTrack: LocalFootprintTrack = {
-          clientId: `starter-${preset.id}`,
-          title: preset.title,
-          color: preset.color,
-          distanceKm: calculatePolylineKm(starterPts),
-          durationSeconds: starterPts.length * 16,
-          startedAt: Date.now() - 1800000,
-          endedAt: Date.now(),
-          points: starterPts,
-          memories: starterMems,
-          isDemoRoute: true,
-          syncStatus: 'pending',
-        };
-        await saveLocalTrack(starterTrack);
-        localList = await getAllLocalTracks();
-      }
-
-      setTracks(localList);
-      if (!selectedTrackId && localList[0]) {
-        setSelectedTrackId(localList[0].clientId);
-      }
-
-      if (!isEffectiveOnline) {
-        if (!silent) {
-          toast.info(
-            'Đang ở chế độ Offline',
-            'Hành trình đã được lưu an toàn trong IndexedDB và sẽ tự đồng bộ khi có mạng.',
-          );
-        }
-        return;
-      }
-
-      setIsSyncing(true);
       try {
-        const pending = localList.filter((t) => t.syncStatus === 'pending');
+        // Load strictly user-scoped local tracks (never auto-seed fake Đồng Tháp demo routes for new users!)
+        const localList = await getAllLocalTracks(ownerKey);
+        setTracks(localList);
+        if (!selectedTrackId && localList[0]) {
+          setSelectedTrackId(localList[0].clientId);
+        }
+
+        if (!isEffectiveOnline) {
+          if (!silent) {
+            toast.info(
+              'Đang ở chế độ Offline',
+              'Hành trình đã được lưu an toàn trong IndexedDB và sẽ tự đồng bộ khi có mạng.',
+            );
+          }
+          return;
+        }
+
+        setIsSyncing(true);
+        const pending = localList.filter((t) => t.syncStatus === 'pending' && !t.isDemoRoute);
         if (pending.length > 0) {
           const syncRes = await api.post<{
             success: boolean;
@@ -592,7 +600,10 @@ export function FootprintMapPage() {
             tracks: pending,
             autoCheckIn: autoCheckInEnabled,
           });
-          await markTracksAsSynced(pending.map((p) => p.clientId));
+          await markTracksAsSynced(
+            pending.map((p) => p.clientId),
+            ownerKey,
+          );
 
           const autoList = syncRes.data?.autoCheckIns ?? [];
           if (autoList.length > 0) {
@@ -629,7 +640,7 @@ export function FootprintMapPage() {
         }>('/footprints');
 
         if (res.data?.tracks) {
-          const merged = await mergeServerTracksWithLocal(res.data.tracks);
+          const merged = await mergeServerTracksWithLocal(res.data.tracks, ownerKey);
           setTracks(merged);
           if (!selectedTrackId && merged[0]) setSelectedTrackId(merged[0].clientId);
         }
@@ -661,50 +672,32 @@ export function FootprintMapPage() {
         // Offline / transient network error — keep local data cleanly
       } finally {
         setIsSyncing(false);
+        syncInFlightRef.current = false;
       }
     },
-    [autoCheckInEnabled, isEffectiveOnline, selectedTrackId],
+    [autoCheckInEnabled, isEffectiveOnline, ownerKey, selectedTrackId],
   );
 
   useEffect(() => {
+    if (authStatus !== 'ready') return;
     void syncWithCloud(true);
-  }, [syncWithCloud]);
+  }, [authStatus, syncWithCloud]);
 
-  // ── Merge Real User/Mobile-App Photos with Journey & Check-in Memories ────
+  // ── Show ONLY Real User Photos (and user-attached non-demo track photos) ──
+  // New users start with a clean blank photo map (0 ảnh · 0 cụm điểm); GPS check-ins without user photos
+  // appear cleanly as subtle green stamp markers instead of fake stock destination photos!
   const allMapPhotos = useMemo<FootprintPhotoItem[]>(() => {
     const combined: FootprintPhotoItem[] = [...userPhotos];
     const seenKeys = new Set(
       userPhotos.map((p) => `${p.imageUrl}|${p.coordinates.lat.toFixed(3)},${p.coordinates.lng.toFixed(3)}`),
     );
 
-    // Add check-in destination photos so stamped destinations show on the photo map too
-    for (const chk of checkInPins) {
-      if (!chk.imageUrl) continue;
-      const key = `${chk.imageUrl}|${chk.coordinates.lat.toFixed(3)},${chk.coordinates.lng.toFixed(3)}`;
-      if (seenKeys.has(key)) continue;
-      seenKeys.add(key);
-      combined.push({
-        id: `chk-${chk.id}`,
-        clientPhotoId: `chk-${chk.id}`,
-        imageUrl: chk.imageUrl,
-        thumbnailUrl: chk.imageUrl,
-        coordinates: chk.coordinates,
-        takenAt: chk.checkedInAt || new Date().toISOString(),
-        placeName: chk.name,
-        area: chk.area,
-        destinationId: chk.destinationId,
-        destinationSlug: chk.slug,
-        caption: `Đã đóng dấu Hộ chiếu số (+${chk.pointsAwarded} EXP)`,
-        sourceApp: 'journey',
-        isStarterMemory: true,
-      });
-    }
-
-    // Add track memory photos (e.g. starter Sa Đéc heritage spots) so map is immediately visual & rich
     for (const tr of tracks) {
+      if (tr.isDemoRoute) continue;
       for (const m of tr.memories || []) {
-        const photoUrl = resolveStopPhoto(m.placeName, m.imageUrl);
-        if (!photoUrl) continue;
+        // Only include memories where the user actually attached a photo URL (never synthesize stock images)
+        if (!m.imageUrl) continue;
+        const photoUrl = resolveMediaUrl(m.imageUrl);
         const key = `${photoUrl}|${m.lat.toFixed(3)},${m.lng.toFixed(3)}`;
         if (seenKeys.has(key)) continue;
         seenKeys.add(key);
@@ -720,13 +713,13 @@ export function FootprintMapPage() {
           trackClientId: tr.clientId,
           caption: m.note || m.moodLabel,
           sourceApp: 'journey',
-          isStarterMemory: Boolean(tr.isDemoRoute),
+          isStarterMemory: false,
         });
       }
     }
 
     return combined.sort((a, b) => new Date(b.takenAt).getTime() - new Date(a.takenAt).getTime());
-  }, [userPhotos, checkInPins, tracks]);
+  }, [userPhotos, tracks]);
 
   // Filter photos by search bar in real time
   const visibleMapPhotos = useMemo(() => {
@@ -1041,7 +1034,7 @@ export function FootprintMapPage() {
       photoMarkersRef.current.push(marker);
     }
 
-    // Subtle secondary markers for check-in destinations that don't have a photo pin nearby
+    // Subtle secondary markers for check-in destinations that don't have a user photo nearby
     for (const m of stampMarkersRef.current) m.remove();
     stampMarkersRef.current = [];
     for (const chk of checkInPins) {
@@ -1049,10 +1042,20 @@ export function FootprintMapPage() {
         (c) => haversineDistanceKm({ lat: c.lat, lng: c.lng }, chk.coordinates) < 0.25,
       );
       if (coveredByPhoto) continue;
-      const dot = document.createElement('div');
-      dot.title = `Đã đóng dấu Hộ chiếu: ${chk.name}`;
+      const dot = document.createElement('button');
+      dot.type = 'button';
+      dot.title = `Đã đóng dấu Hộ chiếu: ${chk.name} · Chạm để thêm ảnh kỷ niệm`;
+      dot.setAttribute('aria-label', `Đã đóng dấu Hộ chiếu ${chk.name}`);
       dot.style.cssText =
-        'width:14px;height:14px;border-radius:999px;background:#10b981;border:2.5px solid #ffffff;box-shadow:0 4px 12px rgba(0,0,0,0.38);cursor:pointer;';
+        'width:16px;height:16px;border-radius:999px;background:#10b981;border:2.5px solid #ffffff;box-shadow:0 4px 12px rgba(0,0,0,0.38);cursor:pointer;padding:0;';
+      dot.addEventListener('click', (e) => {
+        e.stopPropagation();
+        setCaptureModalState({
+          open: true,
+          coords: chk.coordinates,
+          placeName: chk.name,
+        });
+      });
       stampMarkersRef.current.push(
         new maplibregl.Marker({ element: dot, anchor: 'center' })
           .setLngLat([chk.coordinates.lng, chk.coordinates.lat])
@@ -1320,99 +1323,120 @@ export function FootprintMapPage() {
     [autoCheckInEnabled, geofenceTargets, isEffectiveOnline, simulatingRouteId],
   );
 
-  // ── Live GPS Track Recording ───────────────────────────────────────────────
+  // ── Live GPS Track Recording (Global Persistent Store + Watcher in PublicLayout) ──
   useEffect(() => {
-    if (!isRecordingGps || !liveStartedAt) return;
+    if (!isRecordingGps || !liveStartedAt) {
+      setLiveElapsedSec(0);
+      return;
+    }
+    setLiveElapsedSec(Math.max(0, Math.floor((Date.now() - liveStartedAt) / 1000)));
     const id = window.setInterval(() => {
-      setLiveElapsedSec(Math.floor((Date.now() - liveStartedAt) / 1000));
+      setLiveElapsedSec(Math.max(0, Math.floor((Date.now() - liveStartedAt) / 1000)));
     }, 1000);
     return () => window.clearInterval(id);
   }, [isRecordingGps, liveStartedAt]);
 
-  const handleStartLiveGps = async () => {
+  // Trigger instant geofence check & follow live dot whenever the global recorder captures a fresh GPS fix
+  useEffect(() => {
+    if (!recordingSession || recordingSession.points.length === 0) return;
+    const latestPt = recordingSession.points[recordingSession.points.length - 1]!;
+    void checkAndTriggerGeofence(latestPt.lat, latestPt.lng);
+  }, [recordingSession?.lastPointAt, recordingSession, checkAndTriggerGeofence]);
+
+  const handleStartLiveGps = () => {
     if (!('geolocation' in navigator)) {
       toast.error('Thiết bị không hỗ trợ GPS', 'Bạn có thể chạy Cung đường Mẫu trong tab Lộ trình.');
       return;
     }
-    try {
-      if ('wakeLock' in navigator) wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
-    } catch {
-      // ignore
-    }
-    setLiveStartedAt(Date.now());
-    setLiveElapsedSec(0);
-    setLivePoints([]);
-    setLiveMemories([]);
-    setIsRecordingGps(true);
+    const initialPoint: TrackPoint | null =
+      userLocation && !userLocation.isManualFallback
+        ? {
+            lat: userLocation.lat,
+            lng: userLocation.lng,
+            timestamp: Date.now(),
+            speedKmh: userLocation.speedKmh,
+          }
+        : null;
+
+    startGlobalRecording({
+      ownerKey,
+      title: `Hành trình ngày ${new Date().toLocaleDateString('vi-VN')}`,
+      initialPoint,
+    });
     setShowRoutesOnMap(true);
     setFollowUserLocation(true);
-    toast.success('Đã bật ghi hành trình GPS', 'Bấm nút Camera bất cứ lúc nào để lưu ảnh gắn theo lộ trình này.');
-
-    recordWatchIdRef.current = navigator.geolocation.watchPosition(
-      (pos) => {
-        const pt: TrackPoint = {
-          lat: Number(pos.coords.latitude.toFixed(6)),
-          lng: Number(pos.coords.longitude.toFixed(6)),
-          timestamp: Date.now(),
-          speedKmh: pos.coords.speed ? Math.round(pos.coords.speed * 3.6) : undefined,
-        };
-        persistUserLocation({
-          lat: pt.lat,
-          lng: pt.lng,
-          accuracyMeters: pos.coords.accuracy || undefined,
-          headingDegrees: typeof pos.coords.heading === 'number' ? pos.coords.heading : null,
-          updatedAt: Date.now(),
-        });
-        setGpsStatus('active');
-        void checkAndTriggerGeofence(pt.lat, pt.lng);
-        setLivePoints((prev) => {
-          if (prev.length > 0 && haversineDistanceKm(prev[prev.length - 1]!, pt) < 0.008) return prev;
-          return [...prev, pt];
-        });
-      },
-      () => {},
-      { enableHighAccuracy: true, maximumAge: 3000, timeout: 10000 },
+    toast.success(
+      'Đã bật ghi hành trình GPS (tự động lưu liên tục)',
+      'Bạn có thể chuyển tab hoặc mở lại app dọc đường — lộ trình vẫn được lưu và tự nối đường bộ khi dừng!',
     );
   };
 
   const handleStopAndSaveLiveGps = async () => {
-    if (recordWatchIdRef.current !== null) {
-      navigator.geolocation.clearWatch(recordWatchIdRef.current);
-      recordWatchIdRef.current = null;
-    }
-    if (wakeLockRef.current) {
-      try {
-        await wakeLockRef.current.release();
-      } catch {
-        // ignore
+    const active = useGpsRecordingStore.getState().session;
+    if (!active || isSavingLiveTrack) return;
+
+    setIsSavingLiveTrack(true);
+    try {
+      let recordedPoints = [...active.points];
+      // If user only had 1 point or moved slightly before tapping Stop, try one final live fix
+      if (userLocation && !userLocation.isManualFallback) {
+        const tail = recordedPoints[recordedPoints.length - 1];
+        const finalPt: TrackPoint = {
+          lat: userLocation.lat,
+          lng: userLocation.lng,
+          timestamp: Date.now(),
+          speedKmh: userLocation.speedKmh,
+        };
+        if (!tail || haversineDistanceKm(tail, finalPt) >= 0.01) {
+          recordedPoints.push(finalPt);
+        }
       }
-      wakeLockRef.current = null;
+
+      if (recordedPoints.length === 0) {
+        clearGlobalRecording();
+        toast.info('Chưa ghi nhận tọa độ GPS nào', 'Hãy đảm bảo đã cấp quyền Vị trí cho trình duyệt.');
+        return;
+      }
+
+      // Bridge any large lock-screen gaps (>= 1km, e.g. Cần Thơ -> Sài Gòn) cleanly along real highways via OSRM
+      const { points: finalizedPoints, bridgedSegments } = await bridgeTrackRoadGaps(
+        recordedPoints,
+        isEffectiveOnline,
+      );
+      const now = Date.now();
+      const totalKm = calculatePolylineKm(finalizedPoints);
+      const newTrack: LocalFootprintTrack = {
+        clientId: active.clientId,
+        title: active.title.trim() || `Hành trình ngày ${new Date(active.startedAt).toLocaleDateString('vi-VN')}`,
+        color: TRACK_COLORS[tracks.length % TRACK_COLORS.length] || '#10b981',
+        distanceKm: totalKm,
+        durationSeconds: Math.max(1, Math.floor((now - active.startedAt) / 1000)),
+        startedAt: active.startedAt,
+        endedAt: now,
+        points: finalizedPoints,
+        memories: active.memories,
+        syncStatus: 'pending',
+      };
+      await saveLocalTrack(newTrack, ownerKey);
+      clearGlobalRecording();
+      setSelectedTrackId(newTrack.clientId);
+      setShowRoutesOnMap(true);
+      if (finalizedPoints.length >= 2) {
+        fitTrackBounds(finalizedPoints);
+      }
+      if (bridgedSegments > 0) {
+        toast.success(
+          `Đã lưu hành trình ${totalKm} km!`,
+          `Tự động nối mượt ${bridgedSegments} đoạn đường bộ khi bạn khóa màn hình.`,
+        );
+      }
+      await syncWithCloud(false);
+    } finally {
+      setIsSavingLiveTrack(false);
     }
-    setIsRecordingGps(false);
-    if (livePoints.length === 0) {
-      toast.info('Chưa ghi nhận bước di chuyển nào');
-      return;
-    }
-    const newTrack: LocalFootprintTrack = {
-      clientId: `track-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      title: liveTrackTitle.trim() || `Hành trình ngày ${new Date().toLocaleDateString('vi-VN')}`,
-      color: TRACK_COLORS[tracks.length % TRACK_COLORS.length] || '#10b981',
-      distanceKm: calculatePolylineKm(livePoints),
-      durationSeconds: liveElapsedSec || 60,
-      startedAt: liveStartedAt || Date.now() - 60000,
-      endedAt: Date.now(),
-      points: livePoints,
-      memories: liveMemories,
-      syncStatus: 'pending',
-    };
-    await saveLocalTrack(newTrack);
-    setLivePoints([]);
-    setLiveMemories([]);
-    setSelectedTrackId(newTrack.clientId);
-    await syncWithCloud(false);
   };
 
-  // ── Demo Journey & Replay ──────────────────────────────────────────────────
+  // ── Demo Journey & Replay (strictly local preview — never stamps fake check-ins or uploads to cloud!) ──
   const handleRunDemoJourney = async (preset: PresetJourneyRoute) => {
     if (simTimerRef.current) window.clearInterval(simTimerRef.current);
     setIsReplaying(false);
@@ -1425,11 +1449,8 @@ export function FootprintMapPage() {
     );
     const startPt = fullPoints[0]!;
     fitTrackBounds(fullPoints);
-    setLiveTrackTitle(preset.title);
-    setLivePoints([startPt]);
-    setLiveMemories([]);
+    setSimPoints([startPt]);
     setReplayAvatarPos({ lat: startPt.lat, lng: startPt.lng });
-    void checkAndTriggerGeofence(startPt.lat, startPt.lng);
 
     let idx = 1;
     simTimerRef.current = window.setInterval(async () => {
@@ -1440,8 +1461,8 @@ export function FootprintMapPage() {
         setReplayAvatarPos(null);
 
         const completedTrack: LocalFootprintTrack = {
-          clientId: `track-${preset.id}-${Date.now()}`,
-          title: preset.title,
+          clientId: `demo-${preset.id}-${Date.now()}`,
+          title: `[Demo] ${preset.title}`,
           color: preset.color,
           distanceKm: calculatePolylineKm(fullPoints),
           durationSeconds: fullPoints.length * 16,
@@ -1450,21 +1471,19 @@ export function FootprintMapPage() {
           points: fullPoints,
           memories: fullMemories,
           isDemoRoute: true,
-          syncStatus: 'pending',
+          syncStatus: 'synced',
         };
-        await saveLocalTrack(completedTrack);
-        setLivePoints([]);
-        setLiveMemories([]);
+        await saveLocalTrack(completedTrack, ownerKey);
+        setSimPoints([]);
         setSelectedTrackId(completedTrack.clientId);
-        if (isEffectiveOnline) await syncWithCloud(false);
-        else setTracks(await getAllLocalTracks());
+        setTracks(await getAllLocalTracks(ownerKey));
+        toast.info('Đã hoàn tất chạy thử lộ trình Demo', 'Lộ trình mẫu chỉ xem cục bộ và không cộng điểm hay chèn ảnh vào tài khoản.');
         return;
       }
       const nextPt = fullPoints[idx]!;
       const partialPoints = fullPoints.slice(0, idx + 1);
-      setLivePoints(partialPoints);
+      setSimPoints(partialPoints);
       setReplayAvatarPos({ lat: nextPt.lat, lng: nextPt.lng });
-      void checkAndTriggerGeofence(nextPt.lat, nextPt.lng);
       idx++;
     }, 90);
   };
@@ -1558,16 +1577,15 @@ export function FootprintMapPage() {
   };
 
   const handleDeleteTrack = async (clientId: string) => {
-    if (typeof window !== 'undefined') window.sessionStorage.setItem('dtst_footprint_user_cleared', '1');
-    await deleteLocalTrackById(clientId);
-    if (isEffectiveOnline) {
+    await deleteLocalTrackById(clientId, ownerKey);
+    if (isEffectiveOnline && !clientId.startsWith('demo-')) {
       try {
         await api.delete(`/footprints/${encodeURIComponent(clientId)}`);
       } catch {
         // ignore
       }
     }
-    const remaining = await getAllLocalTracks();
+    const remaining = await getAllLocalTracks(ownerKey);
     setTracks(remaining);
     if (selectedTrackId === clientId) setSelectedTrackId(remaining[0]?.clientId ?? null);
     toast.info('Đã xóa hành trình khỏi bản đồ');
@@ -1703,6 +1721,27 @@ export function FootprintMapPage() {
                   : 'Chạm đặt vị trí'}
           </span>
         </button>
+
+        {/* Always-Visible Live Recording Indicator Pill on the Map */}
+        {isRecordingGps && (
+          <button
+            type="button"
+            onClick={() => void handleStopAndSaveLiveGps()}
+            disabled={isSavingLiveTrack}
+            className="pointer-events-auto inline-flex items-center gap-2 rounded-full border border-rose-300/60 bg-rose-600/92 px-3 py-2 text-[11px] font-extrabold text-white shadow-[0_12px_28px_-6px_rgba(225,29,72,0.7)] backdrop-blur-xl transition hover:bg-rose-500 active:scale-95 disabled:opacity-60"
+            title="Bấm để Dừng & Lưu lộ trình đang ghi"
+          >
+            <span className="relative flex size-2 shrink-0">
+              <span className="absolute inline-flex size-full animate-ping rounded-full bg-white opacity-80" />
+              <span className="relative inline-flex size-2 rounded-full bg-white" />
+            </span>
+            <span className="tabular-nums">
+              {isSavingLiveTrack
+                ? 'Đang nối đường & lưu...'
+                : `Đang ghi · ${liveKm.toFixed(1)} km · ${livePoints.length}đ · Dừng`}
+            </span>
+          </button>
+        )}
       </div>
 
       {/* ── Top-Right Apple Maps Frosted Vertical Control Capsule ────────── */}
@@ -1855,7 +1894,7 @@ export function FootprintMapPage() {
 
       {/* ── Expandable Search Bar (floats cleanly right above bottom dock) ─ */}
       {searchOpen && (
-        <div className="pointer-events-auto absolute bottom-[5.25rem] left-1/2 z-30 flex w-[calc(100%-2rem)] max-w-md -translate-x-1/2 items-center gap-2 rounded-full border border-white/25 bg-slate-950/82 px-3.5 py-2 text-white shadow-2xl backdrop-blur-2xl sm:bottom-24">
+        <div className="pointer-events-auto absolute bottom-[6.25rem] left-1/2 z-30 flex w-[calc(100%-2rem)] max-w-md -translate-x-1/2 items-center gap-2 rounded-full border border-white/25 bg-slate-950/82 px-3.5 py-2 text-white shadow-2xl backdrop-blur-2xl sm:bottom-24">
           <Search className="size-4 shrink-0 text-emerald-300" />
           <input
             type="search"
@@ -1913,8 +1952,30 @@ export function FootprintMapPage() {
         }}
       />
 
-      {/* ── Bottom Apple Photos Floating Dock (Centered, zero Pé Meko overlap!) ─ */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-3.5 z-30 flex items-center justify-center px-2.5 sm:bottom-5 sm:px-3">
+      {/* ── Friendly Clean-Slate Prompt for Brand-New Users (0 photos, hidden while recording GPS) ──── */}
+      {authStatus === 'ready' && !isSyncing && !isRecordingGps && allMapPhotos.length === 0 && dockMode === 'map' && !activeCluster && !searchOpen && (
+        <div className="pointer-events-none absolute left-3.5 right-[4.5rem] top-[7rem] z-20 flex justify-start sm:inset-x-0 sm:bottom-24 sm:top-auto sm:justify-center sm:px-4">
+          <button
+            type="button"
+            onClick={() =>
+              setCaptureModalState({
+                open: true,
+                coords: userLocation ? { lat: userLocation.lat, lng: userLocation.lng } : null,
+                placeName: '',
+                mode: 'camera',
+                files: null,
+              })
+            }
+            className="pointer-events-auto inline-flex items-center gap-2 rounded-2xl border border-white/25 bg-slate-950/75 px-3.5 py-2 text-left text-xs font-semibold text-white shadow-[0_14px_34px_-10px_rgba(0,0,0,0.6)] backdrop-blur-xl transition hover:bg-slate-900/90 active:scale-[0.98] sm:rounded-full sm:px-4"
+          >
+            <Camera className="size-3.5 shrink-0 text-emerald-300" aria-hidden />
+            <span>Bản đồ đang trống · Chạm để ghim ảnh đầu tiên</span>
+          </button>
+        </div>
+      )}
+
+      {/* ── Bottom Apple Photos Floating Dock (Centered, clear of raised Mobile Dấu chân FAB & Pé Meko!) ─ */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-7 z-30 flex items-center justify-center px-2.5 sm:bottom-5 sm:px-3">
         <div className="pointer-events-auto flex items-center gap-1.5 sm:gap-2">
           {/* Segmented Frosted Pill: Bản đồ | Thư viện | Địa điểm | Lộ trình */}
           <nav
@@ -2050,7 +2111,12 @@ export function FootprintMapPage() {
         routeStops={routeStopsWithLegs}
         focusedStopIdx={focusedStopIdx}
         isRecordingGps={isRecordingGps}
+        isSavingLiveTrack={isSavingLiveTrack}
         liveElapsedLabel={formatDurationClock(liveElapsedSec)}
+        livePointsCount={recordingSession?.points.length ?? 0}
+        liveKm={liveKm}
+        wakeLockActive={wakeLockActive}
+        liveGpsError={liveGpsError}
         simulatingRouteId={simulatingRouteId}
         isReplaying={isReplaying}
         replayProgress={replayProgress}
@@ -2114,10 +2180,9 @@ export function FootprintMapPage() {
         onToggleFog={() => setFogEnabled((v) => !v)}
         onChangeFogRadius={setFogRadiusPx}
         onToggleAutoCheckIn={() => {
-          setAutoCheckInEnabled((v) => {
-            toast.info(!v ? 'Đã BẬT Tự động Check-in (<1km)' : 'Đã TẮT Tự động Check-in');
-            return !v;
-          });
+          const next = !autoCheckInEnabled;
+          toggleAutoCheckIn();
+          toast.info(next ? 'Đã BẬT Tự động Điểm danh GPS (<1km)' : 'Đã TẮT Tự động Điểm danh GPS');
         }}
         onToggleSimulateOffline={() => setSimulateOffline((v) => !v)}
         onSyncNow={() => void syncWithCloud(false)}

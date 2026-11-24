@@ -2,13 +2,18 @@ import clsx from 'clsx';
 import {
   Contrast,
   HeartHandshake,
+  MapPinCheck,
   RotateCcw,
   Settings,
   Sparkles,
+  Stamp,
   Type,
   X,
 } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Link } from 'react-router-dom';
+import { useAuthStore } from '../../stores/authStore';
+import { useGpsAutoCheckInStore } from '../../stores/gpsAutoCheckInStore';
 import { useUiComfortStore, type FontScale } from '../../stores/uiComfortStore';
 import { toast } from '../../stores/toastStore';
 
@@ -30,6 +35,9 @@ export function SettingsMenuContent({ onClose }: { onClose?: () => void }) {
     setCalmMotion,
     resetDefaults,
   } = useUiComfortStore();
+  const user = useAuthStore((s) => s.user);
+  const autoGpsEnabled = useGpsAutoCheckInStore((s) => s.enabled);
+  const toggleAutoGps = useGpsAutoCheckInStore((s) => s.toggle);
 
   const handleToggleSenior = () => {
     const next = !seniorMode;
@@ -113,6 +121,66 @@ export function SettingsMenuContent({ onClose }: { onClose?: () => void }) {
           />
         </span>
       </button>
+
+      {/* Guest fallback for GPS Check-In & Passport when User Dropdown is not mounted */}
+      {!user && (
+        <div className="mt-3 space-y-2">
+          <div className="flex items-center justify-between gap-2 rounded-2xl border border-sand-200 bg-sand-50/90 px-3 py-2.5">
+            <Link
+              to="/check-in"
+              onClick={onClose}
+              className="flex min-w-0 flex-1 items-center gap-2.5"
+            >
+              <span
+                className={clsx(
+                  'grid size-8 shrink-0 place-items-center rounded-xl',
+                  autoGpsEnabled ? 'bg-leaf-600 text-white' : 'bg-sand-200 text-river-600',
+                )}
+              >
+                <MapPinCheck className="size-4" aria-hidden />
+              </span>
+              <span className="min-w-0">
+                <span className="block truncate text-xs font-extrabold text-river-900">Điểm danh GPS</span>
+                <span className="block truncate text-[11px] text-river-600">
+                  {autoGpsEnabled ? 'Tự động (<1km) · Đang bật' : 'Tự động · Đang tắt'}
+                </span>
+              </span>
+            </Link>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={autoGpsEnabled}
+              aria-label="Bật hoặc tắt tự động điểm danh GPS"
+              onClick={() => {
+                const next = toggleAutoGps();
+                toast.info(next ? 'Đã bật tự động điểm danh GPS' : 'Đã tắt tự động điểm danh GPS');
+              }}
+              className={clsx(
+                'relative inline-flex h-6 w-10 shrink-0 cursor-pointer items-center rounded-full p-0.5 transition-colors',
+                autoGpsEnabled ? 'bg-leaf-600' : 'bg-sand-300',
+              )}
+            >
+              <span
+                aria-hidden
+                className={clsx(
+                  'size-5 rounded-full bg-white shadow transition-transform',
+                  autoGpsEnabled ? 'translate-x-4' : 'translate-x-0',
+                )}
+              />
+            </button>
+          </div>
+          <Link
+            to="/passport"
+            onClick={onClose}
+            className="flex items-center gap-2.5 rounded-2xl border border-sand-200 bg-white px-3 py-2 text-xs font-bold text-river-800 transition-colors hover:border-leaf-300 hover:bg-leaf-50"
+          >
+            <span className="grid size-8 shrink-0 place-items-center rounded-xl bg-leaf-50 text-leaf-700">
+              <Stamp className="size-4" aria-hidden />
+            </span>
+            <span>Hộ chiếu trải nghiệm số</span>
+          </Link>
+        </div>
+      )}
 
       {/* Font Size Controls */}
       <div className="mt-3.5">

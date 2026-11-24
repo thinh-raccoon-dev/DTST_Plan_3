@@ -2,6 +2,8 @@ import { Mail, Phone } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link, Outlet, ScrollRestoration, useLocation } from 'react-router-dom';
 import { AiCopilotWidget } from '../ai/AiCopilotWidget';
+import { GpsAutoCheckInWatcher } from '../gps/GpsAutoCheckInWatcher';
+import { GpsTrackRecorderWatcher } from '../gps/GpsTrackRecorderWatcher';
 import { ScrollProgressBar } from '../ui/MotionPrimitives';
 import { Header } from './Header';
 import { LogoFull } from './Logo';
@@ -134,6 +136,8 @@ export function PublicLayout() {
       </main>
       {!isFullBleedMap && <Footer />}
       <MobileBottomNav />
+      <GpsAutoCheckInWatcher />
+      <GpsTrackRecorderWatcher />
       <AiCopilotWidget />
       <ScrollRestoration />
     </div>

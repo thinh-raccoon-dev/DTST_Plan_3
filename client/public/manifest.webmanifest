@@ -1,0 +1,25 @@
+{
+  "name": "Đồng Tháp Smart Travel · Hộ chiếu Trải nghiệm",
+  "short_name": "Đồng Tháp Go",
+  "description": "Khám phá Đồng Tháp, Bản đồ Dấu chân, điểm danh GPS tự động và Hộ chiếu trải nghiệm số.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f9f7f2",
+  "theme_color": "#176b50",
+  "lang": "vi",
+  "icons": [
+    {
+      "src": "/favicon.png",
+      "sizes": "64x64",
+      "type": "image/png"
+    },
+    {
+      "src": "/favicon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

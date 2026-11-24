@@ -15,7 +15,57 @@ export function resolveMediaUrl(url: string): string {
   return url;
 }
 
-export const api = axios.create({ baseURL, withCredentials: true, timeout: 15_000 });
+export const api = axios.create({ baseURL, withCredentials: true, timeout: 25_000 });
+
+const SESSION_TOKEN_KEY = 'dtst_session_token_v1';
+const CACHED_USER_KEY = 'dtst_cached_user_v1';
+
+export function getStoredAuthToken(): string | null {
+  try {
+    if (typeof localStorage === 'undefined') return null;
+    const raw = localStorage.getItem(SESSION_TOKEN_KEY);
+    return raw && raw.length > 20 ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+export function setStoredAuthToken(token: string | null): void {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    if (token && token.length > 20) {
+      localStorage.setItem(SESSION_TOKEN_KEY, token);
+    } else {
+      localStorage.removeItem(SESSION_TOKEN_KEY);
+    }
+  } catch {
+    // ignore storage restrictions (e.g. private browsing quota)
+  }
+}
+
+export function getCachedAuthUser<T>(): T | null {
+  try {
+    if (typeof localStorage === 'undefined') return null;
+    const raw = localStorage.getItem(CACHED_USER_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
+
+export function setCachedAuthUser(user: unknown | null): void {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    if (user) {
+      localStorage.setItem(CACHED_USER_KEY, JSON.stringify(user));
+    } else {
+      localStorage.removeItem(CACHED_USER_KEY);
+    }
+  } catch {
+    // ignore
+  }
+}
 
 let csrfToken: string | null = null;
 let csrfRequest: Promise<string> | null = null;
@@ -37,6 +87,13 @@ async function getCsrfToken(): Promise<string> {
 const SAFE_METHODS = new Set(['get', 'head', 'options']);
 
 api.interceptors.request.use(async (config) => {
+  // Ask server to also return a sliding-renewed fallback session token so Mobile Safari ITP,
+  // iOS/Android Home Screen PWAs, and cross-origin deployments never lose login state.
+  config.headers.set('x-auth-persistence', 'token');
+  const storedToken = getStoredAuthToken();
+  if (storedToken && !config.headers.has('Authorization')) {
+    config.headers.set('Authorization', `Bearer ${storedToken}`);
+  }
   if (!SAFE_METHODS.has((config.method ?? 'get').toLowerCase())) {
     config.headers.set('x-csrf-token', await getCsrfToken());
   }

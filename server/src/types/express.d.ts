@@ -14,8 +14,14 @@ declare global {
         hoursPerDay: number;
       };
     }
+    interface AuthMeta {
+      tokenVersion: number;
+      issuedAtSec?: number;
+      via: 'cookie' | 'bearer';
+    }
     interface Request {
       user?: AuthUser;
+      authMeta?: AuthMeta;
       anonymousSessionId?: string;
     }
   }

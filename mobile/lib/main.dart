@@ -226,9 +226,62 @@ class DtstMainShell extends StatelessWidget {
               ),
             ],
           ),
-          body: IndexedStack(
-            index: currentIndex,
-            children: tabs,
+          body: Column(
+            children: [
+              Expanded(
+                child: IndexedStack(
+                  index: currentIndex,
+                  children: tabs,
+                ),
+              ),
+              ListenableBuilder(
+                listenable: appState.gpsTracker,
+                builder: (context, _) {
+                  final tracker = appState.gpsTracker;
+                  if (!tracker.isRecording) return const SizedBox.shrink();
+                  return Material(
+                    color: Colors.red.shade600,
+                    child: InkWell(
+                      onTap: () => appState.setTabIndex(4),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.gps_fixed_rounded, size: 16, color: Colors.white),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Đang ghi GPS ngầm · ${tracker.liveDistanceKm.toStringAsFixed(2)} km · ${tracker.pointCount} điểm (${tracker.formattedElapsed})',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: () => tracker.stopAndSave(),
+                              style: TextButton.styleFrom(
+                                foregroundColor: Colors.white,
+                                backgroundColor: Colors.white.withValues(alpha: 0.2),
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                minimumSize: Size.zero,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ),
+                              child: const Text(
+                                'Dừng',
+                                style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ],
           ),
           bottomNavigationBar: NavigationBar(
             selectedIndex: currentIndex,

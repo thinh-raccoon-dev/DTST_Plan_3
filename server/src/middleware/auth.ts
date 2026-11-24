@@ -18,12 +18,13 @@ export function signAccessToken(userId: string, tokenVersion = 0): string {
   });
 }
 
-function readTokenClaims(token: string): { userId: string; tokenVersion: number } | null {
+function readTokenClaims(token: string): { userId: string; tokenVersion: number; issuedAtSec?: number } | null {
   try {
     const payload = jwt.verify(token, env.JWT_SECRET, { algorithms: ['HS256'] });
     if (typeof payload === 'object' && typeof payload.sub === 'string' && isValidObjectId(payload.sub)) {
       const tv = typeof payload.tv === 'number' ? payload.tv : 0;
-      return { userId: payload.sub, tokenVersion: tv };
+      const iat = typeof payload.iat === 'number' ? payload.iat : undefined;
+      return { userId: payload.sub, tokenVersion: tv, issuedAtSec: iat };
     }
     return null;
   } catch {
@@ -32,39 +33,74 @@ function readTokenClaims(token: string): { userId: string; tokenVersion: number 
   }
 }
 
-/** Resolves the current user from the HttpOnly cookie. Role, status and tokenVersion always come from the DB. */
+/** Resolves the current user from the HttpOnly cookie or Authorization Bearer token. Role, status and tokenVersion always come from the DB. */
 export async function attachUser(req: Request, res: Response, next: NextFunction): Promise<void> {
-  let token: string | undefined = typeof req.cookies?.[AUTH_COOKIE] === 'string' ? req.cookies[AUTH_COOKIE] : undefined;
-  if (!token && req.headers.authorization?.startsWith('Bearer ')) {
-    token = req.headers.authorization.slice(7).trim();
-  }
-  if (!token || token.length === 0) return next();
+  const cookieToken = typeof req.cookies?.[AUTH_COOKIE] === 'string' && req.cookies[AUTH_COOKIE].length > 0
+    ? req.cookies[AUTH_COOKIE]
+    : undefined;
+  const bearerToken = req.headers.authorization?.startsWith('Bearer ')
+    ? req.headers.authorization.slice(7).trim() || undefined
+    : undefined;
 
-  const claims = readTokenClaims(token);
-  if (!claims) {
-    res.clearCookie(AUTH_COOKIE, baseCookieOptions());
-    return next();
+  if (!cookieToken && !bearerToken) return next();
+
+  // Try cookie first; if stale/expired, fall back cleanly to a fresh Bearer token (mobile / PWA / cross-origin).
+  const candidates: Array<{ token: string; via: 'cookie' | 'bearer' }> = [];
+  if (cookieToken) candidates.push({ token: cookieToken, via: 'cookie' });
+  if (bearerToken && bearerToken !== cookieToken) candidates.push({ token: bearerToken, via: 'bearer' });
+
+  let matchedUser: {
+    _id: unknown;
+    email: string;
+    displayName: string;
+    role: 'tourist' | 'partner' | 'admin';
+    status: string;
+    tokenVersion?: number;
+    preferences?: {
+      areas?: string[];
+      interests?: string[];
+      numberOfDays?: number;
+      hoursPerDay?: number;
+    } | null;
+  } | null = null;
+  let matchedClaims: { userId: string; tokenVersion: number; issuedAtSec?: number } | null = null;
+  let matchedVia: 'cookie' | 'bearer' = 'cookie';
+
+  for (const candidate of candidates) {
+    const claims = readTokenClaims(candidate.token);
+    if (!claims) continue;
+    const user = await UserModel.findById(claims.userId)
+      .select('email displayName role status tokenVersion preferences')
+      .lean();
+    if (user && user.status === 'active' && (user.tokenVersion ?? 0) === claims.tokenVersion) {
+      matchedUser = user;
+      matchedClaims = claims;
+      matchedVia = candidate.via;
+      break;
+    }
   }
 
-  const user = await UserModel.findById(claims.userId)
-    .select('email displayName role status tokenVersion preferences')
-    .lean();
-  if (!user || user.status !== 'active' || (user.tokenVersion ?? 0) !== claims.tokenVersion) {
-    res.clearCookie(AUTH_COOKIE, baseCookieOptions());
+  if (!matchedUser || !matchedClaims) {
+    if (cookieToken) res.clearCookie(AUTH_COOKIE, baseCookieOptions());
     return next();
   }
 
   req.user = {
-    id: String(user._id),
-    email: user.email,
-    displayName: user.displayName,
-    role: user.role,
+    id: String(matchedUser._id),
+    email: matchedUser.email,
+    displayName: matchedUser.displayName,
+    role: matchedUser.role,
     preferences: {
-      areas: user.preferences?.areas ?? [],
-      interests: user.preferences?.interests ?? [],
-      numberOfDays: user.preferences?.numberOfDays ?? 2,
-      hoursPerDay: user.preferences?.hoursPerDay ?? 8,
+      areas: matchedUser.preferences?.areas ?? [],
+      interests: matchedUser.preferences?.interests ?? [],
+      numberOfDays: matchedUser.preferences?.numberOfDays ?? 2,
+      hoursPerDay: matchedUser.preferences?.hoursPerDay ?? 8,
     },
+  };
+  req.authMeta = {
+    tokenVersion: matchedClaims.tokenVersion,
+    issuedAtSec: matchedClaims.issuedAtSec,
+    via: matchedVia,
   };
   next();
 }

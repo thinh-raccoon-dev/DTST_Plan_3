@@ -1,5 +1,5 @@
-const TILE_CACHE_NAME = 'dtst-map-tiles-v2';
-const API_CACHE_NAME = 'dtst-footprints-api-v2';
+const TILE_CACHE_NAME = 'dtst-map-tiles-v3';
+const API_CACHE_NAME = 'dtst-destinations-api-v3';
 
 self.addEventListener('install', () => {
   self.skipWaiting();
@@ -47,8 +47,8 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Network-first with cache fallback for footprints & destinations API
-  if (url.pathname.startsWith('/api/v1/footprints') || url.pathname.startsWith('/api/v1/destinations')) {
+  // Network-first cache fallback ONLY for public destinations catalog (never cache user-private /auth or /footprints responses!)
+  if (url.pathname.startsWith('/api/v1/destinations')) {
     event.respondWith(
       caches.open(API_CACHE_NAME).then(async (cache) => {
         try {

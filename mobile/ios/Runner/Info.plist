@@ -7,7 +7,17 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Dtst Mobile</string>
+	<string>Đồng Tháp Go</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Ứng dụng cần quyền Vị trí để ghi lại hành trình Dấu chân và tự động điểm danh Hộ chiếu số tại điểm đến.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Cho phép truy cập vị trí ngay cả khi khóa màn hình để ghi mượt trọn hành trình Dấu chân đường dài (ví dụ Cần Thơ – Sài Gòn) mà không bị gián đoạn.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>Cho phép ghi lại lộ trình GPS chạy ngầm ngay cả khi tắt màn hình.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+	</array>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>

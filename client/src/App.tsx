@@ -120,6 +120,20 @@ export function App() {
   const loadSession = useAuthStore((s) => s.loadSession);
   useEffect(() => {
     void loadSession();
+    const handleResume = () => {
+      if (document.visibilityState === 'visible') {
+        void loadSession({ silent: true });
+      }
+    };
+    const handleOnline = () => {
+      void loadSession({ silent: true });
+    };
+    document.addEventListener('visibilitychange', handleResume);
+    window.addEventListener('online', handleOnline);
+    return () => {
+      document.removeEventListener('visibilitychange', handleResume);
+      window.removeEventListener('online', handleOnline);
+    };
   }, [loadSession]);
   return (
     <>

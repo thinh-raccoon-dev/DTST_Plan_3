@@ -61,11 +61,11 @@ export async function listFootprintsHandler(req: Request, res: Response): Promis
     const identity = identityFromRequest(req);
     const filter = ownerFilter(identity);
 
-    // If user is authenticated and also has an anonymousSessionId cookie, merge any unclaimed device tracks & photos automatically
+    // If user is authenticated and also has an anonymousSessionId cookie, merge any unclaimed real device tracks & photos automatically (never claim fake demo tracks)
     if (identity.userId && identity.anonymousSessionId) {
       await Promise.all([
         TravelFootprintModel.updateMany(
-          { anonymousSessionId: identity.anonymousSessionId, userId: { $exists: false } },
+          { anonymousSessionId: identity.anonymousSessionId, userId: { $exists: false }, isDemoRoute: { $ne: true } },
           { $set: { userId: identity.userId }, $unset: { anonymousSessionId: 1 } },
         ),
         FootprintPhotoModel.updateMany(
@@ -225,9 +225,14 @@ export async function syncFootprintsHandler(req: Request, res: Response): Promis
     const filter = ownerFilter(identity);
     const owner = ownerFields(identity);
 
+    // Deduplicate tracks by clientId within the same request batch
+    const uniqueTracks = Array.from(
+      new Map(parsed.data.tracks.map((t) => [t.clientId, t])).values(),
+    );
+
     let syncedCount = 0;
 
-    for (const track of parsed.data.tracks) {
+    for (const track of uniqueTracks) {
       const existing = await TravelFootprintModel.findOne({
         ...filter,
         clientId: track.clientId,
@@ -272,24 +277,31 @@ export async function syncFootprintsHandler(req: Request, res: Response): Promis
 
         await existing.save();
       } else {
-        await TravelFootprintModel.create({
-          ...owner,
-          clientId: track.clientId,
-          title: track.title,
-          color: track.color,
-          distanceKm: computedDist,
-          durationSeconds: durationSec,
-          startedAt: startedDate,
-          endedAt: endedDate,
-          points: track.points,
-          memories: track.memories,
-          isDemoRoute: track.isDemoRoute,
-        });
+        await TravelFootprintModel.findOneAndUpdate(
+          { ...filter, clientId: track.clientId },
+          {
+            $setOnInsert: {
+              ...owner,
+              clientId: track.clientId,
+              title: track.title,
+              color: track.color,
+              distanceKm: computedDist,
+              durationSeconds: durationSec,
+              startedAt: startedDate,
+              endedAt: endedDate,
+              points: track.points,
+              memories: track.memories,
+              isDemoRoute: track.isDemoRoute,
+            },
+          },
+          { upsert: true },
+        );
       }
       syncedCount++;
     }
 
-    // Automatic Hands-Free GPS Check-in for any published destination within MAX_CHECKIN_METERS (1,000m) of the synced trajectory
+    // Automatic Hands-Free GPS Check-in for any published destination within MAX_CHECKIN_METERS (1,000m)
+    // Strictly EXCLUDE demo/simulated routes so demo journeys never stamp fake Passport check-ins!
     const autoCheckIns: Array<{
       id: string;
       name: string;
@@ -301,8 +313,9 @@ export async function syncFootprintsHandler(req: Request, res: Response): Promis
     }> = [];
     const newBadges: unknown[] = [];
 
-    if (parsed.data.autoCheckIn !== false && parsed.data.tracks.length > 0) {
-      const allPts = parsed.data.tracks.flatMap((t) => t.points);
+    const realTracks = uniqueTracks.filter((t) => !t.isDemoRoute);
+    if (parsed.data.autoCheckIn !== false && realTracks.length > 0) {
+      const allPts = realTracks.flatMap((t) => t.points);
       if (allPts.length > 0) {
         const [publishedDestinations, existingCheckIns] = await Promise.all([
           DestinationModel.find({

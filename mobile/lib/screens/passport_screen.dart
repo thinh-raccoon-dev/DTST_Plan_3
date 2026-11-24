@@ -4,6 +4,7 @@ import '../models/api_models.dart';
 import '../services/api_client.dart';
 import '../state/app_state.dart';
 import '../theme/app_theme.dart';
+import '../widgets/background_gps_card.dart';
 import '../widgets/common_widgets.dart';
 import 'auth_profile_screen.dart';
 import 'destination_detail_screen.dart';
@@ -414,6 +415,10 @@ class _PassportScreenState extends State<PassportScreen> {
               ],
             ),
           ),
+          const SizedBox(height: 14),
+
+          // True Background GPS Footprint Recorder (Android Foreground Service + iOS Background Location)
+          BackgroundGpsCard(appState: widget.appState),
           const SizedBox(height: 16),
 
           // 4 Stat Cards

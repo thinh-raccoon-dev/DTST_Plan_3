@@ -51,7 +51,12 @@ interface JourneyDrawerProps {
   routeStops: RouteStopDisplay[];
   focusedStopIdx: number | null;
   isRecordingGps: boolean;
+  isSavingLiveTrack?: boolean;
   liveElapsedLabel: string;
+  livePointsCount?: number;
+  liveKm?: number;
+  wakeLockActive?: boolean;
+  liveGpsError?: string | null;
   simulatingRouteId: string | null;
   isReplaying: boolean;
   replayProgress: number;
@@ -93,7 +98,12 @@ export function JourneyDrawer({
   routeStops,
   focusedStopIdx,
   isRecordingGps,
+  isSavingLiveTrack = false,
   liveElapsedLabel,
+  livePointsCount = 0,
+  liveKm = 0,
+  wakeLockActive = false,
+  liveGpsError = null,
   simulatingRouteId,
   isReplaying,
   replayProgress,
@@ -154,41 +164,64 @@ export function JourneyDrawer({
       </div>
 
       {/* Live GPS Recording Primary CTA */}
-      <div className="flex items-center gap-2 border-b border-white/10 bg-white/[0.04] px-4 py-3">
-        {!isRecordingGps ? (
-          <button
-            type="button"
-            onClick={onStartLiveGps}
-            className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-full bg-gradient-to-r from-rose-500 to-amber-500 px-3.5 py-2 text-xs font-extrabold text-white shadow-md transition hover:brightness-110"
-          >
-            <Radio className="size-3.5" />
-            Bắt đầu ghi GPS
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={onStopLiveGps}
-            className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-full bg-rose-600 px-3.5 py-2 text-xs font-extrabold text-white ring-2 ring-rose-300/60"
-          >
-            <Square className="size-3.5 fill-white" />
-            Dừng & Lưu ({liveElapsedLabel})
-          </button>
-        )}
-
-        <button
-          type="button"
-          onClick={onToggleFog}
-          className={clsx(
-            'inline-flex items-center gap-1 rounded-full px-3 py-2 text-xs font-bold transition',
-            fogEnabled
-              ? 'bg-emerald-500/25 text-emerald-200 ring-1 ring-emerald-400/40'
-              : 'bg-white/10 text-slate-300 hover:bg-white/20',
+      <div className="border-b border-white/10 bg-white/[0.04] px-4 py-3">
+        <div className="flex items-center gap-2">
+          {!isRecordingGps ? (
+            <button
+              type="button"
+              onClick={onStartLiveGps}
+              className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-full bg-gradient-to-r from-rose-500 to-amber-500 px-3.5 py-2 text-xs font-extrabold text-white shadow-md transition hover:brightness-110"
+            >
+              <Radio className="size-3.5" />
+              Bắt đầu ghi GPS
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled={isSavingLiveTrack}
+              onClick={onStopLiveGps}
+              className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-full bg-rose-600 px-3.5 py-2 text-xs font-extrabold text-white ring-2 ring-rose-300/60 disabled:opacity-60"
+            >
+              <Square className="size-3.5 fill-white" />
+              {isSavingLiveTrack ? 'Đang nối đường & lưu...' : `Dừng & Lưu (${liveElapsedLabel})`}
+            </button>
           )}
-          title="Bật/tắt hiệu ứng Sương mù Khám phá"
-        >
-          {fogEnabled ? <Eye className="size-3.5" /> : <EyeOff className="size-3.5" />}
-          Sương mù
-        </button>
+
+          <button
+            type="button"
+            onClick={onToggleFog}
+            className={clsx(
+              'inline-flex items-center gap-1 rounded-full px-3 py-2 text-xs font-bold transition',
+              fogEnabled
+                ? 'bg-emerald-500/25 text-emerald-200 ring-1 ring-emerald-400/40'
+                : 'bg-white/10 text-slate-300 hover:bg-white/20',
+            )}
+            title="Bật/tắt hiệu ứng Sương mù Khám phá"
+          >
+            {fogEnabled ? <Eye className="size-3.5" /> : <EyeOff className="size-3.5" />}
+            Sương mù
+          </button>
+        </div>
+
+        {isRecordingGps && (
+          <div className="mt-2.5 rounded-2xl border border-rose-400/30 bg-rose-500/12 px-3 py-2 text-[11px] leading-relaxed text-rose-100">
+            <div className="flex flex-wrap items-center justify-between gap-2 font-bold">
+              <span className="tabular-nums">
+                ● Đã ghi {liveKm.toFixed(2)} km · {livePointsCount} tọa độ (tự lưu liên tục)
+              </span>
+              <span className="rounded-full bg-white/12 px-2 py-0.5 text-[10px] font-semibold text-emerald-200">
+                {wakeLockActive ? 'Giữ sáng màn hình: Bật' : 'Chế độ tự nối khi mở lại'}
+              </span>
+            </div>
+            {liveGpsError ? (
+              <p className="mt-1 text-amber-200">{liveGpsError}</p>
+            ) : (
+              <p className="mt-1 text-slate-300">
+                Mẹo Web/PWA: Điện thoại sẽ tạm dừng GPS web khi khóa màn hình — bạn có thể giữ sáng màn hình hoặc mở app vài lần dọc đường để tự động nối trọn tuyến đường bộ!
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       {fogEnabled && (
