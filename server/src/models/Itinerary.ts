@@ -1,5 +1,5 @@
 import { Schema, model, type InferSchemaType, type HydratedDocument } from 'mongoose';
-import { AREAS, INTERESTS } from '../config/catalog.js';
+import { INTERESTS } from '../config/catalog.js';
 
 const itemSchema = new Schema(
   {

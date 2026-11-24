@@ -45,8 +45,7 @@ async function main() {
   console.log('\n--- Tài khoản test ---');
   console.log('Admin :', adminEmail, '/', adminPassword);
   console.log('Tourist:', 'tourist@example.com', '/', 'TestTourist1!');
-  console.log('Đăng nhập: http://localhost:5173/login');
-  console.log('Admin UI : http://localhost:5173/admin/login');
+  console.log('Đăng nhập (tất cả vai trò): http://localhost:5173/login');
 
   await mongoose.disconnect();
 }

@@ -26,6 +26,7 @@ const MIME_TO_EXT: Record<string, string> = {
 
 const ALLOWED_MIME_TYPES = new Set(Object.keys(MIME_TO_EXT));
 const MAX_AUTO_PLACE_MATCH_METERS = 500;
+const MAX_ANONYMOUS_CLOUD_PHOTOS = 20;
 const MEDIA_KEY_REGEX = /^[a-f0-9]{32}\.(?:jpg|png|webp|gif|avif)$/i;
 
 /** OWASP binary magic-byte verification directly on in-memory upload Buffer. */
@@ -368,7 +369,7 @@ export async function serveFootprintMediaHandler(req: Request, res: Response): P
     res.set({
       'Content-Type': blob.contentType || 'image/jpeg',
       'Content-Length': String(rawBuffer.length),
-      'Cache-Control': 'public, max-age=31536000, immutable',
+      'Cache-Control': 'private, max-age=604800, immutable',
       'Cross-Origin-Resource-Policy': 'cross-origin',
       'X-Content-Type-Options': 'nosniff',
     });
@@ -508,6 +509,20 @@ export async function createFootprintPhotoHandler(req: Request, res: Response): 
           success: true,
           deduplicated: true,
           photo: serializeFootprintPhoto(existing),
+        });
+        return;
+      }
+    }
+
+    // Cap cloud storage for unauthenticated anonymous sessions to prevent MongoDB blob exhaustion
+    if (!identity.userId) {
+      const guestPhotoCount = await FootprintPhotoModel.countDocuments(filter);
+      if (guestPhotoCount >= MAX_ANONYMOUS_CLOUD_PHOTOS) {
+        res.status(403).json({
+          error: {
+            code: 'GUEST_PHOTO_QUOTA_EXCEEDED',
+            message: `Phiên khách chưa đăng nhập lưu tối đa ${MAX_ANONYMOUS_CLOUD_PHOTOS} ảnh kỷ niệm trên đám mây. Vui lòng đăng nhập để lưu trữ và đồng bộ không giới hạn.`,
+          },
         });
         return;
       }

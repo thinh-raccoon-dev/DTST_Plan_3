@@ -1,11 +1,11 @@
 import { useEffect, type ComponentType } from 'react';
-import { createBrowserRouter, Outlet, RouterProvider, useRouteError } from 'react-router-dom';
+import { createBrowserRouter, Navigate, Outlet, RouterProvider, useRouteError } from 'react-router-dom';
 import { RequireAuth, RequireStaff } from './components/layout/Guards';
 import { PublicLayout } from './components/layout/PublicLayout';
 import { Button } from './components/ui/Button';
 import { EmptyState, PageLoader } from './components/ui/States';
 import { Toaster } from './components/ui/Toaster';
-import { AdminLoginPage, LoginPage, RegisterPage } from './pages/AuthPages';
+import { AuthPortalPage } from './pages/AuthPages';
 import { DestinationDetailPage } from './pages/DestinationDetailPage';
 import { DestinationsPage } from './pages/DestinationsPage';
 import { FavoritesPage } from './pages/FavoritesPage';
@@ -53,8 +53,13 @@ const router = createBrowserRouter([
           { path: '/check-in', lazy: lazyPage(() => import('./pages/GpsCheckInPage'), (m) => m.GpsCheckInPage) },
           { path: '/scan', lazy: lazyPage(() => import('./pages/GpsCheckInPage'), (m) => m.GpsCheckInPage) },
           { path: '/qr/:code', element: <QrLandingPage /> },
-          { path: '/login', element: <LoginPage /> },
-          { path: '/register', element: <RegisterPage /> },
+          {
+            element: <AuthPortalPage />,
+            children: [
+              { path: '/login', element: null },
+              { path: '/register', element: null },
+            ],
+          },
           { path: '/privacy', element: <PrivacyPage /> },
           { path: '/terms', element: <TermsPage /> },
           { path: '/passport', element: <PassportPage /> },
@@ -65,7 +70,7 @@ const router = createBrowserRouter([
           { path: '*', element: <NotFoundPage /> },
         ],
       },
-      { path: '/admin/login', element: <AdminLoginPage /> },
+      { path: '/admin/login', element: <Navigate to="/login" replace state={{ from: '/admin' }} /> },
       {
         path: '/admin',
         element: (

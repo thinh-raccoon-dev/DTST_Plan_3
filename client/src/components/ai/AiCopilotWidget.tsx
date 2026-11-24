@@ -19,6 +19,7 @@ import {
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, toApiError } from '../../lib/api';
+import { stageCopilotAuthHandoff } from '../../lib/copilotAuthHandoff';
 import { useAuthStore } from '../../stores/authStore';
 import { useItineraryDraft } from '../../stores/itineraryDraftStore';
 import { toast } from '../../stores/toastStore';
@@ -761,7 +762,25 @@ export function AiCopilotWidget() {
         return;
       }
 
-      // 8. Standard Navigation / Auto-Fill Routes
+      // 8. Secure in-memory Auth Handoff (never put plaintext password in URL query string)
+      if (action.type === 'LOGIN_ACCOUNT' || action.type === 'REGISTER_ACCOUNT') {
+        const mode = action.type === 'REGISTER_ACCOUNT' ? 'register' : 'login';
+        const targetRoute = mode === 'register' ? '/register' : '/login';
+        if (action.payload.email && action.payload.password) {
+          stageCopilotAuthHandoff({
+            mode,
+            email: action.payload.email,
+            password: action.payload.password,
+            displayName: action.payload.displayName,
+          });
+          // Wipe plaintext password from message history in React memory immediately
+          delete action.payload.password;
+        }
+        navigate(targetRoute);
+        return;
+      }
+
+      // 9. Standard Navigation / Auto-Fill Routes
       if (action.payload?.path) {
         navigate(action.payload.path);
       }

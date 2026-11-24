@@ -6,17 +6,17 @@ version: '3.8'
 
 services:
   # ----------------------------------------------------------------------------
-  # 1. MongoDB Database
+  # 1. MongoDB Database (Internal network only — never exposed to public 0.0.0.0)
   # ----------------------------------------------------------------------------
   mongodb:
     image: mongo:7.0
     container_name: dtst-mongodb
     restart: unless-stopped
-    ports:
-      - "${MONGODB_PORT:-27017}:27017"
+    expose:
+      - "27017"
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:-dtst_admin}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASS:-dtst_secure_password_2026}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASS:?MONGO_ROOT_PASS must be set in environment}
       MONGO_INITDB_DATABASE: ${MONGO_DB_NAME:-dong_thap_tourism}
     volumes:
       - dtst_mongo_data:/data/db
@@ -31,14 +31,14 @@ services:
       start_period: 10s
 
   # ----------------------------------------------------------------------------
-  # 2. Valhalla Routing Engine (Đồng Tháp Road Distance Matrix)
+  # 2. Valhalla Routing Engine (Internal network only)
   # ----------------------------------------------------------------------------
   valhalla:
     image: ghcr.io/gis-ops/docker-valhalla/valhalla:latest
     container_name: dtst-valhalla
     restart: unless-stopped
-    ports:
-      - "8002:8002"
+    expose:
+      - "8002"
     volumes:
       - ./documents:/custom_files
     environment:
@@ -56,7 +56,7 @@ services:
       start_period: 20s
 
   # ----------------------------------------------------------------------------
-  # 3. Python Trip Planner V9 AI Service
+  # 3. Python Trip Planner V9 AI Service (Internal network only)
   # ----------------------------------------------------------------------------
   planner-v9:
     build:
@@ -64,8 +64,8 @@ services:
       dockerfile: Dockerfile
     container_name: dtst-planner-v9
     restart: unless-stopped
-    ports:
-      - "8010:8010"
+    expose:
+      - "8010"
     environment:
       - PYTHONUNBUFFERED=1
     depends_on:
@@ -90,17 +90,21 @@ services:
     container_name: dtst-server-api
     restart: unless-stopped
     ports:
-      - "4000:4000"
+      - "${API_BIND_HOST:-127.0.0.1}:4000:4000"
     environment:
       - NODE_ENV=production
       - PORT=4000
-      - MONGO_URI=mongodb://${MONGO_ROOT_USER:-dtst_admin}:${MONGO_ROOT_PASS:-dtst_secure_password_2026}@mongodb:27017/${MONGO_DB_NAME:-dong_thap_tourism}?authSource=admin
-      - JWT_SECRET=${JWT_SECRET:-dtst_production_enterprise_super_secret_key_2026_change_in_env}
+      - TRUST_PROXY=${TRUST_PROXY:-1}
+      - MONGO_URI=mongodb://${MONGO_ROOT_USER:-dtst_admin}:${MONGO_ROOT_PASS:?MONGO_ROOT_PASS must be set in environment}@mongodb:27017/${MONGO_DB_NAME:-dong_thap_tourism}?authSource=admin
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set in environment (at least 32 characters)}
       - JWT_EXPIRES_IN=7d
-      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost,http://localhost:80,https://dulich.dongthap.gov.vn}
+      - CORS_ORIGINS=${CORS_ORIGINS:-https://dongthapgo.com,https://dulich.dongthap.gov.vn}
       - TRIP_PLANNER_API_URL=http://planner-v9:8010
-      - COOKIE_DOMAIN=${COOKIE_DOMAIN:-localhost}
-      - COOKIE_SECURE=${COOKIE_SECURE:-false}
+      - COOKIE_DOMAIN=${COOKIE_DOMAIN:-}
+      - COOKIE_SECURE=${COOKIE_SECURE:-true}
+      - MAIL_FROM=${MAIL_FROM:-Đồng Tháp Smart Travel <support@dongthapgo.com>}
+      - MAIL_REPLY_TO=${MAIL_REPLY_TO:-support@dongthapgo.com}
+      - BREVO_API_KEY=${BREVO_API_KEY:-}
     depends_on:
       mongodb:
         condition: service_healthy
@@ -109,7 +113,7 @@ services:
     networks:
       - dtst_net
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:4000/health || exit 1"]
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:4000/api/v1/health || exit 1"]
       interval: 20s
       timeout: 5s
       retries: 3

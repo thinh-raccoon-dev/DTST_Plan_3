@@ -1,6 +1,6 @@
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import type { NextFunction, Request, Response } from 'express';
-import { CSRF_COOKIE, baseCookieOptions } from '../utils/cookies.js';
+import { AUTH_COOKIE, CSRF_COOKIE, baseCookieOptions } from '../utils/cookies.js';
 import { AppError } from '../utils/errors.js';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
@@ -33,10 +33,20 @@ export function issueCsrfToken(req: Request, res: Response): string {
 
 export function csrfProtection(req: Request, _res: Response, next: NextFunction): void {
   if (SAFE_METHODS.has(req.method)) return next();
+
+  const hasAuthCookie = typeof req.cookies?.[AUTH_COOKIE] === 'string' && req.cookies[AUTH_COOKIE].length > 0;
+  const hasBearerAuth = Boolean(req.headers.authorization?.startsWith('Bearer '));
+
+  // 1. Pure Authorization: Bearer clients (Native iOS/Android/Flutter apps without session cookies)
+  // are immune to browser ambient-cookie CSRF attacks.
+  if (hasBearerAuth && !hasAuthCookie) {
+    return next();
+  }
+
   const cookieToken: unknown = req.cookies?.[CSRF_COOKIE];
   const headerToken = req.get(CSRF_HEADER);
 
-  // 1. Standard double-submit cookie verification (SPA web clients)
+  // 2. Strict Double-Submit Cookie verification (required whenever browser cookies are present)
   if (
     typeof cookieToken === 'string' &&
     typeof headerToken === 'string' &&
@@ -46,14 +56,16 @@ export function csrfProtection(req: Request, _res: Response, next: NextFunction)
     return next();
   }
 
-  // 2. Token-in-header verification (Flutter Web, mobile, cross-origin clients)
-  if (typeof headerToken === 'string' && /^[a-f0-9]{64}$/.test(headerToken)) {
+  // 3. Cross-origin guest fallback ONLY when no authentication/CSRF cookies were sent by the browser
+  // (e.g. Safari ITP blocking third-party cookies on anonymous endpoints). Never allowed if auth cookie is present.
+  if (
+    !hasAuthCookie &&
+    !cookieToken &&
+    typeof headerToken === 'string' &&
+    /^[a-f0-9]{64}$/.test(headerToken)
+  ) {
     const issuedAt = issuedTokens.get(headerToken);
     if (issuedAt && Date.now() - issuedAt < CSRF_TTL_MS) {
-      return next();
-    }
-    // In development or when requested by mobile/API client
-    if (process.env.NODE_ENV !== 'production' || req.get('x-client-platform') === 'mobile') {
       return next();
     }
   }

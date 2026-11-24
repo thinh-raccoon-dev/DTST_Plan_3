@@ -94,7 +94,8 @@ test('MVP flow: admin publishes content, tourist scans QR, completes challenge o
     await tourist.getByLabel(/^Mật khẩu\*?$/).fill('Mat-khau-e2e-123');
     await tourist.getByLabel('Nhập lại mật khẩu').fill('Mat-khau-e2e-123');
     await tourist.getByRole('checkbox').check();
-    await tourist.getByRole('button', { name: 'Đăng ký' }).click();
+    await tourist.getByRole('button', { name: 'Gửi mã xác thực OTP' }).click();
+    await tourist.getByRole('button', { name: 'Điền nhanh' }).click();
     await expect(tourist).toHaveURL(/\/passport$/);
 
     await tourist.goto(`/destinations/${slug}`);

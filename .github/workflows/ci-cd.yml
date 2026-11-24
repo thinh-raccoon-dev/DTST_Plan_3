@@ -2,9 +2,9 @@ name: DTST Enterprise CI/CD Pipeline
 
 on:
   push:
-    branches: [ "main", "dtst_V2.1", "master" ]
+    branches: [ "main", "update*", "dtst_V2.1", "master" ]
   pull_request:
-    branches: [ "main", "dtst_V2.1", "master" ]
+    branches: [ "main", "update*", "dtst_V2.1", "master" ]
 
 jobs:
   # ----------------------------------------------------------------------------
@@ -24,45 +24,27 @@ jobs:
           node-version: 20
           cache: 'npm'
 
-      - name: Install Client Dependencies
-        run: |
-          cd client
-          npm ci
+      - name: Install Workspace Dependencies
+        run: npm ci
 
-      - name: Typecheck Client (TypeScript)
-        run: |
-          cd client
-          npm run typecheck
+      - name: Typecheck Server & Client (TypeScript)
+        run: npm run typecheck
 
-      - name: Build Client (Vite Production Bundle)
-        run: |
-          cd client
-          npm run build
+      - name: Run Client Unit Tests
+        run: npm run test -w client
 
-      - name: Install Server Dependencies
-        run: |
-          cd server
-          npm ci
-
-      - name: Typecheck Server (TypeScript)
-        run: |
-          cd server
-          npm run typecheck
-
-      - name: Build Server (tsc)
-        run: |
-          cd server
-          npm run build
+      - name: Build Server & Client Production Bundles
+        run: npm run build
 
       - name: Setup Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Test Python Trip Planner V9 Syntax & Imports
+      - name: Test Python Trip Planner V9 Engine
         run: |
-          cd documents/trip_planner_17_v9
-          python -m py_compile web_api.py trip_service.py progress.py assemble.py
+          python -X utf8 -m py_compile documents/trip_planner_17_v9/web_api.py documents/trip_planner_17_v9/trip_service.py documents/trip_planner_17_v9/progress.py documents/trip_planner_17_v9/assemble.py
+          python -X utf8 -m unittest discover -s documents/trip_planner_17_v9 -p "test_*.py"
 
   # ----------------------------------------------------------------------------
   # Job 2: Enterprise Container Build Check

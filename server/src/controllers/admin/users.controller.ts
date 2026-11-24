@@ -3,7 +3,10 @@ import type { Request, Response } from 'express';
 import { Types, isValidObjectId } from 'mongoose';
 import { z } from 'zod';
 import { DestinationModel } from '../../models/Destination.js';
+import { EmailOtpModel } from '../../models/EmailOtp.js';
 import { FavoriteModel } from '../../models/Favorite.js';
+import { FootprintPhotoModel } from '../../models/FootprintPhoto.js';
+import { FootprintPhotoBlobModel } from '../../models/FootprintPhotoBlob.js';
 import { GroupInquiryModel } from '../../models/GroupInquiry.js';
 import { ItineraryModel } from '../../models/Itinerary.js';
 import { PassportEntryModel } from '../../models/PassportEntry.js';
@@ -308,11 +311,17 @@ export async function deleteUser(req: Request, res: Response) {
   if (!user) throw notFound('Không tìm thấy người dùng.');
 
   // Nghị định 13/2023/NĐ-CP: Full cascade deletion / anonymization of personal data
+  const userPhotos = await FootprintPhotoModel.find({ userId: id }).select('_id').lean();
+  const userPhotoIds = userPhotos.map((p) => p._id);
+
   await Promise.all([
     ItineraryModel.deleteMany({ userId: id }),
     PassportEntryModel.deleteMany({ userId: id }),
     FavoriteModel.deleteMany({ userId: id }),
     TravelFootprintModel.deleteMany({ userId: id }),
+    FootprintPhotoModel.deleteMany({ userId: id }),
+    ...(userPhotoIds.length > 0 ? [FootprintPhotoBlobModel.deleteMany({ photoId: { $in: userPhotoIds } })] : []),
+    EmailOtpModel.deleteMany({ email: user.email }),
     VoucherClaimModel.deleteMany({ userId: id }),
     GroupInquiryModel.deleteMany({ userId: id }),
     ReviewModel.updateMany(

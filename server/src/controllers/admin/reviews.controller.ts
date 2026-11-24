@@ -8,7 +8,7 @@ import {
   respondReviewSchema,
   updateReviewStatusSchema,
 } from '../../schemas/review.schemas.js';
-import { badRequest, forbidden, notFound } from '../../utils/errors.js';
+import { forbidden, notFound } from '../../utils/errors.js';
 import { escapeRegex } from '../../utils/text.js';
 
 function isPartner(req: Request) {

@@ -34,12 +34,13 @@ class Handler(BaseHTTPRequestHandler):
             result=plan_trip(load_data(),ValhallaClient(self.server.valhalla_url,req.get('mode_of_transport','car')),req,scorer=build_scorer(req) if req.get('mode','ai')=='ai' else None)
             result['readable_itinerary']=readable(result)
             self.reply(200,result)
-        except (ValueError,TypeError,KeyError,AttributeError) as e:self.reply(400,{'error':str(e)})
+        except ValueError as e:self.reply(400,{'error':str(e)})
+        except (TypeError,KeyError,AttributeError):self.reply(400,{'error':'Dữ liệu đầu vào thiếu trường bắt buộc hoặc sai định dạng'})
         except OSError:self.reply(503,{'error':'Không đọc được dữ liệu hoặc dịch vụ phụ thuộc'})
 
 if __name__=='__main__':
     import math,socket,threading
-    p=argparse.ArgumentParser();p.add_argument('--port',type=int,default=8010);p.add_argument('--valhalla-url',default='http://127.0.0.1:8002');a=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('--host',default='127.0.0.1');p.add_argument('--port',type=int,default=8010);p.add_argument('--valhalla-url',default='http://127.0.0.1:8002');a=p.parse_args()
     def is_port_open(host,port):
         with socket.socket(socket.AF_INET,socket.SOCK_STREAM) as s:
             s.settimeout(0.5)
@@ -66,6 +67,6 @@ if __name__=='__main__':
         valhalla_sim=ThreadingHTTPServer(('127.0.0.1',8002),LocalValhallaFallback)
         threading.Thread(target=valhalla_sim.serve_forever,daemon=True).start()
         print('Valhalla Docker (:8002) chưa bật -> Đã tự động chạy bộ định tuyến giả lập trên http://127.0.0.1:8002')
-    server=ThreadingHTTPServer(('127.0.0.1',a.port),Handler);server.valhalla_url=a.valhalla_url
-    print(f'Local development API: http://127.0.0.1:{a.port}; GET /places; POST /recommend')
+    server=ThreadingHTTPServer((a.host,a.port),Handler);server.valhalla_url=a.valhalla_url
+    print(f'Local development API: http://{a.host}:{a.port}; GET /places; POST /recommend')
     server.serve_forever()
